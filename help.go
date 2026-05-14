@@ -30,7 +30,7 @@ func usage(w io.Writer) {
 	fmt.Fprintln(w, "  help    打印帮助信息")
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "常用选项:")
-	fmt.Fprintln(w, "  -image PATH_OR_URL      输入图片；可重复传入")
+	fmt.Fprintln(w, "  -file PATH_OR_URL       输入文本/图片；可重复传入")
 	fmt.Fprintln(w, "  -image-generation       启用图片生成工具")
 	fmt.Fprintln(w, "  -stream                 实时打印返回的文本增量")
 	fmt.Fprintln(w, "  -save-images DIR        保存响应中的图片；留空则不保存")

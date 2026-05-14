@@ -37,8 +37,9 @@ func runAsk(args []string) error {
 	saveDir := fs.String("save-images", ".", "保存响应中图片的目录；留空则不保存")
 	apiKey := fs.String("api-key", "", "API key; overrides KUAIMA_API_KEY/OPENAI_API_KEY")
 	verbose := fs.Bool("v", false, "print full request and response to stderr")
-	var images stringsFlag
-	fs.Var(&images, "image", "输入图片的本地路径或 URL；可重复传入")
+	var attachments stringsFlag
+	fs.Var(&attachments, "file", "file path or image URL to include; can be repeated")
+	fs.Var(&attachments, "image", "deprecated alias for -file")
 	if err := parseFlags(fs, args); err != nil {
 		return err
 	}
@@ -51,8 +52,12 @@ func runAsk(args []string) error {
 			return err
 		}
 	}
-	if prompt == "" {
+	if prompt == "" && len(attachments) == 0 {
 		return errors.New("prompt is required")
+	}
+	images, textFiles, err := collectInputAttachments(prompt, attachments)
+	if err != nil {
+		return err
 	}
 
 	c, err := newClient(*baseURL, *apiKey, *verbose)
@@ -60,7 +65,7 @@ func runAsk(args []string) error {
 		return err
 	}
 
-	input, err := buildInput(prompt, strings.TrimSpace(*system), images)
+	input, err := buildInput(prompt, strings.TrimSpace(*system), images, textFiles)
 	if err != nil {
 		return err
 	}
@@ -127,6 +132,8 @@ func readPromptFromStdin() (string, error) {
 
 func runChat(args []string) error {
 	fs := newFlagSet("chat")
+	var files stringsFlag
+	fs.Var(&files, "file", "file path or image URL to include; can be repeated")
 	apiKey := fs.String("api-key", "", "API key; overrides KUAIMA_API_KEY/OPENAI_API_KEY")
 	verbose := fs.Bool("v", false, "print full request and response to stderr")
 	model := fs.String("model", envOr("KUAIMA_MODEL", defaultModel), "模型名称")
@@ -156,8 +163,12 @@ func runChat(args []string) error {
 		if text == "/exit" || text == "/quit" {
 			break
 		}
+		images, textFiles, err := collectInputAttachments(text, files)
+		if err != nil {
+			return err
+		}
 
-		input, err := buildInput(text, strings.TrimSpace(*system), nil)
+		input, err := buildInput(text, strings.TrimSpace(*system), images, textFiles)
 		if err != nil {
 			return err
 		}
@@ -202,7 +213,7 @@ func runImage(args []string) error {
 	if err != nil {
 		return err
 	}
-	input, err := buildInput(prompt, "", nil)
+	input, err := buildInput(prompt, "", nil, nil)
 	if err != nil {
 		return err
 	}

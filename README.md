@@ -34,10 +34,10 @@ $env:KUAIMA_API_KEY="your_api_key"
 Get-Content prompt.txt | .\dist\kuaima_cli.exe
 ```
 
-输入本地图片或图片 URL，`-image` 可以重复：
+输入本地文本、图片或图片 URL，`-file` 可以重复；提示词里的 `@路径` 也会按文件类型自动处理：
 
 ```powershell
-.\dist\kuaima_cli.exe -image .\photo.png -image "https://example.com/cat.jpg" "描述这些图片"
+.\dist\kuaima_cli.exe -file .\notes.md -file .\photo.png -file "https://example.com/cat.jpg" "结合 @.\extra.txt 描述这些内容"
 ```
 
 开启流式输出：

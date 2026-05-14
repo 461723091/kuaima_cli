@@ -21,7 +21,7 @@ type inputContent struct {
 	ImageURL string `json:"image_url,omitempty"`
 }
 
-func buildInput(prompt, system string, images []string) ([]inputMessage, error) {
+func buildInput(prompt, system string, images []string, files []textFileContent) ([]inputMessage, error) {
 	var messages []inputMessage
 	if strings.TrimSpace(system) != "" {
 		messages = append(messages, inputMessage{
@@ -33,10 +33,19 @@ func buildInput(prompt, system string, images []string) ([]inputMessage, error) 
 		})
 	}
 
-	content := []inputContent{{
-		Type: "input_text",
-		Text: prompt,
-	}}
+	content := []inputContent{}
+	if prompt != "" {
+		content = append(content, inputContent{
+			Type: "input_text",
+			Text: prompt,
+		})
+	}
+	for _, file := range files {
+		content = append(content, inputContent{
+			Type: "input_text",
+			Text: formatTextFileContent(file),
+		})
+	}
 	for _, image := range images {
 		imageURL, err := imageInputURL(image)
 		if err != nil {
