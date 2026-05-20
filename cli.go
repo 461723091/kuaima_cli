@@ -46,26 +46,38 @@ type inputOptions struct {
 }
 
 func addClientFlags(fs *flag.FlagSet) clientOptions {
+	return addClientFlagsWithConfig(fs, appConfig{})
+}
+
+func addClientFlagsWithConfig(fs *flag.FlagSet, cfg appConfig) clientOptions {
 	return clientOptions{
-		model:   fs.String("model", envOr("KUAIMA_MODEL", defaultModel), "模型名称"),
-		baseURL: fs.String("base-url", envOr("KUAIMA_BASE_URL", defaultBaseURL), "API 基础地址"),
-		ossURL:  fs.String("oss-url", envOr("KUAIMA_OSS_URL", defaultOssURL), "OSS API 基础地址"),
-		apiKey:  fs.String("api-key", "", "API key；覆盖 KUAIMA_API_KEY/OPENAI_API_KEY"),
+		model:   fs.String("model", envOr("KUAIMA_MODEL", configNonEmptyString(cfg.Model, defaultModel)), "模型名称"),
+		baseURL: fs.String("base-url", envOr("KUAIMA_BASE_URL", configNonEmptyString(cfg.BaseURL, defaultBaseURL)), "API 基础地址"),
+		ossURL:  fs.String("oss-url", envOr("KUAIMA_OSS_URL", configNonEmptyString(cfg.OssURL, defaultOssURL)), "OSS API 基础地址"),
+		apiKey:  fs.String("api-key", envOr("KUAIMA_API_KEY", envOr("OPENAI_API_KEY", configString(cfg.APIKey, ""))), "API key；覆盖 KUAIMA_API_KEY/OPENAI_API_KEY"),
 		verbose: fs.Bool("v", false, "打印完整请求和响应到 stderr"),
 	}
 }
 
 func addResponseFlags(fs *flag.FlagSet) responseOptions {
+	return addResponseFlagsWithConfig(fs, appConfig{})
+}
+
+func addResponseFlagsWithConfig(fs *flag.FlagSet, cfg appConfig) responseOptions {
 	return responseOptions{
-		clientOptions: addClientFlags(fs),
-		system:        fs.String("system", "", "可选的系统/开发者指令"),
-		stream:        fs.Bool("stream", false, "实时打印服务端返回的文本增量"),
+		clientOptions: addClientFlagsWithConfig(fs, cfg),
+		system:        fs.String("system", configString(cfg.System, ""), "可选的系统/开发者指令"),
+		stream:        fs.Bool("stream", configBool(cfg.Stream, false), "实时打印服务端返回的文本增量"),
 	}
 }
 
 func addInputFlags(fs *flag.FlagSet) inputOptions {
+	return addInputFlagsWithConfig(fs, appConfig{})
+}
+
+func addInputFlagsWithConfig(fs *flag.FlagSet, cfg appConfig) inputOptions {
 	return inputOptions{
-		fileFormat:  fs.String("file-format", "base64", "本地图片输入格式：base64 或 url"),
+		fileFormat:  fs.String("file-format", configNonEmptyString(cfg.FileFormat, "base64"), "本地图片输入格式：base64 或 url"),
 		attachments: addAttachmentFlags(fs),
 	}
 }
@@ -79,6 +91,10 @@ func addAttachmentFlags(fs *flag.FlagSet) *stringsFlag {
 
 func addSaveImagesFlag(fs *flag.FlagSet, defaultDir string) *string {
 	return fs.String("save-images", defaultDir, "保存响应中图片的目录；留空则不保存")
+}
+
+func addSaveImagesFlagWithConfig(fs *flag.FlagSet, cfg appConfig, defaultDir string) *string {
+	return addSaveImagesFlag(fs, configString(cfg.SaveImages, defaultDir))
 }
 
 func (opts clientOptions) newClient() (*client, error) {
@@ -112,12 +128,19 @@ func saveResponseImages(ctx context.Context, c *client, resp *responsePayload, d
 }
 
 func runAsk(args []string) error {
+	cfg, err := loadAppConfig()
+	if err != nil {
+		return err
+	}
 	fs := newFlagSet("ask")
-	opts := addResponseFlags(fs)
+	opts := addResponseFlagsWithConfig(fs, cfg)
 	imageGeneration := fs.Bool("image-generation", false, "启用图片生成工具")
-	saveDir := addSaveImagesFlag(fs, ".")
-	inputOpts := addInputFlags(fs)
+	saveDir := addSaveImagesFlagWithConfig(fs, cfg, ".")
+	inputOpts := addInputFlagsWithConfig(fs, cfg)
 	if err := parseFlags(fs, args); err != nil {
+		return err
+	}
+	if err := persistConfigFlags(fs, cfg); err != nil {
 		return err
 	}
 
@@ -196,10 +219,17 @@ func readPromptFromStdin() (string, error) {
 }
 
 func runChat(args []string) error {
+	cfg, err := loadAppConfig()
+	if err != nil {
+		return err
+	}
 	fs := newFlagSet("chat")
-	opts := addResponseFlags(fs)
-	inputOpts := addInputFlags(fs)
+	opts := addResponseFlagsWithConfig(fs, cfg)
+	inputOpts := addInputFlagsWithConfig(fs, cfg)
 	if err := parseFlags(fs, args); err != nil {
+		return err
+	}
+	if err := persistConfigFlags(fs, cfg); err != nil {
 		return err
 	}
 
@@ -248,11 +278,18 @@ func runChat(args []string) error {
 }
 
 func runImage(args []string) error {
+	cfg, err := loadAppConfig()
+	if err != nil {
+		return err
+	}
 	fs := newFlagSet("image")
-	opts := addClientFlags(fs)
-	saveDir := addSaveImagesFlag(fs, ".")
-	inputOpts := addInputFlags(fs)
+	opts := addClientFlagsWithConfig(fs, cfg)
+	saveDir := addSaveImagesFlagWithConfig(fs, cfg, ".")
+	inputOpts := addInputFlagsWithConfig(fs, cfg)
 	if err := parseFlags(fs, args); err != nil {
+		return err
+	}
+	if err := persistConfigFlags(fs, cfg); err != nil {
 		return err
 	}
 

@@ -20,6 +20,35 @@ $env:KUAIMA_API_KEY="your_api_key"
 
 也可以使用 `OPENAI_API_KEY`。
 
+也可以使用家目录下的配置文件，路径为 `~/.kuaima/conf.json`。配置文件优先级最低：命令行参数 > 环境变量 > 配置文件 > 内置默认值。
+
+命令运行时会把本次显式传入的可持久化参数自动写回配置文件，包括：
+
+```text
+model
+base_url
+oss_url
+api_key
+system
+stream
+file_format
+save_images
+```
+
+例如：
+
+```json
+{
+  "model": "gpt-5.4-mini",
+  "base_url": "https://ai.szkmjb.com",
+  "oss_url": "https://oss.szkmjb.com",
+  "api_key": "your_api_key",
+  "stream": true,
+  "file_format": "base64",
+  "save_images": "."
+}
+```
+
 ## 使用
 
 直接输入提示词并打印返回结果：

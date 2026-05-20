@@ -46,6 +46,9 @@ func usage(w io.Writer) {
 	fmt.Fprintln(w, "  KUAIMA_BASE_URL         默认 https://ai.szkmjb.com")
 	fmt.Fprintln(w, "  KUAIMA_OSS_URL          默认 https://oss.szkmjb.com")
 	fmt.Fprintln(w, "  KUAIMA_MODEL            默认 gpt-5.4-mini")
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "配置文件:")
+	fmt.Fprintln(w, "  ~/.kuaima/conf.json     优先级低于环境变量和命令行参数")
 }
 
 func commandUsage(w io.Writer, name string, fs *flag.FlagSet) {

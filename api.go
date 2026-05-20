@@ -62,7 +62,7 @@ func newClient(baseURL, ossURL, apiKey string, verbose bool) (*client, error) {
 		apiKey = envOr("KUAIMA_API_KEY", os.Getenv("OPENAI_API_KEY"))
 	}
 	if strings.TrimSpace(apiKey) == "" {
-		return nil, errors.New("missing API key: pass -api-key or set KUAIMA_API_KEY or OPENAI_API_KEY")
+		return nil, errors.New("未提供 -api-key 密钥")
 	}
 	return &client{
 		baseURL: strings.TrimRight(baseURL, "/"),
