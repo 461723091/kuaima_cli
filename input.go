@@ -1,13 +1,20 @@
 package main
 
 import (
+	"context"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"mime"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
+)
+
+const (
+	fileFormatBase64 = "base64"
+	fileFormatURL    = "url"
 )
 
 type inputMessage struct {
@@ -22,6 +29,14 @@ type inputContent struct {
 }
 
 func buildInput(prompt, system string, images []string, files []textFileContent) ([]inputMessage, error) {
+	return buildInputWithFileFormat(context.Background(), nil, prompt, system, images, files, fileFormatBase64)
+}
+
+func buildInputWithFileFormat(ctx context.Context, c *client, prompt, system string, images []string, files []textFileContent, fileFormat string) ([]inputMessage, error) {
+	fileFormat, err := normalizeFileFormat(fileFormat)
+	if err != nil {
+		return nil, err
+	}
 	var messages []inputMessage
 	if strings.TrimSpace(system) != "" {
 		messages = append(messages, inputMessage{
@@ -47,7 +62,7 @@ func buildInput(prompt, system string, images []string, files []textFileContent)
 		})
 	}
 	for _, image := range images {
-		imageURL, err := imageInputURL(image)
+		imageURL, err := imageInputURL(ctx, c, image, fileFormat)
 		if err != nil {
 			return nil, err
 		}
@@ -60,10 +75,27 @@ func buildInput(prompt, system string, images []string, files []textFileContent)
 	return messages, nil
 }
 
-func imageInputURL(value string) (string, error) {
+func normalizeFileFormat(value string) (string, error) {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "", fileFormatBase64:
+		return fileFormatBase64, nil
+	case fileFormatURL:
+		return fileFormatURL, nil
+	default:
+		return "", fmt.Errorf("invalid -file-format %q: expected base64 or url", value)
+	}
+}
+
+func imageInputURL(ctx context.Context, c *client, value, fileFormat string) (string, error) {
 	value = strings.TrimSpace(value)
 	if isHTTPURL(value) || strings.HasPrefix(value, "data:image/") {
 		return value, nil
+	}
+	if fileFormat == fileFormatURL {
+		if c == nil {
+			return "", errors.New("OSS client is required when -file-format=url")
+		}
+		return c.uploadLocalFile(ctx, value)
 	}
 
 	data, err := os.ReadFile(value)

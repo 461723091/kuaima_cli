@@ -17,6 +17,7 @@ import (
 
 type client struct {
 	baseURL    string
+	ossURL     string
 	apiKey     string
 	verbose    bool
 	httpClient *http.Client
@@ -56,7 +57,7 @@ type apiError struct {
 	Code    any    `json:"code"`
 }
 
-func newClient(baseURL, apiKey string, verbose bool) (*client, error) {
+func newClient(baseURL, ossURL, apiKey string, verbose bool) (*client, error) {
 	if strings.TrimSpace(apiKey) == "" {
 		apiKey = envOr("KUAIMA_API_KEY", os.Getenv("OPENAI_API_KEY"))
 	}
@@ -65,6 +66,7 @@ func newClient(baseURL, apiKey string, verbose bool) (*client, error) {
 	}
 	return &client{
 		baseURL: strings.TrimRight(baseURL, "/"),
+		ossURL:  strings.TrimRight(ossURL, "/"),
 		apiKey:  apiKey,
 		verbose: verbose,
 		httpClient: &http.Client{

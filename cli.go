@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 	"strings"
 )
 
@@ -21,7 +20,7 @@ func (f *stringsFlag) String() string {
 func (f *stringsFlag) Set(value string) error {
 	value = strings.TrimSpace(value)
 	if value == "" {
-		return errors.New("value cannot be empty")
+		return errors.New("值不能为空")
 	}
 	*f = append(*f, value)
 	return nil
@@ -30,6 +29,7 @@ func (f *stringsFlag) Set(value string) error {
 type clientOptions struct {
 	model   *string
 	baseURL *string
+	ossURL  *string
 	apiKey  *string
 	verbose *bool
 }
@@ -40,12 +40,18 @@ type responseOptions struct {
 	stream *bool
 }
 
+type inputOptions struct {
+	fileFormat  *string
+	attachments *stringsFlag
+}
+
 func addClientFlags(fs *flag.FlagSet) clientOptions {
 	return clientOptions{
 		model:   fs.String("model", envOr("KUAIMA_MODEL", defaultModel), "模型名称"),
 		baseURL: fs.String("base-url", envOr("KUAIMA_BASE_URL", defaultBaseURL), "API 基础地址"),
-		apiKey:  fs.String("api-key", "", "API key; overrides KUAIMA_API_KEY/OPENAI_API_KEY"),
-		verbose: fs.Bool("v", false, "print full request and response to stderr"),
+		ossURL:  fs.String("oss-url", envOr("KUAIMA_OSS_URL", defaultOssURL), "OSS API 基础地址"),
+		apiKey:  fs.String("api-key", "", "API key；覆盖 KUAIMA_API_KEY/OPENAI_API_KEY"),
+		verbose: fs.Bool("v", false, "打印完整请求和响应到 stderr"),
 	}
 }
 
@@ -57,23 +63,60 @@ func addResponseFlags(fs *flag.FlagSet) responseOptions {
 	}
 }
 
+func addInputFlags(fs *flag.FlagSet) inputOptions {
+	return inputOptions{
+		fileFormat:  fs.String("file-format", "base64", "本地图片输入格式：base64 或 url"),
+		attachments: addAttachmentFlags(fs),
+	}
+}
+
 func addAttachmentFlags(fs *flag.FlagSet) *stringsFlag {
 	var attachments stringsFlag
-	fs.Var(&attachments, "file", "file path or image URL to include; can be repeated")
-	fs.Var(&attachments, "image", "deprecated alias for -file")
+	fs.Var(&attachments, "file", "输入文本/图片路径或图片 URL；可重复传入")
+	fs.Var(&attachments, "image", "已废弃，等同于 -file")
 	return &attachments
 }
 
+func addSaveImagesFlag(fs *flag.FlagSet, defaultDir string) *string {
+	return fs.String("save-images", defaultDir, "保存响应中图片的目录；留空则不保存")
+}
+
 func (opts clientOptions) newClient() (*client, error) {
-	return newClient(*opts.baseURL, *opts.apiKey, *opts.verbose)
+	return newClient(*opts.baseURL, *opts.ossURL, *opts.apiKey, *opts.verbose)
+}
+
+func (opts inputOptions) buildInput(ctx context.Context, c *client, prompt, system string) ([]inputMessage, error) {
+	images, textFiles, err := collectInputAttachments(prompt, *opts.attachments)
+	if err != nil {
+		return nil, err
+	}
+	return buildInputWithFileFormat(ctx, c, prompt, system, images, textFiles, *opts.fileFormat)
+}
+
+func (opts inputOptions) hasPromptOrAttachments(prompt string) bool {
+	return strings.TrimSpace(prompt) != "" || len(*opts.attachments) > 0
+}
+
+func saveResponseImages(ctx context.Context, c *client, resp *responsePayload, dir string) ([]string, error) {
+	if strings.TrimSpace(dir) == "" {
+		return nil, nil
+	}
+	saved, err := saveImagesFromResponse(ctx, c.httpClient, resp, dir)
+	if err != nil {
+		return nil, err
+	}
+	for _, path := range saved {
+		fmt.Fprintf(os.Stderr, "已保存图片: %s\n", path)
+	}
+	return saved, nil
 }
 
 func runAsk(args []string) error {
 	fs := newFlagSet("ask")
 	opts := addResponseFlags(fs)
 	imageGeneration := fs.Bool("image-generation", false, "启用图片生成工具")
-	saveDir := fs.String("save-images", ".", "保存响应中图片的目录")
-	attachments := addAttachmentFlags(fs)
+	saveDir := addSaveImagesFlag(fs, ".")
+	inputOpts := addInputFlags(fs)
 	if err := parseFlags(fs, args); err != nil {
 		return err
 	}
@@ -86,12 +129,8 @@ func runAsk(args []string) error {
 			return err
 		}
 	}
-	if prompt == "" && len(*attachments) == 0 {
-		return errors.New("prompt is required")
-	}
-	images, textFiles, err := collectInputAttachments(prompt, *attachments)
-	if err != nil {
-		return err
+	if !inputOpts.hasPromptOrAttachments(prompt) {
+		return errors.New("必须提供提示词或附件")
 	}
 
 	c, err := opts.newClient()
@@ -99,7 +138,7 @@ func runAsk(args []string) error {
 		return err
 	}
 
-	input, err := buildInput(prompt, strings.TrimSpace(*opts.system), images, textFiles)
+	input, err := inputOpts.buildInput(context.Background(), c, prompt, strings.TrimSpace(*opts.system))
 	if err != nil {
 		return err
 	}
@@ -131,16 +170,8 @@ func runAsk(args []string) error {
 		return err
 	}
 
-	if strings.TrimSpace(*saveDir) != "" {
-		saved, err := saveImagesFromResponse(context.Background(), c.httpClient, resp, *saveDir)
-		if err != nil {
-			return err
-		}
-		for _, path := range saved {
-			fmt.Fprintf(os.Stderr, "saved image: %s\n", path)
-		}
-	}
-	return nil
+	_, err = saveResponseImages(context.Background(), c, resp, *saveDir)
+	return err
 }
 
 func readPromptFromStdin() (string, error) {
@@ -167,7 +198,7 @@ func readPromptFromStdin() (string, error) {
 func runChat(args []string) error {
 	fs := newFlagSet("chat")
 	opts := addResponseFlags(fs)
-	files := addAttachmentFlags(fs)
+	inputOpts := addInputFlags(fs)
 	if err := parseFlags(fs, args); err != nil {
 		return err
 	}
@@ -191,12 +222,7 @@ func runChat(args []string) error {
 		if text == "/exit" || text == "/quit" {
 			break
 		}
-		images, textFiles, err := collectInputAttachments(text, *files)
-		if err != nil {
-			return err
-		}
-
-		input, err := buildInput(text, strings.TrimSpace(*opts.system), images, textFiles)
+		input, err := inputOpts.buildInput(context.Background(), c, text, strings.TrimSpace(*opts.system))
 		if err != nil {
 			return err
 		}
@@ -224,21 +250,22 @@ func runChat(args []string) error {
 func runImage(args []string) error {
 	fs := newFlagSet("image")
 	opts := addClientFlags(fs)
-	output := fs.String("o", "image.png", "输出图片路径")
+	saveDir := addSaveImagesFlag(fs, ".")
+	inputOpts := addInputFlags(fs)
 	if err := parseFlags(fs, args); err != nil {
 		return err
 	}
 
 	prompt := strings.TrimSpace(strings.Join(fs.Args(), " "))
-	if prompt == "" {
-		return errors.New("image prompt is required")
+	if !inputOpts.hasPromptOrAttachments(prompt) {
+		return errors.New("必须提供图片提示词或附件")
 	}
 
 	c, err := opts.newClient()
 	if err != nil {
 		return err
 	}
-	input, err := buildInput(prompt, "", nil, nil)
+	input, err := inputOpts.buildInput(context.Background(), c, prompt, "")
 	if err != nil {
 		return err
 	}
@@ -251,22 +278,13 @@ func runImage(args []string) error {
 		return err
 	}
 
-	candidates := imageCandidates(resp)
-	if len(candidates) == 0 {
-		return errors.New("no image found in response")
-	}
-	data, mediaType, err := loadImageCandidate(context.Background(), c.httpClient, candidates[0])
+	saved, err := saveResponseImages(context.Background(), c, resp, *saveDir)
 	if err != nil {
 		return err
 	}
-	if mediaType != "" && filepath.Ext(*output) == "" {
-		*output += extensionForMediaType(mediaType, "")
+	if strings.TrimSpace(*saveDir) != "" && len(saved) == 0 {
+		return errors.New("响应中没有图片")
 	}
-	savedPath, err := writeFileUnique(*output, data, 0644)
-	if err != nil {
-		return err
-	}
-	fmt.Printf("已保存 %s\n", savedPath)
 	return nil
 }
 

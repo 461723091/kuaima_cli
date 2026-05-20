@@ -40,13 +40,19 @@ Get-Content prompt.txt | .\dist\kuaima_cli.exe
 .\dist\kuaima_cli.exe -file .\notes.md -file .\photo.png -file "https://example.com/cat.jpg" "结合 @.\extra.txt 描述这些内容"
 ```
 
+本地图片默认以 base64 data URL 形式放入输入；也可以先上传到 OSS，再用返回的 URL 构造输入：
+
+```powershell
+.\dist\kuaima_cli.exe -file-format url -file .\photo.png "描述这张图片"
+```
+
 开启流式输出：
 
 ```powershell
 .\dist\kuaima_cli.exe -stream "写一段产品介绍"
 ```
 
-如果返回结果里包含图片 URL、data URL、base64 图片，默认会保存到当前目录。可以指定保存目录，或传空字符串关闭：
+如果返回结果里包含图片 URL、data URL 或 base64 图片，默认会保存到当前目录。可以指定保存目录，或传空字符串关闭：
 
 ```powershell
 .\dist\kuaima_cli.exe -save-images .\outputs "生成一张海报"
@@ -59,12 +65,19 @@ Get-Content prompt.txt | .\dist\kuaima_cli.exe
 .\dist\kuaima_cli.exe -image-generation -save-images .\outputs "生成一张白色咖啡杯产品图"
 ```
 
-兼容旧的子命令：
+图片子命令会自动启用图片生成，并用 `-save-images` 保存响应中的所有图片：
+
+```powershell
+.\dist\kuaima_cli.exe image -save-images .\outputs "a clean product render of a white coffee mug"
+.\dist\kuaima_cli.exe image -file .\reference.png -save-images .\outputs "生成这张参考图的产品海报版本"
+```
+
+兼容子命令：
 
 ```powershell
 .\dist\kuaima_cli.exe ask -stream "你好"
 .\dist\kuaima_cli.exe chat
-.\dist\kuaima_cli.exe image -o output.png "a clean product render of a white coffee mug"
+.\dist\kuaima_cli.exe image -save-images .\outputs "a clean product render of a white coffee mug"
 ```
 
 ## 常用环境变量
@@ -72,5 +85,6 @@ Get-Content prompt.txt | .\dist\kuaima_cli.exe
 ```text
 KUAIMA_API_KEY   API key，未设置时使用 OPENAI_API_KEY
 KUAIMA_BASE_URL  默认 https://ai.szkmjb.com
+KUAIMA_OSS_URL   默认 https://oss.szkmjb.com
 KUAIMA_MODEL     默认 gpt-5.4-mini
 ```
