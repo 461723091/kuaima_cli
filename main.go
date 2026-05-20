@@ -10,6 +10,8 @@ import (
 const (
 	defaultBaseURL = "https://ai.szkmjb.com"
 	defaultModel   = "gpt-5.4-mini"
+
+	defaultOssURL = "https://oss.szkmjb.com"
 )
 
 func main() {

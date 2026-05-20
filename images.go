@@ -50,12 +50,46 @@ func saveImagesFromResponse(ctx context.Context, httpClient *http.Client, resp *
 		}
 		name := fmt.Sprintf("response-image-%02d%s", len(saved)+1, extensionForMediaType(mediaType, candidate.Value))
 		path := filepath.Join(dir, name)
-		if err := os.WriteFile(path, data, 0644); err != nil {
+		path, err = writeFileUnique(path, data, 0644)
+		if err != nil {
 			return saved, err
 		}
 		saved = append(saved, path)
 	}
 	return saved, nil
+}
+
+func writeFileUnique(path string, data []byte, perm os.FileMode) (string, error) {
+	for i := 0; ; i++ {
+		candidate := numberedPath(path, i)
+		file, err := os.OpenFile(candidate, os.O_WRONLY|os.O_CREATE|os.O_EXCL, perm)
+		if errors.Is(err, os.ErrExist) {
+			continue
+		}
+		if err != nil {
+			return "", err
+		}
+		if _, err := file.Write(data); err != nil {
+			closeErr := file.Close()
+			if closeErr != nil {
+				return "", fmt.Errorf("%w; close file: %v", err, closeErr)
+			}
+			return "", err
+		}
+		if err := file.Close(); err != nil {
+			return "", err
+		}
+		return candidate, nil
+	}
+}
+
+func numberedPath(path string, index int) string {
+	if index == 0 {
+		return path
+	}
+	ext := filepath.Ext(path)
+	stem := strings.TrimSuffix(path, ext)
+	return fmt.Sprintf("%s-%02d%s", stem, index, ext)
 }
 
 func imageCandidates(resp *responsePayload) []imageCandidate {

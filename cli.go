@@ -27,19 +27,53 @@ func (f *stringsFlag) Set(value string) error {
 	return nil
 }
 
-func runAsk(args []string) error {
-	fs := newFlagSet("ask")
-	model := fs.String("model", envOr("KUAIMA_MODEL", defaultModel), "模型名称")
-	baseURL := fs.String("base-url", envOr("KUAIMA_BASE_URL", defaultBaseURL), "API 基础地址")
-	system := fs.String("system", "", "可选的系统/开发者指令")
-	stream := fs.Bool("stream", false, "实时打印服务端返回的文本增量")
-	imageGeneration := fs.Bool("image-generation", false, "启用图片生成工具")
-	saveDir := fs.String("save-images", ".", "保存响应中图片的目录；留空则不保存")
-	apiKey := fs.String("api-key", "", "API key; overrides KUAIMA_API_KEY/OPENAI_API_KEY")
-	verbose := fs.Bool("v", false, "print full request and response to stderr")
+type clientOptions struct {
+	model   *string
+	baseURL *string
+	apiKey  *string
+	verbose *bool
+}
+
+type responseOptions struct {
+	clientOptions
+	system *string
+	stream *bool
+}
+
+func addClientFlags(fs *flag.FlagSet) clientOptions {
+	return clientOptions{
+		model:   fs.String("model", envOr("KUAIMA_MODEL", defaultModel), "模型名称"),
+		baseURL: fs.String("base-url", envOr("KUAIMA_BASE_URL", defaultBaseURL), "API 基础地址"),
+		apiKey:  fs.String("api-key", "", "API key; overrides KUAIMA_API_KEY/OPENAI_API_KEY"),
+		verbose: fs.Bool("v", false, "print full request and response to stderr"),
+	}
+}
+
+func addResponseFlags(fs *flag.FlagSet) responseOptions {
+	return responseOptions{
+		clientOptions: addClientFlags(fs),
+		system:        fs.String("system", "", "可选的系统/开发者指令"),
+		stream:        fs.Bool("stream", false, "实时打印服务端返回的文本增量"),
+	}
+}
+
+func addAttachmentFlags(fs *flag.FlagSet) *stringsFlag {
 	var attachments stringsFlag
 	fs.Var(&attachments, "file", "file path or image URL to include; can be repeated")
 	fs.Var(&attachments, "image", "deprecated alias for -file")
+	return &attachments
+}
+
+func (opts clientOptions) newClient() (*client, error) {
+	return newClient(*opts.baseURL, *opts.apiKey, *opts.verbose)
+}
+
+func runAsk(args []string) error {
+	fs := newFlagSet("ask")
+	opts := addResponseFlags(fs)
+	imageGeneration := fs.Bool("image-generation", false, "启用图片生成工具")
+	saveDir := fs.String("save-images", ".", "保存响应中图片的目录")
+	attachments := addAttachmentFlags(fs)
 	if err := parseFlags(fs, args); err != nil {
 		return err
 	}
@@ -52,34 +86,34 @@ func runAsk(args []string) error {
 			return err
 		}
 	}
-	if prompt == "" && len(attachments) == 0 {
+	if prompt == "" && len(*attachments) == 0 {
 		return errors.New("prompt is required")
 	}
-	images, textFiles, err := collectInputAttachments(prompt, attachments)
+	images, textFiles, err := collectInputAttachments(prompt, *attachments)
 	if err != nil {
 		return err
 	}
 
-	c, err := newClient(*baseURL, *apiKey, *verbose)
+	c, err := opts.newClient()
 	if err != nil {
 		return err
 	}
 
-	input, err := buildInput(prompt, strings.TrimSpace(*system), images, textFiles)
+	input, err := buildInput(prompt, strings.TrimSpace(*opts.system), images, textFiles)
 	if err != nil {
 		return err
 	}
 	req := responseRequest{
-		Model:  *model,
+		Model:  *opts.model,
 		Input:  input,
-		Stream: *stream,
+		Stream: *opts.stream,
 	}
 	if *imageGeneration {
 		req.Tools = []map[string]string{{"type": "image_generation"}}
 	}
 
 	var resp *responsePayload
-	if *stream {
+	if *opts.stream {
 		resp, err = c.createResponseStream(context.Background(), req, os.Stdout)
 		if err == nil {
 			fmt.Fprintln(os.Stdout)
@@ -132,24 +166,18 @@ func readPromptFromStdin() (string, error) {
 
 func runChat(args []string) error {
 	fs := newFlagSet("chat")
-	var files stringsFlag
-	fs.Var(&files, "file", "file path or image URL to include; can be repeated")
-	apiKey := fs.String("api-key", "", "API key; overrides KUAIMA_API_KEY/OPENAI_API_KEY")
-	verbose := fs.Bool("v", false, "print full request and response to stderr")
-	model := fs.String("model", envOr("KUAIMA_MODEL", defaultModel), "模型名称")
-	baseURL := fs.String("base-url", envOr("KUAIMA_BASE_URL", defaultBaseURL), "API 基础地址")
-	system := fs.String("system", "", "可选的系统/开发者指令")
-	stream := fs.Bool("stream", false, "实时打印服务端返回的文本增量")
+	opts := addResponseFlags(fs)
+	files := addAttachmentFlags(fs)
 	if err := parseFlags(fs, args); err != nil {
 		return err
 	}
 
-	c, err := newClient(*baseURL, *apiKey, *verbose)
+	c, err := opts.newClient()
 	if err != nil {
 		return err
 	}
 
-	fmt.Println("简单对话模式。输入 /exit 或按 Ctrl+C 退出。")
+	fmt.Println("简单对话模式。输入 /exit 或 /quit 退出。")
 	scanner := bufio.NewScanner(os.Stdin)
 	for {
 		fmt.Print("> ")
@@ -163,17 +191,17 @@ func runChat(args []string) error {
 		if text == "/exit" || text == "/quit" {
 			break
 		}
-		images, textFiles, err := collectInputAttachments(text, files)
+		images, textFiles, err := collectInputAttachments(text, *files)
 		if err != nil {
 			return err
 		}
 
-		input, err := buildInput(text, strings.TrimSpace(*system), images, textFiles)
+		input, err := buildInput(text, strings.TrimSpace(*opts.system), images, textFiles)
 		if err != nil {
 			return err
 		}
-		req := responseRequest{Model: *model, Input: input, Stream: *stream}
-		if *stream {
+		req := responseRequest{Model: *opts.model, Input: input, Stream: *opts.stream}
+		if *opts.stream {
 			if _, err := c.createResponseStream(context.Background(), req, os.Stdout); err != nil {
 				return err
 			}
@@ -195,10 +223,7 @@ func runChat(args []string) error {
 
 func runImage(args []string) error {
 	fs := newFlagSet("image")
-	apiKey := fs.String("api-key", "", "API key; overrides KUAIMA_API_KEY/OPENAI_API_KEY")
-	verbose := fs.Bool("v", false, "print full request and response to stderr")
-	model := fs.String("model", envOr("KUAIMA_MODEL", defaultModel), "模型名称")
-	baseURL := fs.String("base-url", envOr("KUAIMA_BASE_URL", defaultBaseURL), "API 基础地址")
+	opts := addClientFlags(fs)
 	output := fs.String("o", "image.png", "输出图片路径")
 	if err := parseFlags(fs, args); err != nil {
 		return err
@@ -209,7 +234,7 @@ func runImage(args []string) error {
 		return errors.New("image prompt is required")
 	}
 
-	c, err := newClient(*baseURL, *apiKey, *verbose)
+	c, err := opts.newClient()
 	if err != nil {
 		return err
 	}
@@ -218,7 +243,7 @@ func runImage(args []string) error {
 		return err
 	}
 	resp, err := c.createResponse(context.Background(), responseRequest{
-		Model: *model,
+		Model: *opts.model,
 		Input: input,
 		Tools: []map[string]string{{"type": "image_generation"}},
 	})
@@ -237,10 +262,11 @@ func runImage(args []string) error {
 	if mediaType != "" && filepath.Ext(*output) == "" {
 		*output += extensionForMediaType(mediaType, "")
 	}
-	if err := os.WriteFile(*output, data, 0644); err != nil {
+	savedPath, err := writeFileUnique(*output, data, 0644)
+	if err != nil {
 		return err
 	}
-	fmt.Printf("已保存 %s\n", *output)
+	fmt.Printf("已保存 %s\n", savedPath)
 	return nil
 }
 
