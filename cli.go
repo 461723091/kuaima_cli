@@ -28,13 +28,14 @@ func (f *stringsFlag) Set(value string) error {
 }
 
 type clientOptions struct {
-	model    *string
-	baseURL  *string
-	ossURL   *string
-	apiKey   *string
-	username *string
-	password *string
-	verbose  *bool
+	model      *string
+	imageModel *string
+	baseURL    *string
+	ossURL     *string
+	apiKey     *string
+	username   *string
+	password   *string
+	verbose    *bool
 }
 
 type responseOptions struct {
@@ -53,14 +54,16 @@ func addClientFlags(fs *flag.FlagSet) clientOptions {
 }
 
 func addClientFlagsWithConfig(fs *flag.FlagSet, cfg appConfig) clientOptions {
+	modelDefault := envOr("KUAIMA_MODEL", configNonEmptyString(cfg.Model, defaultModel))
 	return clientOptions{
-		model:    fs.String("model", envOr("KUAIMA_MODEL", configNonEmptyString(cfg.Model, defaultModel)), "模型名称"),
-		baseURL:  fs.String("base-url", envOr("KUAIMA_BASE_URL", configNonEmptyString(cfg.BaseURL, defaultBaseURL)), "API 基础地址"),
-		ossURL:   fs.String("oss-url", envOr("KUAIMA_OSS_URL", configNonEmptyString(cfg.OssURL, defaultOssURL)), "OSS API 基础地址"),
-		apiKey:   fs.String("api-key", envOr("KUAIMA_API_KEY", envOr("OPENAI_API_KEY", configString(cfg.APIKey, ""))), "API key；覆盖 KUAIMA_API_KEY/OPENAI_API_KEY"),
-		username: fs.String("username", configString(cfg.Username, ""), "快马账号；未提供时自动生成并保存"),
-		password: fs.String("password", configString(cfg.Password, ""), "快马密码；未提供时自动生成并保存"),
-		verbose:  fs.Bool("v", false, "打印完整请求和响应到 stderr"),
+		model:      fs.String("model", modelDefault, "模型名称"),
+		imageModel: fs.String("image-model", envOr("KUAIMA_IMAGE_MODEL", configString(cfg.ImageModel, "")), "图片生成模型名称"),
+		baseURL:    fs.String("base-url", envOr("KUAIMA_BASE_URL", configNonEmptyString(cfg.BaseURL, defaultBaseURL)), "API 基础地址"),
+		ossURL:     fs.String("oss-url", envOr("KUAIMA_OSS_URL", configNonEmptyString(cfg.OssURL, defaultOssURL)), "OSS API 基础地址"),
+		apiKey:     fs.String("api-key", envOr("KUAIMA_API_KEY", envOr("OPENAI_API_KEY", configString(cfg.APIKey, ""))), "API key；覆盖 KUAIMA_API_KEY/OPENAI_API_KEY"),
+		username:   fs.String("username", configString(cfg.Username, ""), "快马账号；未提供时自动生成并保存"),
+		password:   fs.String("password", configString(cfg.Password, ""), "快马密码；未提供时自动生成并保存"),
+		verbose:    fs.Bool("v", false, "打印完整请求和响应到 stderr"),
 	}
 }
 
@@ -104,6 +107,16 @@ func addSaveImagesFlagWithConfig(fs *flag.FlagSet, cfg appConfig, defaultDir str
 
 func (opts clientOptions) newClient() (*client, error) {
 	return newClient(*opts.baseURL, *opts.ossURL, *opts.apiKey, *opts.username, *opts.password, *opts.verbose)
+}
+
+func (opts clientOptions) imageGenerationModel() string {
+	if opts.imageModel != nil && strings.TrimSpace(*opts.imageModel) != "" {
+		return *opts.imageModel
+	}
+	if opts.model != nil {
+		return *opts.model
+	}
+	return ""
 }
 
 func (opts inputOptions) buildInput(ctx context.Context, c *client, prompt, system string) ([]inputMessage, error) {
@@ -176,6 +189,7 @@ func runAsk(args []string) error {
 		Stream: *opts.stream,
 	}
 	if *imageGeneration {
+		req.Model = opts.imageGenerationModel()
 		req.Tools = []map[string]string{{"type": "image_generation"}}
 	}
 
@@ -312,7 +326,7 @@ func runImage(args []string) error {
 		return err
 	}
 	resp, err := c.createResponse(context.Background(), responseRequest{
-		Model: *opts.model,
+		Model: opts.imageGenerationModel(),
 		Input: input,
 		Tools: []map[string]string{{"type": "image_generation"}},
 	})

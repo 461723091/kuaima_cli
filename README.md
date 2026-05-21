@@ -26,6 +26,7 @@ $env:KUAIMA_API_KEY="your_api_key"
 
 ```text
 model
+image_model
 base_url
 oss_url
 api_key
@@ -40,6 +41,7 @@ save_images
 ```json
 {
   "model": "gpt-5.4-mini",
+  "image_model": "gpt-image-1",
   "base_url": "https://ai.szkmjb.com",
   "oss_url": "https://oss.szkmjb.com",
   "api_key": "your_api_key",
@@ -116,4 +118,5 @@ KUAIMA_API_KEY   API key，未设置时使用 OPENAI_API_KEY
 KUAIMA_BASE_URL  默认 https://ai.szkmjb.com
 KUAIMA_OSS_URL   默认 https://oss.szkmjb.com
 KUAIMA_MODEL     默认 gpt-5.4-mini
+KUAIMA_IMAGE_MODEL 图片生成模型；未设置时回退到 KUAIMA_MODEL/model
 ```

@@ -9,6 +9,7 @@ import (
 
 func TestConfigDefaultsHaveLowestUserPriority(t *testing.T) {
 	t.Setenv("KUAIMA_MODEL", "env-model")
+	t.Setenv("KUAIMA_IMAGE_MODEL", "env-image-model")
 	t.Setenv("KUAIMA_BASE_URL", "")
 	t.Setenv("KUAIMA_OSS_URL", "")
 	t.Setenv("KUAIMA_API_KEY", "")
@@ -16,6 +17,7 @@ func TestConfigDefaultsHaveLowestUserPriority(t *testing.T) {
 
 	cfg := appConfig{
 		Model:      stringPtr("config-model"),
+		ImageModel: stringPtr("config-image-model"),
 		BaseURL:    stringPtr("https://config.example.com"),
 		OssURL:     stringPtr("https://oss-config.example.com"),
 		APIKey:     stringPtr("config-key"),
@@ -35,6 +37,9 @@ func TestConfigDefaultsHaveLowestUserPriority(t *testing.T) {
 
 	if *opts.model != "env-model" {
 		t.Fatalf("expected env model, got %q", *opts.model)
+	}
+	if *opts.imageModel != "env-image-model" {
+		t.Fatalf("expected env image model, got %q", *opts.imageModel)
 	}
 	if *opts.baseURL != "https://cli.example.com" {
 		t.Fatalf("expected CLI base URL, got %q", *opts.baseURL)
@@ -73,6 +78,7 @@ func TestPersistConfigFlagsUpdatesOnlyExplicitPersistentFlags(t *testing.T) {
 	_ = addInputFlagsWithConfig(fs, cfg)
 	if err := parseFlags(fs, []string{
 		"-model", "new-model",
+		"-image-model", "new-image-model",
 		"-stream=false",
 		"-file-format", fileFormatURL,
 		"-save-images", "",
@@ -95,6 +101,9 @@ func TestPersistConfigFlagsUpdatesOnlyExplicitPersistentFlags(t *testing.T) {
 
 	if got["model"] != "new-model" {
 		t.Fatalf("expected updated model, got %#v", got["model"])
+	}
+	if got["image_model"] != "new-image-model" {
+		t.Fatalf("expected updated image_model, got %#v", got["image_model"])
 	}
 	if got["base_url"] != "https://old.example.com" {
 		t.Fatalf("expected existing base_url to be preserved, got %#v", got["base_url"])

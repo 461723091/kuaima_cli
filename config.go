@@ -13,6 +13,7 @@ import (
 
 type appConfig struct {
 	Model      *string `json:"model,omitempty"`
+	ImageModel *string `json:"image_model,omitempty"`
 	BaseURL    *string `json:"base_url,omitempty"`
 	OssURL     *string `json:"oss_url,omitempty"`
 	APIKey     *string `json:"api_key,omitempty"`
@@ -115,6 +116,9 @@ func persistConfigFlags(fs *flag.FlagSet, cfg appConfig) error {
 		switch f.Name {
 		case "model":
 			cfg.Model = stringPtr(f.Value.String())
+			changed = true
+		case "image-model":
+			cfg.ImageModel = stringPtr(f.Value.String())
 			changed = true
 		case "base-url":
 			cfg.BaseURL = stringPtr(f.Value.String())

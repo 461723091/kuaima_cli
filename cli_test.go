@@ -32,11 +32,12 @@ func TestInputOptionsBuildInputWithImageAttachment(t *testing.T) {
 
 func TestImageCommandSharedFlagsParse(t *testing.T) {
 	fs := newFlagSet("image")
-	_ = addClientFlags(fs)
+	opts := addClientFlags(fs)
 	saveDir := addSaveImagesFlag(fs, ".")
 	inputOpts := addInputFlags(fs)
 
 	err := parseFlags(fs, []string{
+		"-image-model", "image-model",
 		"-file-format", "url",
 		"-file", "https://example.com/reference.png",
 		"-save-images", "outputs",
@@ -46,6 +47,9 @@ func TestImageCommandSharedFlagsParse(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	if opts.imageGenerationModel() != "image-model" {
+		t.Fatalf("unexpected image model: %q", opts.imageGenerationModel())
+	}
 	if *inputOpts.fileFormat != fileFormatURL {
 		t.Fatalf("unexpected file format: %q", *inputOpts.fileFormat)
 	}
@@ -54,6 +58,17 @@ func TestImageCommandSharedFlagsParse(t *testing.T) {
 	}
 	if *saveDir != "outputs" {
 		t.Fatalf("unexpected save dir: %q", *saveDir)
+	}
+}
+
+func TestImageGenerationModelFallsBackToModel(t *testing.T) {
+	fs := newFlagSet("image")
+	opts := addClientFlags(fs)
+	if err := parseFlags(fs, []string{"-model", "cli-model"}); err != nil {
+		t.Fatal(err)
+	}
+	if opts.imageGenerationModel() != "cli-model" {
+		t.Fatalf("expected image model to fall back to model, got %q", opts.imageGenerationModel())
 	}
 }
 
