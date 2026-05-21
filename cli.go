@@ -377,13 +377,34 @@ func runBalance(args []string) error {
 	if err != nil {
 		return err
 	}
-	fmt.Printf("name: %s\n", usage.Name)
-	fmt.Printf("total_granted: %d\n", usage.TotalGranted)
-	fmt.Printf("total_used: %d\n", usage.TotalUsed)
-	fmt.Printf("total_available: %d\n", usage.TotalAvailable)
-	fmt.Printf("unlimited_quota: %t\n", usage.UnlimitedQuota)
-	fmt.Printf("expires_at: %d\n", usage.ExpiresAt)
+	fmt.Printf("%s\n", usage.Name)
+	fmt.Printf("可用额度: %s\n", formatQuotaAmount(usage.TotalAvailable))
+	fmt.Printf("已消耗: %s\n", formatQuotaAmount(usage.TotalUsed))
+	if len(usage.Subscriptions) > 0 {
+		fmt.Println("订阅套餐:")
+		for _, item := range usage.Subscriptions {
+			sub := item.Subscription
+			fmt.Printf("    状态: %s\n", sub.Status)
+			fmt.Printf("    可用额度: %s\n", formatQuotaAmount(sub.AmountTotal-sub.AmountUsed))
+			fmt.Printf("    已消耗: %s\n", formatQuotaAmount(sub.AmountUsed))
+			fmt.Printf("    订阅时间: %s\n", formatTime(sub.StartTime))
+			fmt.Printf("    到期时间: %s\n", formatTime(sub.EndTime))
+			//fmt.Printf("    last_reset_time: %d\n", sub.LastResetTime)
+			//fmt.Printf("    next_reset_time: %d\n", sub.NextResetTime)
+		}
+	}
 	return nil
+}
+
+func formatQuotaAmount(quota int64) string {
+	return fmt.Sprintf("%d (￥%.2f)", quota, float64(quota)/500000)
+}
+func formatTime(ts int64) string {
+	if ts <= 0 {
+		return "-"
+	}
+	tm := time.Unix(ts, 0)
+	return tm.Format("2006-01-02 15:04")
 }
 
 func runRecharge(args []string) error {

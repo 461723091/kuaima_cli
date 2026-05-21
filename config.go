@@ -33,10 +33,19 @@ func loadAppConfig() (appConfig, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			if err := saveAppConfig(appConfig{}); err != nil {
-				return appConfig{}, err
+			oldPath := filepath.Join(filepath.Dir(path), "conf.json")
+			oldData, oldErr := os.ReadFile(oldPath)
+			if oldErr == nil {
+				sourcePath = oldPath
+				data = oldData
+			} else if errors.Is(oldErr, os.ErrNotExist) {
+				if err := saveAppConfig(appConfig{}); err != nil {
+					return appConfig{}, err
+				}
+				return appConfig{}, nil
+			} else {
+				return appConfig{}, oldErr
 			}
-			return appConfig{}, nil
 		} else {
 			return appConfig{}, err
 		}
