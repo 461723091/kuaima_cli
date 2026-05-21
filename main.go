@@ -26,9 +26,9 @@ func main() {
 		case "image":
 			exit(runImage(os.Args[2:]))
 			return
-		case "login":
-			exit(runLogin(os.Args[2:]))
-			return
+		//case "login":
+		//	exit(runLogin(os.Args[2:]))
+		//	return
 		case "balance":
 			exit(runBalance(os.Args[2:]))
 			return
