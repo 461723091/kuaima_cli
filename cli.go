@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"strings"
+	"time"
 )
 
 type stringsFlag []string
@@ -27,11 +28,13 @@ func (f *stringsFlag) Set(value string) error {
 }
 
 type clientOptions struct {
-	model   *string
-	baseURL *string
-	ossURL  *string
-	apiKey  *string
-	verbose *bool
+	model    *string
+	baseURL  *string
+	ossURL   *string
+	apiKey   *string
+	username *string
+	password *string
+	verbose  *bool
 }
 
 type responseOptions struct {
@@ -51,11 +54,13 @@ func addClientFlags(fs *flag.FlagSet) clientOptions {
 
 func addClientFlagsWithConfig(fs *flag.FlagSet, cfg appConfig) clientOptions {
 	return clientOptions{
-		model:   fs.String("model", envOr("KUAIMA_MODEL", configNonEmptyString(cfg.Model, defaultModel)), "模型名称"),
-		baseURL: fs.String("base-url", envOr("KUAIMA_BASE_URL", configNonEmptyString(cfg.BaseURL, defaultBaseURL)), "API 基础地址"),
-		ossURL:  fs.String("oss-url", envOr("KUAIMA_OSS_URL", configNonEmptyString(cfg.OssURL, defaultOssURL)), "OSS API 基础地址"),
-		apiKey:  fs.String("api-key", envOr("KUAIMA_API_KEY", envOr("OPENAI_API_KEY", configString(cfg.APIKey, ""))), "API key；覆盖 KUAIMA_API_KEY/OPENAI_API_KEY"),
-		verbose: fs.Bool("v", false, "打印完整请求和响应到 stderr"),
+		model:    fs.String("model", envOr("KUAIMA_MODEL", configNonEmptyString(cfg.Model, defaultModel)), "模型名称"),
+		baseURL:  fs.String("base-url", envOr("KUAIMA_BASE_URL", configNonEmptyString(cfg.BaseURL, defaultBaseURL)), "API 基础地址"),
+		ossURL:   fs.String("oss-url", envOr("KUAIMA_OSS_URL", configNonEmptyString(cfg.OssURL, defaultOssURL)), "OSS API 基础地址"),
+		apiKey:   fs.String("api-key", envOr("KUAIMA_API_KEY", envOr("OPENAI_API_KEY", configString(cfg.APIKey, ""))), "API key；覆盖 KUAIMA_API_KEY/OPENAI_API_KEY"),
+		username: fs.String("username", configString(cfg.Username, ""), "快马账号；未提供时自动生成并保存"),
+		password: fs.String("password", configString(cfg.Password, ""), "快马密码；未提供时自动生成并保存"),
+		verbose:  fs.Bool("v", false, "打印完整请求和响应到 stderr"),
 	}
 }
 
@@ -98,7 +103,7 @@ func addSaveImagesFlagWithConfig(fs *flag.FlagSet, cfg appConfig, defaultDir str
 }
 
 func (opts clientOptions) newClient() (*client, error) {
-	return newClient(*opts.baseURL, *opts.ossURL, *opts.apiKey, *opts.verbose)
+	return newClient(*opts.baseURL, *opts.ossURL, *opts.apiKey, *opts.username, *opts.password, *opts.verbose)
 }
 
 func (opts inputOptions) buildInput(ctx context.Context, c *client, prompt, system string) ([]inputMessage, error) {
@@ -322,6 +327,95 @@ func runImage(args []string) error {
 	if strings.TrimSpace(*saveDir) != "" && len(saved) == 0 {
 		return errors.New("响应中没有图片")
 	}
+	return nil
+}
+
+func runLogin(args []string) error {
+	cfg, err := loadAppConfig()
+	if err != nil {
+		return err
+	}
+	fs := newFlagSet("login")
+	opts := addClientFlagsWithConfig(fs, cfg)
+	force := fs.Bool("force", false, "重新登录并刷新 API key")
+	if err := parseFlags(fs, args); err != nil {
+		return err
+	}
+	if err := persistConfigFlags(fs, cfg); err != nil {
+		return err
+	}
+
+	apiKey := strings.TrimSpace(*opts.apiKey)
+	if apiKey == "" || *force {
+		apiKey, err = ensureAPIKey(context.Background(), *opts.baseURL, *opts.username, *opts.password, *opts.verbose)
+		if err != nil {
+			return err
+		}
+	}
+	fmt.Println(apiKey)
+	return nil
+}
+
+func runBalance(args []string) error {
+	cfg, err := loadAppConfig()
+	if err != nil {
+		return err
+	}
+	fs := newFlagSet("balance")
+	opts := addClientFlagsWithConfig(fs, cfg)
+	if err := parseFlags(fs, args); err != nil {
+		return err
+	}
+	if err := persistConfigFlags(fs, cfg); err != nil {
+		return err
+	}
+	c, err := opts.newClient()
+	if err != nil {
+		return err
+	}
+	usage, err := c.getTokenUsage(context.Background())
+	if err != nil {
+		return err
+	}
+	fmt.Printf("name: %s\n", usage.Name)
+	fmt.Printf("total_granted: %d\n", usage.TotalGranted)
+	fmt.Printf("total_used: %d\n", usage.TotalUsed)
+	fmt.Printf("total_available: %d\n", usage.TotalAvailable)
+	fmt.Printf("unlimited_quota: %t\n", usage.UnlimitedQuota)
+	fmt.Printf("expires_at: %d\n", usage.ExpiresAt)
+	return nil
+}
+
+func runRecharge(args []string) error {
+	cfg, err := loadAppConfig()
+	if err != nil {
+		return err
+	}
+	fs := newFlagSet("recharge")
+	opts := addClientFlagsWithConfig(fs, cfg)
+	printOnly := fs.Bool("print-url", false, "只打印充值页面 URL，不打开浏览器")
+	if err := parseFlags(fs, args); err != nil {
+		return err
+	}
+	if err := persistConfigFlags(fs, cfg); err != nil {
+		return err
+	}
+	username, password, err := resolveRechargeCredentials(context.Background(), *opts.baseURL, *opts.username, *opts.password, *opts.verbose)
+	if err != nil {
+		return err
+	}
+	rawURL, err := rechargeURL(*opts.baseURL, username, password, time.Now())
+	if err != nil {
+		return err
+	}
+	if *printOnly {
+		fmt.Println(rawURL)
+		return nil
+	}
+	if err := openBrowser(rawURL); err != nil {
+		return err
+	}
+	fmt.Println(rawURL)
 	return nil
 }
 

@@ -26,13 +26,26 @@ func main() {
 		case "image":
 			exit(runImage(os.Args[2:]))
 			return
+		case "login":
+			exit(runLogin(os.Args[2:]))
+			return
+		case "balance":
+			exit(runBalance(os.Args[2:]))
+			return
+		case "recharge":
+			exit(runRecharge(os.Args[2:]))
+			return
 		case "help", "-h", "--help":
 			usage(os.Stdout)
 			return
 		}
 	}
 
-	exit(runAsk(os.Args[1:]))
+	if len(os.Args) > 1 {
+		exit(runAsk(os.Args[1:]))
+		return
+	}
+	usage(os.Stdout)
 }
 
 func exit(err error) {

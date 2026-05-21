@@ -57,12 +57,16 @@ type apiError struct {
 	Code    any    `json:"code"`
 }
 
-func newClient(baseURL, ossURL, apiKey string, verbose bool) (*client, error) {
+func newClient(baseURL, ossURL, apiKey, username, password string, verbose bool) (*client, error) {
 	if strings.TrimSpace(apiKey) == "" {
 		apiKey = envOr("KUAIMA_API_KEY", os.Getenv("OPENAI_API_KEY"))
 	}
 	if strings.TrimSpace(apiKey) == "" {
-		return nil, errors.New("未提供 -api-key 密钥")
+		var err error
+		apiKey, err = ensureAPIKey(context.Background(), baseURL, username, password, verbose)
+		if err != nil {
+			return nil, fmt.Errorf("auto get api-key: %w", err)
+		}
 	}
 	return &client{
 		baseURL: strings.TrimRight(baseURL, "/"),

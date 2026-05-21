@@ -84,7 +84,7 @@ func TestPersistConfigFlagsUpdatesOnlyExplicitPersistentFlags(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	data, err := os.ReadFile(filepath.Join(dir, "conf.json"))
+	data, err := os.ReadFile(filepath.Join(dir, "config.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -126,12 +126,34 @@ func TestConfigSaveImagesAllowsEmptyValue(t *testing.T) {
 }
 
 func TestLoadAppConfigMissingFile(t *testing.T) {
-	t.Setenv("KUAIMA_CONFIG_DIR", t.TempDir())
+	dir := t.TempDir()
+	t.Setenv("KUAIMA_CONFIG_DIR", dir)
 	cfg, err := loadAppConfig()
 	if err != nil {
 		t.Fatal(err)
 	}
 	if cfg.Model != nil {
 		t.Fatalf("expected empty config, got %#v", cfg)
+	}
+	data, err := os.ReadFile(filepath.Join(dir, "config.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(data) != "{}\n" {
+		t.Fatalf("expected empty config file, got %q", string(data))
+	}
+}
+
+func TestLoadAppConfigReadsOldConfigPath(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("KUAIMA_CONFIG_DIR", dir)
+	writeTestFile(t, filepath.Join(dir, "conf.json"), []byte(`{"api_key":"old-key"}`))
+
+	cfg, err := loadAppConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if configString(cfg.APIKey, "") != "old-key" {
+		t.Fatalf("expected old config api key, got %#v", cfg.APIKey)
 	}
 }

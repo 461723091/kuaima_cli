@@ -16,6 +16,8 @@ type appConfig struct {
 	BaseURL    *string `json:"base_url,omitempty"`
 	OssURL     *string `json:"oss_url,omitempty"`
 	APIKey     *string `json:"api_key,omitempty"`
+	Username   *string `json:"username,omitempty"`
+	Password   *string `json:"password,omitempty"`
 	System     *string `json:"system,omitempty"`
 	Stream     *bool   `json:"stream,omitempty"`
 	FileFormat *string `json:"file_format,omitempty"`
@@ -27,12 +29,17 @@ func loadAppConfig() (appConfig, error) {
 	if err != nil {
 		return appConfig{}, err
 	}
+	sourcePath := path
 	data, err := os.ReadFile(path)
-	if errors.Is(err, os.ErrNotExist) {
-		return appConfig{}, nil
-	}
 	if err != nil {
-		return appConfig{}, err
+		if errors.Is(err, os.ErrNotExist) {
+			if err := saveAppConfig(appConfig{}); err != nil {
+				return appConfig{}, err
+			}
+			return appConfig{}, nil
+		} else {
+			return appConfig{}, err
+		}
 	}
 	if strings.TrimSpace(string(data)) == "" {
 		return appConfig{}, nil
@@ -40,7 +47,7 @@ func loadAppConfig() (appConfig, error) {
 
 	var cfg appConfig
 	if err := json.Unmarshal(data, &cfg); err != nil {
-		return appConfig{}, fmt.Errorf("read config %s: %w", path, err)
+		return appConfig{}, fmt.Errorf("read config %s: %w", sourcePath, err)
 	}
 	return cfg, nil
 }
@@ -63,13 +70,13 @@ func saveAppConfig(cfg appConfig) error {
 
 func appConfigPath() (string, error) {
 	if dir := strings.TrimSpace(os.Getenv("KUAIMA_CONFIG_DIR")); dir != "" {
-		return filepath.Join(dir, "conf.json"), nil
+		return filepath.Join(dir, "config.json"), nil
 	}
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(home, ".kuaima", "conf.json"), nil
+	return filepath.Join(home, ".kuaima", "config.json"), nil
 }
 
 func configString(value *string, fallback string) string {
@@ -108,6 +115,12 @@ func persistConfigFlags(fs *flag.FlagSet, cfg appConfig) error {
 			changed = true
 		case "api-key":
 			cfg.APIKey = stringPtr(f.Value.String())
+			changed = true
+		case "username":
+			cfg.Username = stringPtr(f.Value.String())
+			changed = true
+		case "password":
+			cfg.Password = stringPtr(f.Value.String())
 			changed = true
 		case "system":
 			cfg.System = stringPtr(f.Value.String())

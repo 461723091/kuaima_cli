@@ -5,3 +5,5 @@ build:
 run:
 	dist/kuaima_cli.exe
 
+test:
+	dist/kuaima_cli.exe 你是什么模型
