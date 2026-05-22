@@ -12,17 +12,25 @@ import (
 )
 
 type appConfig struct {
-	Model      *string `json:"model,omitempty"`
-	ImageModel *string `json:"image_model,omitempty"`
-	BaseURL    *string `json:"base_url,omitempty"`
-	OssURL     *string `json:"oss_url,omitempty"`
-	APIKey     *string `json:"api_key,omitempty"`
-	Username   *string `json:"username,omitempty"`
-	Password   *string `json:"password,omitempty"`
-	System     *string `json:"system,omitempty"`
-	Stream     *bool   `json:"stream,omitempty"`
-	FileFormat *string `json:"file_format,omitempty"`
-	SaveImages *string `json:"save_images,omitempty"`
+	Model                  *string `json:"model,omitempty"`
+	ImageModel             *string `json:"image_model,omitempty"`
+	ImageSize              *string `json:"image_size,omitempty"`
+	ImageQuality           *string `json:"image_quality,omitempty"`
+	ImageCount             *int    `json:"image_count,omitempty"`
+	ImageOutputFormat      *string `json:"image_output_format,omitempty"`
+	ImageOutputCompression *int    `json:"image_output_compression,omitempty"`
+	ImageBackground        *string `json:"image_background,omitempty"`
+	ImageModeration        *string `json:"image_moderation,omitempty"`
+	ImageAction            *string `json:"image_action,omitempty"`
+	BaseURL                *string `json:"base_url,omitempty"`
+	OssURL                 *string `json:"oss_url,omitempty"`
+	APIKey                 *string `json:"api_key,omitempty"`
+	Username               *string `json:"username,omitempty"`
+	Password               *string `json:"password,omitempty"`
+	System                 *string `json:"system,omitempty"`
+	Stream                 *bool   `json:"stream,omitempty"`
+	FileFormat             *string `json:"file_format,omitempty"`
+	SaveImages             *string `json:"save_images,omitempty"`
 }
 
 func loadAppConfig() (appConfig, error) {
@@ -110,6 +118,13 @@ func configBool(value *bool, fallback bool) bool {
 	return fallback
 }
 
+func configInt(value *int, fallback int) int {
+	if value != nil {
+		return *value
+	}
+	return fallback
+}
+
 func persistConfigFlags(fs *flag.FlagSet, cfg appConfig) error {
 	changed := false
 	fs.Visit(func(f *flag.Flag) {
@@ -119,6 +134,34 @@ func persistConfigFlags(fs *flag.FlagSet, cfg appConfig) error {
 			changed = true
 		case "image-model":
 			cfg.ImageModel = stringPtr(f.Value.String())
+			changed = true
+		case "image-size":
+			cfg.ImageSize = stringPtr(f.Value.String())
+			changed = true
+		case "image-quality":
+			cfg.ImageQuality = stringPtr(f.Value.String())
+			changed = true
+		case "image-count":
+			if value, err := strconv.Atoi(f.Value.String()); err == nil {
+				cfg.ImageCount = intPtr(value)
+				changed = true
+			}
+		case "image-output-format":
+			cfg.ImageOutputFormat = stringPtr(f.Value.String())
+			changed = true
+		case "image-output-compression":
+			if value, err := strconv.Atoi(f.Value.String()); err == nil {
+				cfg.ImageOutputCompression = intPtr(value)
+				changed = true
+			}
+		case "image-background":
+			cfg.ImageBackground = stringPtr(f.Value.String())
+			changed = true
+		case "image-moderation":
+			cfg.ImageModeration = stringPtr(f.Value.String())
+			changed = true
+		case "image-action":
+			cfg.ImageAction = stringPtr(f.Value.String())
 			changed = true
 		case "base-url":
 			cfg.BaseURL = stringPtr(f.Value.String())
@@ -162,5 +205,9 @@ func stringPtr(value string) *string {
 }
 
 func boolPtr(value bool) *bool {
+	return &value
+}
+
+func intPtr(value int) *int {
 	return &value
 }

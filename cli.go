@@ -49,6 +49,18 @@ type inputOptions struct {
 	attachments *stringsFlag
 }
 
+type imageOptions struct {
+	size              *string
+	quality           *string
+	count             *int
+	outputFormat      *string
+	outputCompression *int
+	background        *string
+	moderation        *string
+	action            *string
+	mask              *string
+}
+
 func addClientFlags(fs *flag.FlagSet) clientOptions {
 	return addClientFlagsWithConfig(fs, appConfig{})
 }
@@ -57,7 +69,7 @@ func addClientFlagsWithConfig(fs *flag.FlagSet, cfg appConfig) clientOptions {
 	modelDefault := envOr("KUAIMA_MODEL", configNonEmptyString(cfg.Model, defaultModel))
 	return clientOptions{
 		model:      fs.String("model", modelDefault, "模型名称"),
-		imageModel: fs.String("image-model", envOr("KUAIMA_IMAGE_MODEL", configString(cfg.ImageModel, "")), "图片生成模型名称"),
+		imageModel: fs.String("image-model", envOr("KUAIMA_IMAGE_MODEL", configNonEmptyString(cfg.ImageModel, defaultImageModel)), "图片生成模型名称"),
 		baseURL:    fs.String("base-url", envOr("KUAIMA_BASE_URL", configNonEmptyString(cfg.BaseURL, defaultBaseURL)), "API 基础地址"),
 		ossURL:     fs.String("oss-url", envOr("KUAIMA_OSS_URL", configNonEmptyString(cfg.OssURL, defaultOssURL)), "OSS API 基础地址"),
 		apiKey:     fs.String("api-key", envOr("KUAIMA_API_KEY", envOr("OPENAI_API_KEY", configString(cfg.APIKey, ""))), "API key；覆盖 KUAIMA_API_KEY/OPENAI_API_KEY"),
@@ -90,6 +102,20 @@ func addInputFlagsWithConfig(fs *flag.FlagSet, cfg appConfig) inputOptions {
 	}
 }
 
+func addImageFlags(fs *flag.FlagSet, cfg appConfig) imageOptions {
+	return imageOptions{
+		size:              fs.String("image-size", configNonEmptyString(cfg.ImageSize, "auto"), "image size, for example auto, 1024x1024, 1536x1024, 1024x1536, or gpt-image-2 custom WxH"),
+		quality:           fs.String("image-quality", configNonEmptyString(cfg.ImageQuality, "auto"), "image quality, for example auto, low, medium, high"),
+		count:             fs.Int("image-count", configInt(cfg.ImageCount, 1), "number of images for Images API generations"),
+		outputFormat:      fs.String("image-output-format", configString(cfg.ImageOutputFormat, ""), "output image format: png, jpeg, or webp"),
+		outputCompression: fs.Int("image-output-compression", configInt(cfg.ImageOutputCompression, -1), "output compression 0-100 for jpeg/webp; -1 leaves it unset"),
+		background:        fs.String("image-background", configNonEmptyString(cfg.ImageBackground, "auto"), "background: auto, transparent, or opaque"),
+		moderation:        fs.String("image-moderation", configString(cfg.ImageModeration, ""), "image moderation setting, for example auto or low"),
+		action:            fs.String("image-action", configNonEmptyString(cfg.ImageAction, "auto"), "Responses image tool action: auto, generate, or edit"),
+		mask:              fs.String("image-mask", "", "mask image path, data URL, or image URL for Images Edit"),
+	}
+}
+
 func addAttachmentFlags(fs *flag.FlagSet) *stringsFlag {
 	var attachments stringsFlag
 	fs.Var(&attachments, "file", "输入文本/图片路径或图片 URL；可重复传入")
@@ -98,7 +124,7 @@ func addAttachmentFlags(fs *flag.FlagSet) *stringsFlag {
 }
 
 func addSaveImagesFlag(fs *flag.FlagSet, defaultDir string) *string {
-	return fs.String("save-images", defaultDir, "保存响应中图片的目录；留空则不保存")
+	return fs.String("save-images", defaultDir, "保存响应中图片的目录或文件，空则不保存")
 }
 
 func addSaveImagesFlagWithConfig(fs *flag.FlagSet, cfg appConfig, defaultDir string) *string {
@@ -131,6 +157,140 @@ func (opts inputOptions) hasPromptOrAttachments(prompt string) bool {
 	return strings.TrimSpace(prompt) != "" || len(*opts.attachments) > 0
 }
 
+func (opts imageOptions) validate() error {
+	if opts.count != nil && (*opts.count < 1 || *opts.count > 10) {
+		return fmt.Errorf("invalid -image-count %d: expected 1-10", *opts.count)
+	}
+	if opts.outputCompression != nil && *opts.outputCompression != -1 && (*opts.outputCompression < 0 || *opts.outputCompression > 100) {
+		return fmt.Errorf("invalid -image-output-compression %d: expected -1 or 0-100", *opts.outputCompression)
+	}
+	return nil
+}
+
+func (opts imageOptions) responseTool() map[string]any {
+	tool := map[string]any{"type": "image_generation"}
+	addAutoString(tool, "size", opts.size)
+	addAutoString(tool, "quality", opts.quality)
+	addString(tool, "output_format", opts.outputFormat)
+	if opts.outputCompression != nil && *opts.outputCompression >= 0 {
+		tool["output_compression"] = *opts.outputCompression
+	}
+	addAutoString(tool, "background", opts.background)
+	addAutoString(tool, "action", opts.action)
+
+	return tool
+}
+
+func (opts imageOptions) generationRequest(model, prompt string) imageGenerationRequest {
+	req := imageGenerationRequest{
+		Model:  model,
+		Prompt: prompt,
+	}
+	if opts.count != nil && *opts.count > 1 {
+		req.N = *opts.count
+	}
+	if opts.size != nil && strings.TrimSpace(*opts.size) != "" && !strings.EqualFold(strings.TrimSpace(*opts.size), "auto") {
+		req.Size = strings.TrimSpace(*opts.size)
+	}
+	if opts.quality != nil && strings.TrimSpace(*opts.quality) != "" && !strings.EqualFold(strings.TrimSpace(*opts.quality), "auto") {
+		req.Quality = strings.TrimSpace(*opts.quality)
+	}
+	if opts.outputFormat != nil {
+		req.OutputFormat = strings.TrimSpace(*opts.outputFormat)
+	}
+	if opts.outputCompression != nil && *opts.outputCompression >= 0 {
+		req.OutputCompression = opts.outputCompression
+	}
+	if opts.background != nil && strings.TrimSpace(*opts.background) != "" && !strings.EqualFold(strings.TrimSpace(*opts.background), "auto") {
+		req.Background = strings.TrimSpace(*opts.background)
+	}
+	if opts.moderation != nil {
+		req.Moderation = strings.TrimSpace(*opts.moderation)
+	}
+	return req
+}
+
+func (opts imageOptions) editRequest(model, prompt string, images []imageRef, mask *imageRef) imageEditRequest {
+	req := imageEditRequest{
+		Model:  model,
+		Prompt: prompt,
+		Images: images,
+		Mask:   mask,
+	}
+	if opts.count != nil && *opts.count > 1 {
+		req.N = *opts.count
+	}
+	if opts.size != nil && strings.TrimSpace(*opts.size) != "" && !strings.EqualFold(strings.TrimSpace(*opts.size), "auto") {
+		req.Size = strings.TrimSpace(*opts.size)
+	}
+	if opts.quality != nil && strings.TrimSpace(*opts.quality) != "" && !strings.EqualFold(strings.TrimSpace(*opts.quality), "auto") {
+		req.Quality = strings.TrimSpace(*opts.quality)
+	}
+	if opts.outputFormat != nil {
+		req.OutputFormat = strings.TrimSpace(*opts.outputFormat)
+	}
+	if opts.outputCompression != nil && *opts.outputCompression >= 0 {
+		req.OutputCompression = opts.outputCompression
+	}
+	if opts.background != nil && strings.TrimSpace(*opts.background) != "" && !strings.EqualFold(strings.TrimSpace(*opts.background), "auto") {
+		req.Background = strings.TrimSpace(*opts.background)
+	}
+	if opts.moderation != nil {
+		req.Moderation = strings.TrimSpace(*opts.moderation)
+	}
+	return req
+}
+
+func imageRefs(ctx context.Context, c *client, images []string, fileFormat string) ([]imageRef, error) {
+	if len(images) > 16 {
+		return nil, fmt.Errorf("too many image inputs: got %d, expected at most 16", len(images))
+	}
+	refs := make([]imageRef, 0, len(images))
+	for _, image := range images {
+		ref, err := imageRefFromInput(ctx, c, image, fileFormat)
+		if err != nil {
+			return nil, err
+		}
+		refs = append(refs, ref)
+	}
+	return refs, nil
+}
+
+func imageRefFromInput(ctx context.Context, c *client, value, fileFormat string) (imageRef, error) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return imageRef{}, errors.New("empty image input")
+	}
+	imageURL, err := imageInputURL(ctx, c, value, fileFormat)
+	if err != nil {
+		return imageRef{}, err
+	}
+	return imageRef{ImageURL: imageURL}, nil
+}
+
+func addString(values map[string]any, key string, value *string) {
+	if value != nil && strings.TrimSpace(*value) != "" {
+		values[key] = strings.TrimSpace(*value)
+	}
+}
+
+func addAutoString(values map[string]any, key string, value *string) {
+	if value != nil && strings.TrimSpace(*value) != "" && !strings.EqualFold(strings.TrimSpace(*value), "auto") {
+		values[key] = strings.TrimSpace(*value)
+	}
+}
+
+func promptWithTextFiles(prompt string, files []textFileContent) string {
+	parts := []string{}
+	if strings.TrimSpace(prompt) != "" {
+		parts = append(parts, strings.TrimSpace(prompt))
+	}
+	for _, file := range files {
+		parts = append(parts, formatTextFileContent(file))
+	}
+	return strings.Join(parts, "\n\n")
+}
+
 func saveResponseImages(ctx context.Context, c *client, resp *responsePayload, dir string) ([]string, error) {
 	if strings.TrimSpace(dir) == "" {
 		return nil, nil
@@ -155,7 +315,11 @@ func runAsk(args []string) error {
 	imageGeneration := fs.Bool("image-generation", false, "启用图片生成工具")
 	saveDir := addSaveImagesFlagWithConfig(fs, cfg, ".")
 	inputOpts := addInputFlagsWithConfig(fs, cfg)
+	imageOpts := addImageFlags(fs, cfg)
 	if err := parseFlags(fs, args); err != nil {
+		return err
+	}
+	if err := imageOpts.validate(); err != nil {
 		return err
 	}
 	if err := persistConfigFlags(fs, cfg); err != nil {
@@ -189,8 +353,21 @@ func runAsk(args []string) error {
 		Stream: *opts.stream,
 	}
 	if *imageGeneration {
-		req.Model = opts.imageGenerationModel()
-		req.Tools = []map[string]string{{"type": "image_generation"}}
+		tool := imageOpts.responseTool()
+		//指定模型
+		addAutoString(tool, "model", opts.imageModel)
+		//mask图片
+		if imageOpts.mask != nil && *imageOpts.mask != "" {
+			maskURL, err := imageInputURL(context.Background(), c, *imageOpts.mask, *inputOpts.fileFormat)
+			if err != nil {
+				return err
+			}
+			tool["input_image_mask"] = map[string]any{
+				"image_url": maskURL,
+			}
+		}
+
+		req.Tools = []map[string]any{tool}
 	}
 
 	var resp *responsePayload
@@ -305,7 +482,11 @@ func runImage(args []string) error {
 	opts := addClientFlagsWithConfig(fs, cfg)
 	saveDir := addSaveImagesFlagWithConfig(fs, cfg, ".")
 	inputOpts := addInputFlagsWithConfig(fs, cfg)
+	imageOpts := addImageFlags(fs, cfg)
 	if err := parseFlags(fs, args); err != nil {
+		return err
+	}
+	if err := imageOpts.validate(); err != nil {
 		return err
 	}
 	if err := persistConfigFlags(fs, cfg); err != nil {
@@ -321,15 +502,32 @@ func runImage(args []string) error {
 	if err != nil {
 		return err
 	}
-	input, err := inputOpts.buildInput(context.Background(), c, prompt, "")
+	images, textFiles, err := collectInputAttachments(prompt, *inputOpts.attachments)
 	if err != nil {
 		return err
 	}
-	resp, err := c.createResponse(context.Background(), responseRequest{
-		Model: opts.imageGenerationModel(),
-		Input: input,
-		Tools: []map[string]string{{"type": "image_generation"}},
-	})
+	var resp *responsePayload
+	if len(images) == 0 {
+		resp, err = c.createImageGeneration(context.Background(), imageOpts.generationRequest(opts.imageGenerationModel(), promptWithTextFiles(prompt, textFiles)))
+	} else {
+		editPrompt := promptWithTextFiles(prompt, textFiles)
+		if strings.TrimSpace(editPrompt) == "" {
+			return errors.New("must provide an image edit prompt")
+		}
+		refs, refsErr := imageRefs(context.Background(), c, images, *inputOpts.fileFormat)
+		if refsErr != nil {
+			return refsErr
+		}
+		var mask *imageRef
+		if imageOpts.mask != nil && strings.TrimSpace(*imageOpts.mask) != "" {
+			maskRef, maskErr := imageRefFromInput(context.Background(), c, *imageOpts.mask, *inputOpts.fileFormat)
+			if maskErr != nil {
+				return maskErr
+			}
+			mask = &maskRef
+		}
+		resp, err = c.createImageEdit(context.Background(), imageOpts.editRequest(opts.imageGenerationModel(), editPrompt, refs, mask))
+	}
 	if err != nil {
 		return err
 	}

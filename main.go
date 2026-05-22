@@ -8,8 +8,9 @@ import (
 )
 
 const (
-	defaultBaseURL = "https://ai.szkmjb.com"
-	defaultModel   = "gpt-5.4-mini"
+	defaultBaseURL    = "https://ai.szkmjb.com"
+	defaultModel      = "gpt-5.4-mini"
+	defaultImageModel = "gpt-image-2"
 
 	defaultOssURL = "https://oss.szkmjb.com"
 )

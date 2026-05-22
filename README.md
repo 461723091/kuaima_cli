@@ -27,6 +27,14 @@ $env:KUAIMA_API_KEY="your_api_key"
 ```text
 model
 image_model
+image_size
+image_quality
+image_count
+image_output_format
+image_output_compression
+image_background
+image_moderation
+image_action
 base_url
 oss_url
 api_key
@@ -41,7 +49,15 @@ save_images
 ```json
 {
   "model": "gpt-5.4-mini",
-  "image_model": "gpt-image-1",
+  "image_model": "gpt-image-2",
+  "image_size": "1536x1024",
+  "image_quality": "high",
+  "image_count": 2,
+  "image_output_format": "webp",
+  "image_output_compression": 80,
+  "image_background": "transparent",
+  "image_moderation": "low",
+  "image_action": "auto",
   "base_url": "https://ai.szkmjb.com",
   "oss_url": "https://oss.szkmjb.com",
   "api_key": "your_api_key",
@@ -100,6 +116,8 @@ Get-Content prompt.txt | .\dist\kuaima_cli.exe
 
 ```powershell
 .\dist\kuaima_cli.exe image -save-images .\outputs "a clean product render of a white coffee mug"
+.\dist\kuaima_cli.exe image -image-size 1536x1024 -image-quality high -image-count 2 -image-output-format webp -image-output-compression 80 -save-images .\outputs "a clean product render of a white coffee mug"
+.\dist\kuaima_cli.exe image -file .\reference.png -image-mask .\mask.png -save-images .\outputs "replace only the masked area with a ceramic handle"
 .\dist\kuaima_cli.exe image -file .\reference.png -save-images .\outputs "生成这张参考图的产品海报版本"
 ```
 
@@ -118,5 +136,5 @@ KUAIMA_API_KEY   API key，未设置时使用 OPENAI_API_KEY
 KUAIMA_BASE_URL  默认 https://ai.szkmjb.com
 KUAIMA_OSS_URL   默认 https://oss.szkmjb.com
 KUAIMA_MODEL     默认 gpt-5.4-mini
-KUAIMA_IMAGE_MODEL 图片生成模型；未设置时回退到 KUAIMA_MODEL/model
+KUAIMA_IMAGE_MODEL 图片生成模型；默认 gpt-image-2
 ```
