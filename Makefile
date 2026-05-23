@@ -34,4 +34,4 @@ test_img2:
 #指定生图模型 数量无效
 # gpt-image-2 gpt-image-1.5 gpt-image-1 dalle-e-3 dalle-e-2
 test_img3:
-	dist/kuaima_cli.exe -v -log log.log -image-model gpt-image-1.5 -image-count 2 -image-size 1024x1024 -stream -image-generation -file https://weixin.uctphp.com/static/images/ailogo.png 帮我画张快马AI cli的宣传海报，便捷的生图工具，支持gpt-image-2等最新模型,可接入各种agent智能体，参考图是快马AI的logo
+	dist/kuaima_cli.exe -log log.log -image-model gpt-image-1.5 -image-count 2 -image-size 1024x1024 -stream -image-generation -file https://weixin.uctphp.com/static/images/ailogo.png 帮我画张快马AI cli的宣传海报，便捷的生图工具，支持gpt-image-2等最新模型,可接入各种agent智能体，参考图是快马AI的logo

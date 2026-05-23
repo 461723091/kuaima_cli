@@ -74,10 +74,12 @@ type responsePayload struct {
 }
 
 type responseOutput struct {
+	ID      string            `json:"id"`
 	Type    string            `json:"type"`
 	Role    string            `json:"role"`
 	Content []responseContent `json:"content"`
 	Result  string            `json:"result"`
+	Status  string            `json:"status"`
 }
 
 type responseContent struct {
@@ -221,6 +223,7 @@ func (c *client) createResponseStream(ctx context.Context, req responseRequest, 
 
 	var completed json.RawMessage
 	var text bytes.Buffer
+	var outputs []responseOutput
 	var rawStream bytes.Buffer
 	var firstToken time.Time
 	scanner := bufio.NewScanner(httpResp.Body)
@@ -237,11 +240,15 @@ func (c *client) createResponseStream(ctx context.Context, req responseRequest, 
 			continue
 		}
 		var event struct {
-			Type     string          `json:"type"`
-			Delta    string          `json:"delta"`
-			Text     string          `json:"text"`
-			Response json.RawMessage `json:"response"`
-			Error    *apiError       `json:"error"`
+			Type            string          `json:"type"`
+			Delta           string          `json:"delta"`
+			Text            string          `json:"text"`
+			Response        json.RawMessage `json:"response"`
+			Error           *apiError       `json:"error"`
+			OutputIndex     int             `json:"output_index"`
+			Item            json.RawMessage `json:"item"`
+			PartialImageB64 string          `json:"partial_image_b64"`
+			B64JSON         string          `json:"b64_json"`
 		}
 		if err := json.Unmarshal([]byte(data), &event); err != nil {
 			continue
@@ -257,6 +264,27 @@ func (c *client) createResponseStream(ctx context.Context, req responseRequest, 
 				}
 				fmt.Fprint(w, event.Delta)
 				text.WriteString(event.Delta)
+			}
+		case "response.output_item.added", "response.output_item.done":
+			if len(event.Item) > 0 {
+				var item responseOutput
+				if err := json.Unmarshal(event.Item, &item); err == nil {
+					setResponseOutput(&outputs, event.OutputIndex, item)
+				}
+			}
+		case "response.image_generation_call.partial_image":
+			image := event.PartialImageB64
+			if image == "" {
+				image = event.B64JSON
+			}
+			if image != "" {
+				item := ensureResponseOutput(&outputs, event.OutputIndex)
+				if item.Type == "" {
+					item.Type = "image_generation_call"
+				}
+				if item.Status != "completed" {
+					item.Result = image
+				}
 			}
 		case "response.completed":
 			completed = event.Response
@@ -279,9 +307,42 @@ func (c *client) createResponseStream(ctx context.Context, req responseRequest, 
 	}
 	c.logTiming(started, firstToken)
 	if len(completed) > 0 {
-		return decodeResponse(completed)
+		resp, err := decodeResponse(completed)
+		if err != nil {
+			return nil, err
+		}
+		if len(resp.Output) == 0 && len(outputs) > 0 {
+			resp.Output = outputs
+		}
+		if resp.OutputText == "" && text.Len() > 0 {
+			resp.OutputText = text.String()
+		}
+		return resp, nil
 	}
-	return &responsePayload{OutputText: text.String(), Raw: []byte(`{}`)}, nil
+	return &responsePayload{OutputText: text.String(), Output: outputs, Raw: rawStream.Bytes()}, nil
+}
+
+func setResponseOutput(outputs *[]responseOutput, index int, item responseOutput) {
+	if index < 0 {
+		index = len(*outputs)
+	}
+	for len(*outputs) <= index {
+		*outputs = append(*outputs, responseOutput{})
+	}
+	if item.Result == "" && (*outputs)[index].Result != "" {
+		item.Result = (*outputs)[index].Result
+	}
+	(*outputs)[index] = item
+}
+
+func ensureResponseOutput(outputs *[]responseOutput, index int) *responseOutput {
+	if index < 0 {
+		index = len(*outputs)
+	}
+	for len(*outputs) <= index {
+		*outputs = append(*outputs, responseOutput{})
+	}
+	return &(*outputs)[index]
 }
 
 func (c *client) newRequest(ctx context.Context, body io.Reader) (*http.Request, error) {

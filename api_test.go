@@ -1,6 +1,8 @@
 package main
 
 import (
+	"bytes"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -56,5 +58,100 @@ func TestCreateResponseWritesLogFile(t *testing.T) {
 	}
 	if strings.Contains(log, "secret-token") {
 		t.Fatalf("log should redact token:\n%s", log)
+	}
+}
+
+func TestCreateResponseStreamAggregatesOutputItemEvents(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/responses" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = w.Write([]byte("data: {\"type\":\"response.image_generation_call.partial_image\",\"output_index\":0,\"partial_image_b64\":\"partial-image\"}\n\n"))
+		_, _ = w.Write([]byte("data: {\"type\":\"response.output_item.added\",\"output_index\":0,\"item\":{\"id\":\"ig_1\",\"type\":\"image_generation_call\",\"status\":\"in_progress\"}}\n\n"))
+		_, _ = w.Write([]byte("data: {\"type\":\"response.output_item.done\",\"output_index\":0,\"item\":{\"id\":\"ig_1\",\"type\":\"image_generation_call\",\"status\":\"completed\",\"result\":\"final-image\"}}\n\n"))
+		_, _ = w.Write([]byte("data: [DONE]\n\n"))
+	}))
+	defer server.Close()
+
+	c, err := newClient(server.URL, "", "secret-token", "", "", false, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+
+	var out bytes.Buffer
+	resp, err := c.createResponseStream(t.Context(), responseRequest{Model: "test-model", Input: "draw"}, &out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out.String() != "" {
+		t.Fatalf("unexpected stdout: %q", out.String())
+	}
+	if len(resp.Output) != 1 {
+		t.Fatalf("expected 1 output item, got %d", len(resp.Output))
+	}
+	item := resp.Output[0]
+	if item.ID != "ig_1" || item.Type != "image_generation_call" || item.Status != "completed" || item.Result != "final-image" {
+		t.Fatalf("unexpected output item: %+v", item)
+	}
+	if !strings.Contains(string(resp.Raw), "response.image_generation_call.partial_image") {
+		t.Fatalf("raw stream missing partial image event: %s", string(resp.Raw))
+	}
+}
+
+func TestCreateResponseStreamKeepsOutputItemsWhenCompletedResponseIsEmpty(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = w.Write([]byte("data: {\"type\":\"response.output_item.added\",\"output_index\":0,\"item\":{\"id\":\"ig_1\",\"type\":\"image_generation_call\",\"status\":\"in_progress\"}}\n\n"))
+		_, _ = w.Write([]byte("data: {\"type\":\"response.image_generation_call.partial_image\",\"output_index\":0,\"partial_image_b64\":\"partial-image\"}\n\n"))
+		_, _ = w.Write([]byte("data: {\"type\":\"response.output_item.done\",\"output_index\":0,\"item\":{\"id\":\"ig_1\",\"type\":\"image_generation_call\",\"status\":\"generating\",\"result\":\"final-image\"}}\n\n"))
+		_, _ = w.Write([]byte("data: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_1\",\"output\":[]}}\n\n"))
+		_, _ = w.Write([]byte("data: [DONE]\n\n"))
+	}))
+	defer server.Close()
+
+	c, err := newClient(server.URL, "", "secret-token", "", "", false, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+
+	resp, err := c.createResponseStream(t.Context(), responseRequest{Model: "test-model", Input: "draw"}, io.Discard)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(resp.Output) != 1 {
+		t.Fatalf("expected completed response to keep streamed output item, got %d", len(resp.Output))
+	}
+	if resp.Output[0].Result != "final-image" {
+		t.Fatalf("unexpected image result: %+v", resp.Output[0])
+	}
+}
+
+func TestCreateResponseStreamKeepsPartialImageWithoutDone(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = w.Write([]byte("data: {\"type\":\"response.output_item.added\",\"output_index\":0,\"item\":{\"id\":\"ig_1\",\"type\":\"image_generation_call\",\"status\":\"in_progress\"}}\n\n"))
+		_, _ = w.Write([]byte("data: {\"type\":\"response.image_generation_call.partial_image\",\"output_index\":0,\"partial_image_b64\":\"partial-image\"}\n\n"))
+		_, _ = w.Write([]byte("data: [DONE]\n\n"))
+	}))
+	defer server.Close()
+
+	c, err := newClient(server.URL, "", "secret-token", "", "", false, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+
+	resp, err := c.createResponseStream(t.Context(), responseRequest{Model: "test-model", Input: "draw"}, io.Discard)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(resp.Output) != 1 {
+		t.Fatalf("expected 1 output item, got %d", len(resp.Output))
+	}
+	if resp.Output[0].Result != "partial-image" {
+		t.Fatalf("unexpected partial image result: %+v", resp.Output[0])
 	}
 }
