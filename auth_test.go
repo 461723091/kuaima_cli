@@ -29,7 +29,7 @@ func TestEnsureAPIKeyLogsInAndSavesCredentials(t *testing.T) {
 	}))
 	defer server.Close()
 
-	token, err := ensureAPIKey(t.Context(), server.URL, "user1", "pass1", false)
+	token, err := ensureAPIKey(t.Context(), server.URL, "user1", "pass1", false, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

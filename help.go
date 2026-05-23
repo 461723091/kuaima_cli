@@ -57,6 +57,7 @@ func usage(w io.Writer) {
 	fmt.Fprintln(w, "  -api-key KEY            API key；覆盖 KUAIMA_API_KEY/OPENAI_API_KEY")
 	fmt.Fprintln(w, "  -username USER          快马账号；未提供时自动生成")
 	fmt.Fprintln(w, "  -password PASS          快马密码；未提供时自动生成")
+	fmt.Fprintln(w, "  -log FILE               将请求、响应和耗时日志写入文件")
 	fmt.Fprintln(w, "  -v                      打印调试信息到 stderr")
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "环境变量:")

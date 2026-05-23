@@ -139,6 +139,7 @@ func (c *client) uploadLocal(ctx context.Context, path, uploadID, sum string) (*
 		return nil, err
 	}
 	httpReq.Header.Set("Content-Type", writer.FormDataContentType())
+	c.logRequest(httpReq, nil)
 	httpResp, err := c.httpClient.Do(httpReq)
 	if err != nil {
 		return nil, err

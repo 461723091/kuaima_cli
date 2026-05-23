@@ -11,6 +11,8 @@ import (
 	"net/http"
 	"net/http/httptrace"
 	"os"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 )
@@ -20,6 +22,8 @@ type client struct {
 	ossURL     string
 	apiKey     string
 	verbose    bool
+	logWriter  io.Writer
+	logCloser  io.Closer
 	httpClient *http.Client
 }
 
@@ -88,26 +92,64 @@ type apiError struct {
 	Code    any    `json:"code"`
 }
 
-func newClient(baseURL, ossURL, apiKey, username, password string, verbose bool) (*client, error) {
+func newClient(baseURL, ossURL, apiKey, username, password string, verbose bool, logPath string) (*client, error) {
+	logFile, err := openLogFile(logPath)
+	if err != nil {
+		return nil, err
+	}
+	var logWriter io.Writer
+	var logCloser io.Closer
+	if logFile != nil {
+		logWriter = logFile
+		logCloser = logFile
+	}
+
 	if strings.TrimSpace(apiKey) == "" {
 		apiKey = envOr("KUAIMA_API_KEY", os.Getenv("OPENAI_API_KEY"))
 	}
 	if strings.TrimSpace(apiKey) == "" {
 		var err error
-		apiKey, err = ensureAPIKey(context.Background(), baseURL, username, password, verbose)
+		apiKey, err = ensureAPIKey(context.Background(), baseURL, username, password, verbose, logWriter)
 		if err != nil {
+			if logCloser != nil {
+				_ = logCloser.Close()
+			}
 			return nil, fmt.Errorf("auto get api-key: %w", err)
 		}
 	}
 	return &client{
-		baseURL: strings.TrimRight(baseURL, "/"),
-		ossURL:  strings.TrimRight(ossURL, "/"),
-		apiKey:  apiKey,
-		verbose: verbose,
+		baseURL:   strings.TrimRight(baseURL, "/"),
+		ossURL:    strings.TrimRight(ossURL, "/"),
+		apiKey:    apiKey,
+		verbose:   verbose,
+		logWriter: logWriter,
+		logCloser: logCloser,
 		httpClient: &http.Client{
 			Timeout: 10 * time.Minute,
 		},
 	}, nil
+}
+
+func openLogFile(path string) (*os.File, error) {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return nil, nil
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
+		return nil, fmt.Errorf("create log dir: %w", err)
+	}
+	file, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0600)
+	if err != nil {
+		return nil, fmt.Errorf("open log file %q: %w", path, err)
+	}
+	return file, nil
+}
+
+func (c *client) Close() error {
+	if c == nil || c.logCloser == nil {
+		return nil
+	}
+	return c.logCloser.Close()
 }
 
 func (c *client) createResponse(ctx context.Context, req responseRequest) (*responsePayload, error) {
@@ -121,8 +163,8 @@ func (c *client) createResponse(ctx context.Context, req responseRequest) (*resp
 	if err != nil {
 		return nil, err
 	}
-	c.logRequest(httpReq, body)
 	httpReq.Header.Set("Accept", "application/json")
+	c.logRequest(httpReq, body)
 
 	started := time.Now()
 	var firstByte time.Time
@@ -157,8 +199,8 @@ func (c *client) createResponseStream(ctx context.Context, req responseRequest, 
 	if err != nil {
 		return nil, err
 	}
-	c.logRequest(httpReq, body)
 	httpReq.Header.Set("Accept", "text/event-stream")
+	c.logRequest(httpReq, body)
 
 	started := time.Now()
 	var firstByte time.Time
@@ -264,52 +306,109 @@ func withFirstByteTrace(req *http.Request, firstByte *time.Time) *http.Request {
 }
 
 func (c *client) logRequest(req *http.Request, body []byte) {
-	if !c.verbose {
+	if !logEnabled(c.verbose, c.logWriter) {
 		return
 	}
-	fmt.Fprintf(os.Stderr, "\n--- request ---\n%s %s\n", req.Method, req.URL.String())
-	fmt.Fprintln(os.Stderr, "Authorization: Bearer <redacted>")
-	fmt.Fprintln(os.Stderr, "Content-Type: application/json")
-	fmt.Fprintln(os.Stderr, prettyJSON(body))
+	w := logOutput(c.verbose, c.logWriter)
+	fmt.Fprintf(w, "\n%s --- request ---\n%s %s\n", logEntryPrefix(3), req.Method, req.URL.String())
+	if req.Header.Get("Authorization") != "" {
+		fmt.Fprintln(w, "Authorization: Bearer <redacted>")
+	}
+	if contentType := req.Header.Get("Content-Type"); contentType != "" {
+		fmt.Fprintf(w, "Content-Type: %s\n", contentType)
+	}
+	if accept := req.Header.Get("Accept"); accept != "" {
+		fmt.Fprintf(w, "Accept: %s\n", accept)
+	}
+	if len(body) > 0 {
+		fmt.Fprintln(w, prettyJSON(body))
+	}
 }
 
 func (c *client) logTiming(started, first time.Time) {
-	if !c.verbose {
+	if !logEnabled(c.verbose, c.logWriter) {
 		return
 	}
-	fmt.Fprintln(os.Stderr, "\n--- timing ---")
+	w := logOutput(c.verbose, c.logWriter)
+	fmt.Fprintf(w, "\n%s --- timing ---\n", logEntryPrefix(3))
 	if first.IsZero() {
-		fmt.Fprintln(os.Stderr, "首字时间: n/a")
+		fmt.Fprintln(w, "首字时间: n/a")
 	} else {
-		fmt.Fprintf(os.Stderr, "首字时间: %s\n", first.Sub(started).Round(time.Millisecond))
+		fmt.Fprintf(w, "首字时间: %s\n", first.Sub(started).Round(time.Millisecond))
 	}
-	fmt.Fprintf(os.Stderr, "完整时间: %s\n", time.Since(started).Round(time.Millisecond))
+	fmt.Fprintf(w, "完整时间: %s\n", time.Since(started).Round(time.Millisecond))
 }
 
 func (c *client) logResponse(resp *http.Response, body []byte) {
-	if !c.verbose {
+	if !logEnabled(c.verbose, c.logWriter) {
 		return
 	}
-	c.logResponseStatus(resp)
+	c.logResponseStatusWithCaller(resp, logCaller(2))
 	c.logResponseBody(body)
 }
 
 func (c *client) logResponseStatus(resp *http.Response) {
-	if !c.verbose {
+	c.logResponseStatusWithCaller(resp, logCaller(2))
+}
+
+func (c *client) logResponseStatusWithCaller(resp *http.Response, caller string) {
+	if !logEnabled(c.verbose, c.logWriter) {
 		return
 	}
-	fmt.Fprintf(os.Stderr, "\n--- response ---\n%s\n", resp.Status)
+	fmt.Fprintf(logOutput(c.verbose, c.logWriter), "\n%s --- response ---\n%s\n", logEntryPrefixForCaller(caller), resp.Status)
 }
 
 func (c *client) logResponseBody(body []byte) {
-	if !c.verbose {
+	if !logEnabled(c.verbose, c.logWriter) {
 		return
 	}
+	w := logOutput(c.verbose, c.logWriter)
 	if len(body) == 0 {
-		fmt.Fprintln(os.Stderr, "<empty>")
+		fmt.Fprintln(w, "<empty>")
 		return
 	}
-	fmt.Fprintln(os.Stderr, prettyJSON(body))
+	fmt.Fprintln(w, prettyJSON(body))
+}
+
+func logEnabled(verbose bool, writer io.Writer) bool {
+	return verbose || writer != nil
+}
+
+func logOutput(verbose bool, writer io.Writer) io.Writer {
+	if verbose && writer != nil {
+		return io.MultiWriter(os.Stderr, writer)
+	}
+	if writer != nil {
+		return writer
+	}
+	if verbose {
+		return os.Stderr
+	}
+	return io.Discard
+}
+
+func logEntryPrefix(skip int) string {
+	return logEntryPrefixForCaller(logCaller(skip))
+}
+
+func logEntryPrefixForCaller(caller string) string {
+	return fmt.Sprintf("[%s] [%s]", time.Now().Format("2006-01-02 15:04:05.000"), caller)
+}
+
+func logCaller(skip int) string {
+	pc, _, _, ok := runtime.Caller(skip)
+	if !ok {
+		return "unknown"
+	}
+	fn := runtime.FuncForPC(pc)
+	if fn == nil {
+		return "unknown"
+	}
+	name := fn.Name()
+	if i := strings.LastIndex(name, "/"); i >= 0 {
+		name = name[i+1:]
+	}
+	return name
 }
 
 func prettyJSON(data []byte) string {

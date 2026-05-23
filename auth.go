@@ -67,7 +67,7 @@ type tokenUsageResponse struct {
 	Data    tokenUsage `json:"data"`
 }
 
-func ensureAPIKey(ctx context.Context, baseURL, username, password string, verbose bool) (string, error) {
+func ensureAPIKey(ctx context.Context, baseURL, username, password string, verbose bool, logWriter io.Writer) (string, error) {
 	cfg, err := loadAppConfig()
 	if err != nil {
 		return "", err
@@ -83,7 +83,7 @@ func ensureAPIKey(ctx context.Context, baseURL, username, password string, verbo
 		}
 	}
 
-	token, err := loginUser(ctx, baseURL, username, password, verbose)
+	token, err := loginUser(ctx, baseURL, username, password, verbose, logWriter)
 	if err != nil {
 		return "", err
 	}
@@ -96,7 +96,7 @@ func ensureAPIKey(ctx context.Context, baseURL, username, password string, verbo
 	return token, nil
 }
 
-func resolveRechargeCredentials(ctx context.Context, baseURL, username, password string, verbose bool) (string, string, error) {
+func resolveRechargeCredentials(ctx context.Context, baseURL, username, password string, verbose bool, logWriter io.Writer) (string, string, error) {
 	cfg, err := loadAppConfig()
 	if err != nil {
 		return "", "", err
@@ -113,7 +113,7 @@ func resolveRechargeCredentials(ctx context.Context, baseURL, username, password
 		changed = true
 	}
 	if strings.TrimSpace(configString(cfg.APIKey, "")) == "" && strings.TrimSpace(envOr("KUAIMA_API_KEY", os.Getenv("OPENAI_API_KEY"))) == "" {
-		token, err := loginUser(ctx, baseURL, username, password, verbose)
+		token, err := loginUser(ctx, baseURL, username, password, verbose, logWriter)
 		if err != nil {
 			return "", "", err
 		}
@@ -165,7 +165,7 @@ func resolveStoredCredentials(cfg appConfig, username, password string) (string,
 	return username, password, changed, nil
 }
 
-func loginUser(ctx context.Context, baseURL, username, password string, verbose bool) (string, error) {
+func loginUser(ctx context.Context, baseURL, username, password string, verbose bool, logWriter io.Writer) (string, error) {
 	body, err := json.Marshal(map[string]string{
 		"username": username,
 		"password": password,
@@ -180,8 +180,12 @@ func loginUser(ctx context.Context, baseURL, username, password string, verbose 
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
-	if verbose {
-		fmt.Fprintf(os.Stderr, "\n--- login ---\nPOST %s\nusername: %s\n", endpoint, username)
+	if logEnabled(verbose, logWriter) {
+		w := logOutput(verbose, logWriter)
+		fmt.Fprintf(w, "\n%s --- request ---\nPOST %s\n", logEntryPrefix(2), endpoint)
+		fmt.Fprintln(w, "Content-Type: application/json")
+		fmt.Fprintln(w, "Accept: application/json")
+		fmt.Fprintf(w, "{\n  \"username\": %q,\n  \"password\": \"<redacted>\"\n}\n", username)
 	}
 
 	httpClient := &http.Client{Timeout: 30 * time.Second}
@@ -193,6 +197,11 @@ func loginUser(ctx context.Context, baseURL, username, password string, verbose 
 	data, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return "", err
+	}
+	if logEnabled(verbose, logWriter) {
+		w := logOutput(verbose, logWriter)
+		fmt.Fprintf(w, "\n%s --- response ---\n%s\n", logEntryPrefix(2), resp.Status)
+		fmt.Fprintln(w, prettyJSON(data))
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return "", fmt.Errorf("login failed: %s: %s", resp.Status, strings.TrimSpace(string(data)))
@@ -302,6 +311,7 @@ func (c *client) getTokenUsage(ctx context.Context) (*tokenUsage, error) {
 	}
 	req.Header.Set("Authorization", "Bearer "+c.apiKey)
 	req.Header.Set("Accept", "application/json")
+	c.logRequest(req, nil)
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
 		return nil, err

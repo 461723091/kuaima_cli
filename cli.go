@@ -36,6 +36,7 @@ type clientOptions struct {
 	username   *string
 	password   *string
 	verbose    *bool
+	logFile    *string
 }
 
 type responseOptions struct {
@@ -76,6 +77,7 @@ func addClientFlagsWithConfig(fs *flag.FlagSet, cfg appConfig) clientOptions {
 		username:   fs.String("username", configString(cfg.Username, ""), "快马账号；未提供时自动生成并保存"),
 		password:   fs.String("password", configString(cfg.Password, ""), "快马密码；未提供时自动生成并保存"),
 		verbose:    fs.Bool("v", false, "打印完整请求和响应到 stderr"),
+		logFile:    fs.String("log", "", "将请求、响应和耗时日志写入文件"),
 	}
 }
 
@@ -132,7 +134,7 @@ func addSaveImagesFlagWithConfig(fs *flag.FlagSet, cfg appConfig, defaultDir str
 }
 
 func (opts clientOptions) newClient() (*client, error) {
-	return newClient(*opts.baseURL, *opts.ossURL, *opts.apiKey, *opts.username, *opts.password, *opts.verbose)
+	return newClient(*opts.baseURL, *opts.ossURL, *opts.apiKey, *opts.username, *opts.password, *opts.verbose, *opts.logFile)
 }
 
 func (opts clientOptions) imageGenerationModel() string {
@@ -342,6 +344,7 @@ func runAsk(args []string) error {
 	if err != nil {
 		return err
 	}
+	defer c.Close()
 
 	input, err := inputOpts.buildInput(context.Background(), c, prompt, strings.TrimSpace(*opts.system))
 	if err != nil {
@@ -433,6 +436,7 @@ func runChat(args []string) error {
 	if err != nil {
 		return err
 	}
+	defer c.Close()
 
 	fmt.Println("简单对话模式。输入 /exit 或 /quit 退出。")
 	scanner := bufio.NewScanner(os.Stdin)
@@ -502,6 +506,7 @@ func runImage(args []string) error {
 	if err != nil {
 		return err
 	}
+	defer c.Close()
 	images, textFiles, err := collectInputAttachments(prompt, *inputOpts.attachments)
 	if err != nil {
 		return err
@@ -559,7 +564,16 @@ func runLogin(args []string) error {
 
 	apiKey := strings.TrimSpace(*opts.apiKey)
 	if apiKey == "" || *force {
-		apiKey, err = ensureAPIKey(context.Background(), *opts.baseURL, *opts.username, *opts.password, *opts.verbose)
+		logFile, err := openLogFile(*opts.logFile)
+		if err != nil {
+			return err
+		}
+		var logWriter io.Writer
+		if logFile != nil {
+			defer logFile.Close()
+			logWriter = logFile
+		}
+		apiKey, err = ensureAPIKey(context.Background(), *opts.baseURL, *opts.username, *opts.password, *opts.verbose, logWriter)
 		if err != nil {
 			return err
 		}
@@ -585,6 +599,7 @@ func runBalance(args []string) error {
 	if err != nil {
 		return err
 	}
+	defer c.Close()
 	usage, err := c.getTokenUsage(context.Background())
 	if err != nil {
 		return err
@@ -633,7 +648,16 @@ func runRecharge(args []string) error {
 	if err := persistConfigFlags(fs, cfg); err != nil {
 		return err
 	}
-	username, password, err := resolveRechargeCredentials(context.Background(), *opts.baseURL, *opts.username, *opts.password, *opts.verbose)
+	logFile, err := openLogFile(*opts.logFile)
+	if err != nil {
+		return err
+	}
+	var logWriter io.Writer
+	if logFile != nil {
+		defer logFile.Close()
+		logWriter = logFile
+	}
+	username, password, err := resolveRechargeCredentials(context.Background(), *opts.baseURL, *opts.username, *opts.password, *opts.verbose, logWriter)
 	if err != nil {
 		return err
 	}

@@ -1,2 +1,10 @@
 *.exe
+
+*.png
+*.webp
+*.jpeg
+*.jpg
+*.gif
+
+*.log
 dist/

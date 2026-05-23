@@ -1,0 +1,3 @@
+display_name: 快马 GPT Image 2 生图工具
+short_description: 通过 kuaima_cli 调用 gpt-image-2 生成和编辑图片。
+default_prompt: 使用 gpt-image-2 生成图片，并把结果保存到本地。
