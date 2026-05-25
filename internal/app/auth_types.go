@@ -46,3 +46,48 @@ type tokenUsageResponse struct {
 	Message string     `json:"message"`
 	Data    tokenUsage `json:"data"`
 }
+
+type rechargeInfoResponse struct {
+	Success bool         `json:"success"`
+	Message string       `json:"message"`
+	Data    rechargeInfo `json:"data"`
+}
+
+type rechargeInfo struct {
+	AmountOptions []float64          `json:"amount_options"`
+	Discount      map[string]float64 `json:"discount"`
+	Plans         []rechargePlan     `json:"plans"`
+}
+
+type rechargePlan struct {
+	ID                      int     `json:"id"`
+	Title                   string  `json:"title"`
+	Subtitle                string  `json:"subtitle"`
+	PriceAmount             float64 `json:"price_amount"`
+	Currency                string  `json:"currency"`
+	DurationUnit            string  `json:"duration_unit"`
+	DurationValue           int     `json:"duration_value"`
+	CustomSeconds           int64   `json:"custom_seconds"`
+	Enabled                 bool    `json:"enabled"`
+	SortOrder               int     `json:"sort_order"`
+	StripePriceID           string  `json:"stripe_price_id"`
+	CreemProductID          string  `json:"creem_product_id"`
+	MaxPurchasePerUser      int     `json:"max_purchase_per_user"`
+	UpgradeGroup            string  `json:"upgrade_group"`
+	TotalAmount             int64   `json:"total_amount"`
+	QuotaResetPeriod        string  `json:"quota_reset_period"`
+	QuotaResetCustomSeconds int64   `json:"quota_reset_custom_seconds"`
+	CreatedAt               int64   `json:"created_at"`
+	UpdatedAt               int64   `json:"updated_at"`
+}
+
+type paymentResponse struct {
+	Success bool        `json:"success"`
+	Message string      `json:"message"`
+	Data    paymentData `json:"data"`
+}
+
+type paymentData struct {
+	ScanCodeURL string `json:"scancode_url"`
+	TradeNo     string `json:"trade_no"`
+}

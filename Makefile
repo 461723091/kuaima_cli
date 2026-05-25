@@ -46,8 +46,9 @@ test_img3:
 
 #这个是否成功率高一些 ?
 test_img_s:
-	dist/kuaima_cli.exe -log log.log -system "just generate the image,do not give user a prompt, nor a svg" -image-model gpt-image-2 -image-generation -file https://weixin.uctphp.com/static/images/ailogo.png 帮我画张快马AI cli的宣传海报，便捷的生图工具，支持gpt-image-2等最新模型,可接入各种agent智能体，参考图是快马AI的logo
+	dist/kuaima_cli.exe -log log.log -system "Just generate the image; do not return a prompt or SVG" -image-model gpt-image-2 -image-generation -file https://weixin.uctphp.com/static/images/ailogo.png 帮我画张快马AI cli的宣传海报，便捷的生图工具，支持gpt-image-2等最新模型,可接入各种agent智能体，参考图是快马AI的logo
 
 
+#需要后端支持 ?
 test_gen:
 	dist/kuaima_cli.exe -log log.log -file response-image-01-03.png image 帮我把里面的示例图片改成实际场景，比如电商主图，宣传海报，ppt等

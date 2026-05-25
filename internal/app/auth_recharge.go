@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/url"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"time"
@@ -34,4 +35,12 @@ func openBrowser(rawURL string) error {
 		cmd = exec.Command("xdg-open", rawURL)
 	}
 	return cmd.Start()
+}
+
+func openFile(path string) error {
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		return err
+	}
+	return openBrowser(abs)
 }
