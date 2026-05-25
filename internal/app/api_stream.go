@@ -44,7 +44,7 @@ func (c *client) createResponseStreamWithImages(ctx context.Context, req respons
 		data, _ := io.ReadAll(httpResp.Body)
 		c.logResponseBody(data)
 		c.logTiming(started, firstByte)
-		return nil, fmt.Errorf("API request failed: %s: %s", httpResp.Status, strings.TrimSpace(string(data)))
+		return nil, apiRequestError("API request", httpResp.Status, data)
 	}
 
 	var completed json.RawMessage
@@ -81,7 +81,7 @@ func (c *client) createResponseStreamWithImages(ctx context.Context, req respons
 			continue
 		}
 		if event.Error != nil {
-			return nil, fmt.Errorf("API error: %s", event.Error.Message)
+			return nil, apiErrorf("API error: %s", apiErrorMessage(event.Error))
 		}
 		switch event.Type {
 		case "response.output_text.delta", "response.refusal.delta":
@@ -129,7 +129,7 @@ func (c *client) createResponseStreamWithImages(ctx context.Context, req respons
 			if event.Response != nil {
 				resp, err := decodeResponse(event.Response)
 				if err == nil && resp.Error != nil {
-					return nil, fmt.Errorf("API error: %s", resp.Error.Message)
+					return nil, apiErrorf("API error: %s", apiErrorMessage(resp.Error))
 				}
 			}
 			return nil, errors.New("API stream failed")

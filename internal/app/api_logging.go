@@ -1,6 +1,7 @@
 package app
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -10,6 +11,8 @@ import (
 	"strings"
 	"time"
 )
+
+const maxLoggedLongString = 256
 
 func (c *client) logRequest(req *http.Request, body []byte) {
 	if !logEnabled(c.verbose, c.logWriter) {
@@ -120,11 +123,120 @@ func logCaller(skip int) string {
 func prettyJSON(data []byte) string {
 	var value any
 	if err := json.Unmarshal(data, &value); err != nil {
-		return string(data)
+		return prettyEventStream(data)
 	}
-	formatted, err := json.MarshalIndent(value, "", "  ")
+	value = truncateLogValue(value, "")
+	formatted, err := marshalLogJSON(value, true)
 	if err != nil {
 		return string(data)
 	}
 	return string(formatted)
+}
+
+func prettyEventStream(data []byte) string {
+	text := string(data)
+	lines := strings.Split(text, "\n")
+	changed := false
+	for i, line := range lines {
+		prefixLen := len(line) - len(strings.TrimLeft(line, " \t"))
+		prefix := line[:prefixLen]
+		rest := strings.TrimSpace(line[prefixLen:])
+		if !strings.HasPrefix(rest, "data:") {
+			continue
+		}
+		eventData := strings.TrimSpace(strings.TrimPrefix(rest, "data:"))
+		if eventData == "" || eventData == "[DONE]" {
+			continue
+		}
+		var value any
+		if err := json.Unmarshal([]byte(eventData), &value); err != nil {
+			continue
+		}
+		value = truncateLogValue(value, "")
+		formatted, err := marshalLogJSON(value, false)
+		if err != nil {
+			continue
+		}
+		lines[i] = prefix + "data: " + string(formatted)
+		changed = true
+	}
+	if !changed {
+		return text
+	}
+	return strings.Join(lines, "\n")
+}
+
+func truncateLogValue(value any, key string) any {
+	switch v := value.(type) {
+	case map[string]any:
+		for childKey, child := range v {
+			v[childKey] = truncateLogValue(child, childKey)
+		}
+		return v
+	case []any:
+		for i, child := range v {
+			v[i] = truncateLogValue(child, key)
+		}
+		return v
+	case string:
+		if shouldTruncateLogString(key, v) {
+			return truncateLoggedString(v)
+		}
+		return v
+	}
+	return value
+}
+
+func shouldTruncateLogString(key, value string) bool {
+	if len(value) <= maxLoggedLongString {
+		return false
+	}
+	lowerKey := strings.ToLower(key)
+	if strings.Contains(lowerKey, "base64") ||
+		strings.Contains(lowerKey, "b64") ||
+		strings.Contains(lowerKey, "image") ||
+		strings.Contains(lowerKey, "result") ||
+		strings.Contains(lowerKey, "url") ||
+		strings.HasPrefix(value, "data:image/") ||
+		looksLikeLoggedBase64(value) {
+		return true
+	}
+	return false
+}
+
+func looksLikeLoggedBase64(value string) bool {
+	if len(value) < maxLoggedLongString {
+		return false
+	}
+	sample := value
+	if len(sample) > 512 {
+		sample = sample[:512]
+	}
+	var valid int
+	for _, r := range sample {
+		switch {
+		case r >= 'A' && r <= 'Z', r >= 'a' && r <= 'z', r >= '0' && r <= '9', r == '+', r == '/', r == '=', r == '\r', r == '\n':
+			valid++
+		default:
+			return false
+		}
+	}
+	return valid == len(sample)
+}
+
+func truncateLoggedString(value string) string {
+	return value[:maxLoggedLongString] + fmt.Sprintf("...<truncated %d chars>", len(value)-maxLoggedLongString)
+}
+
+func marshalLogJSON(value any, indent bool) ([]byte, error) {
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false)
+	if indent {
+		enc.SetIndent("", "  ")
+	}
+	if err := enc.Encode(value); err != nil {
+		return nil, err
+	}
+	return bytes.TrimRight(buf.Bytes(), "\n"), nil
 }

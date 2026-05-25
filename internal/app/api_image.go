@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -58,7 +57,7 @@ func (c *client) createImageRequest(ctx context.Context, path string, req any, o
 	c.logResponse(httpResp, data)
 	c.logTiming(started, firstByte)
 	if httpResp.StatusCode < 200 || httpResp.StatusCode >= 300 {
-		return nil, fmt.Errorf("%s failed: %s: %s", operation, httpResp.Status, strings.TrimSpace(string(data)))
+		return nil, apiRequestError(operation, httpResp.Status, data)
 	}
 	return decodeResponse(data)
 }
@@ -89,7 +88,7 @@ func (c *client) createImageRequestStream(ctx context.Context, path string, req 
 		data, _ := io.ReadAll(httpResp.Body)
 		c.logResponseBody(data)
 		c.logTiming(started, firstByte)
-		return nil, fmt.Errorf("%s failed: %s: %s", operation, httpResp.Status, strings.TrimSpace(string(data)))
+		return nil, apiRequestError(operation, httpResp.Status, data)
 	}
 
 	var rawStream bytes.Buffer
@@ -124,7 +123,7 @@ func (c *client) createImageRequestStream(ctx context.Context, path string, req 
 			continue
 		}
 		if event.Error != nil {
-			return nil, fmt.Errorf("API error: %s", event.Error.Message)
+			return nil, apiErrorf("API error: %s", apiErrorMessage(event.Error))
 		}
 
 		candidates := imageStreamEventCandidates(event.B64JSON, event.PartialImageB64, event.URL, event.ImageURL, event.Data)

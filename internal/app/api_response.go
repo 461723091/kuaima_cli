@@ -40,7 +40,7 @@ func (c *client) createResponse(ctx context.Context, req responseRequest) (*resp
 	c.logResponse(httpResp, data)
 	c.logTiming(started, firstByte)
 	if httpResp.StatusCode < 200 || httpResp.StatusCode >= 300 {
-		return nil, fmt.Errorf("API request failed: %s: %s", httpResp.Status, strings.TrimSpace(string(data)))
+		return nil, apiRequestError("API request", httpResp.Status, data)
 	}
 
 	return decodeResponse(data)
@@ -53,7 +53,7 @@ func decodeResponse(data []byte) (*responsePayload, error) {
 	}
 	payload.Raw = append(payload.Raw[:0], data...)
 	if payload.Error != nil {
-		return nil, fmt.Errorf("API error: %s", payload.Error.Message)
+		return nil, apiErrorf("API error: %s", apiErrorMessage(payload.Error))
 	}
 	return &payload, nil
 }

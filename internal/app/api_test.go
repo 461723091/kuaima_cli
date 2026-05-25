@@ -62,6 +62,53 @@ func TestCreateResponseWritesLogFile(t *testing.T) {
 	}
 }
 
+func TestCreateResponseAddsRechargeHintForInsufficientQuota(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/responses" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"error":{"message":"You exceeded your current quota","type":"insufficient_quota","code":"insufficient_quota"}}`))
+	}))
+	defer server.Close()
+
+	c, err := newClient(server.URL, "", "secret-token", "", "", false, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+
+	_, err = c.createResponse(t.Context(), responseRequest{Model: "test-model", Input: "hello"})
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if !strings.Contains(err.Error(), rechargeHint) {
+		t.Fatalf("expected recharge hint, got: %v", err)
+	}
+}
+
+func TestCreateResponseHTTPErrorAddsRechargeHintForBalanceMessage(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusPaymentRequired)
+		_, _ = w.Write([]byte(`{"error":{"message":"余额不足"}}`))
+	}))
+	defer server.Close()
+
+	c, err := newClient(server.URL, "", "secret-token", "", "", false, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+
+	_, err = c.createResponse(t.Context(), responseRequest{Model: "test-model", Input: "hello"})
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if !strings.Contains(err.Error(), rechargeHint) {
+		t.Fatalf("expected recharge hint, got: %v", err)
+	}
+}
+
 func TestCreateResponseStreamAggregatesOutputItemEvents(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/v1/responses" {
@@ -98,6 +145,28 @@ func TestCreateResponseStreamAggregatesOutputItemEvents(t *testing.T) {
 	}
 	if !strings.Contains(string(resp.Raw), "response.image_generation_call.partial_image") {
 		t.Fatalf("raw stream missing partial image event: %s", string(resp.Raw))
+	}
+}
+
+func TestCreateResponseStreamAddsRechargeHintForErrorEvent(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = w.Write([]byte("data: {\"type\":\"response.failed\",\"error\":{\"message\":\"insufficient balance\"}}\n\n"))
+	}))
+	defer server.Close()
+
+	c, err := newClient(server.URL, "", "secret-token", "", "", false, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+
+	_, err = c.createResponseStream(t.Context(), responseRequest{Model: "test-model", Input: "hello"}, io.Discard)
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if !strings.Contains(err.Error(), rechargeHint) {
+		t.Fatalf("expected recharge hint, got: %v", err)
 	}
 }
 
@@ -250,6 +319,31 @@ func TestCreateImageGenerationStreamSendsStreamAndEmitsImages(t *testing.T) {
 	}
 	if len(resp.Output) != 2 || resp.Output[1].Result != "final-image" {
 		t.Fatalf("unexpected stream response: %+v", resp.Output)
+	}
+}
+
+func TestCreateImageGenerationAddsRechargeHintForHTTPError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/images/generations" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		w.WriteHeader(http.StatusPaymentRequired)
+		_, _ = w.Write([]byte(`{"error":{"message":"额度不足"}}`))
+	}))
+	defer server.Close()
+
+	c, err := newClient(server.URL, "", "secret-token", "", "", false, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+
+	_, err = c.createImageGeneration(t.Context(), imageGenerationRequest{Model: "test-model", Prompt: "draw"})
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if !strings.Contains(err.Error(), rechargeHint) {
+		t.Fatalf("expected recharge hint, got: %v", err)
 	}
 }
 
