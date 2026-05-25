@@ -10,6 +10,7 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestCreateResponseWritesLogFile(t *testing.T) {
@@ -97,6 +98,46 @@ func TestCreateResponseStreamAggregatesOutputItemEvents(t *testing.T) {
 	}
 	if !strings.Contains(string(resp.Raw), "response.image_generation_call.partial_image") {
 		t.Fatalf("raw stream missing partial image event: %s", string(resp.Raw))
+	}
+}
+
+func TestCreateResponseStreamEmitsImagesBeforeCompleted(t *testing.T) {
+	imageSeen := make(chan struct{})
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = w.Write([]byte("data: {\"type\":\"response.image_generation_call.partial_image\",\"output_index\":0,\"partial_image_b64\":\"partial-image\"}\n\n"))
+		if flusher, ok := w.(http.Flusher); ok {
+			flusher.Flush()
+		}
+		select {
+		case <-imageSeen:
+		case <-time.After(time.Second):
+			t.Fatal("image callback did not run before completed event")
+		}
+		_, _ = w.Write([]byte("data: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_1\",\"output\":[]}}\n\n"))
+		_, _ = w.Write([]byte("data: [DONE]\n\n"))
+	}))
+	defer server.Close()
+
+	c, err := newClient(server.URL, "", "secret-token", "", "", false, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+
+	var images []string
+	_, err = c.createResponseStreamWithImages(t.Context(), responseRequest{Model: "test-model", Input: "draw"}, io.Discard, func(candidate imageCandidate) error {
+		if len(images) == 0 {
+			close(imageSeen)
+		}
+		images = append(images, candidate.Value)
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(images) != 1 || images[0] != "partial-image" {
+		t.Fatalf("unexpected streamed images: %#v", images)
 	}
 }
 

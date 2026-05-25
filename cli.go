@@ -183,6 +183,13 @@ func (opts imageOptions) responseTool() map[string]any {
 	return tool
 }
 
+func (opts imageOptions) responseRunCount() int {
+	if opts.count != nil && *opts.count > 1 {
+		return *opts.count
+	}
+	return 1
+}
+
 func (opts imageOptions) generationRequest(model, prompt string) imageGenerationRequest {
 	req := imageGenerationRequest{
 		Model:  model,
@@ -294,17 +301,33 @@ func promptWithTextFiles(prompt string, files []textFileContent) string {
 }
 
 func saveResponseImages(ctx context.Context, c *client, resp *responsePayload, dir string) ([]string, error) {
-	if strings.TrimSpace(dir) == "" {
-		return nil, nil
-	}
-	saved, err := saveImagesFromResponse(ctx, c.httpClient, resp, dir)
+	return saveResponseImagesWithSaver(newResponseImageSaver(ctx, c.httpClient, dir), resp)
+}
+
+func saveResponseImagesWithSaver(saver *responseImageSaver, resp *responsePayload) ([]string, error) {
+	saved, err := saver.saveResponse(resp)
 	if err != nil {
 		return nil, err
 	}
-	for _, path := range saved {
+	printSavedImages(saved)
+	return saved, nil
+}
+
+func saveStreamImage(saver *responseImageSaver, candidate imageCandidate) error {
+	path, err := saver.saveCandidate(candidate)
+	if err != nil {
+		return err
+	}
+	if path != "" {
+		printSavedImages([]string{path})
+	}
+	return nil
+}
+
+func printSavedImages(paths []string) {
+	for _, path := range paths {
 		fmt.Fprintf(os.Stderr, "已保存图片: %s\n", path)
 	}
-	return saved, nil
 }
 
 func runAsk(args []string) error {
@@ -373,27 +396,37 @@ func runAsk(args []string) error {
 		req.Tools = []map[string]any{tool}
 	}
 
-	var resp *responsePayload
-	if *opts.stream {
-		resp, err = c.createResponseStream(context.Background(), req, os.Stdout)
-		if err == nil {
-			fmt.Fprintln(os.Stdout)
-		}
-	} else {
-		resp, err = c.createResponse(context.Background(), req)
-		if err == nil {
-			text := strings.TrimSpace(resp.text())
-			if text != "" {
-				fmt.Println(text)
+	runCount := 1
+	if *imageGeneration {
+		runCount = imageOpts.responseRunCount()
+	}
+	for i := 0; i < runCount; i++ {
+		var resp *responsePayload
+		imageSaver := newResponseImageSaver(context.Background(), c.httpClient, *saveDir)
+		if *opts.stream {
+			resp, err = c.createResponseStreamWithImages(context.Background(), req, os.Stdout, func(candidate imageCandidate) error {
+				return saveStreamImage(imageSaver, candidate)
+			})
+			if err == nil {
+				fmt.Fprintln(os.Stdout)
+			}
+		} else {
+			resp, err = c.createResponse(context.Background(), req)
+			if err == nil {
+				text := strings.TrimSpace(resp.text())
+				if text != "" {
+					fmt.Println(text)
+				}
 			}
 		}
+		if err != nil {
+			return err
+		}
+		if _, err := saveResponseImagesWithSaver(imageSaver, resp); err != nil {
+			return err
+		}
 	}
-	if err != nil {
-		return err
-	}
-
-	_, err = saveResponseImages(context.Background(), c, resp, *saveDir)
-	return err
+	return nil
 }
 
 func readPromptFromStdin() (string, error) {

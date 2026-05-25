@@ -191,6 +191,10 @@ func (c *client) createResponse(ctx context.Context, req responseRequest) (*resp
 }
 
 func (c *client) createResponseStream(ctx context.Context, req responseRequest, w io.Writer) (*responsePayload, error) {
+	return c.createResponseStreamWithImages(ctx, req, w, nil)
+}
+
+func (c *client) createResponseStreamWithImages(ctx context.Context, req responseRequest, w io.Writer, onImage func(imageCandidate) error) (*responsePayload, error) {
 	req.Stream = true
 	body, err := json.Marshal(req)
 	if err != nil {
@@ -270,6 +274,11 @@ func (c *client) createResponseStream(ctx context.Context, req responseRequest, 
 				var item responseOutput
 				if err := json.Unmarshal(event.Item, &item); err == nil {
 					setResponseOutput(&outputs, event.OutputIndex, item)
+					if onImage != nil && item.Type == "image_generation_call" && strings.TrimSpace(item.Result) != "" {
+						if err := onImage(imageCandidate{Kind: "base64", Value: item.Result}); err != nil {
+							return nil, err
+						}
+					}
 				}
 			}
 		case "response.image_generation_call.partial_image":
@@ -284,6 +293,11 @@ func (c *client) createResponseStream(ctx context.Context, req responseRequest, 
 				}
 				if item.Status != "completed" {
 					item.Result = image
+				}
+				if onImage != nil {
+					if err := onImage(imageCandidate{Kind: "base64", Value: image}); err != nil {
+						return nil, err
+					}
 				}
 			}
 		case "response.completed":

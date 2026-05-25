@@ -83,6 +83,9 @@ func TestImageCommandSharedFlagsParse(t *testing.T) {
 	if tool["action"] != "edit" || tool["size"] != "1536x1024" || tool["quality"] != "high" || tool["output_format"] != "webp" || tool["output_compression"] != 80 || tool["background"] != "transparent" {
 		t.Fatalf("unexpected response tool: %#v", tool)
 	}
+	if imageOpts.responseRunCount() != 3 {
+		t.Fatalf("unexpected response run count: %d", imageOpts.responseRunCount())
+	}
 	if _, ok := tool["moderation"]; ok {
 		t.Fatalf("did not expect moderation in response tool: %#v", tool)
 	}

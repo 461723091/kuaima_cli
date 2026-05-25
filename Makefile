@@ -11,6 +11,9 @@ run:
 test:
 	dist/kuaima_cli.exe 你是什么模型
 
+test_stream:
+	dist/kuaima_cli.exe -stream 给我背诵一下滕王阁序
+
 #查询余额
 balance:
 	dist/kuaima_cli.exe balance
