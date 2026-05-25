@@ -38,3 +38,13 @@ func TestWriteFileUniqueRenamesExistingPath(t *testing.T) {
 		t.Fatalf("unexpected saved file data: %q", data)
 	}
 }
+
+func TestSaveResponseImagesWithNilSaverSkipsSaving(t *testing.T) {
+	saved, err := saveResponseImagesWithSaver(nil, &responsePayload{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(saved) != 0 {
+		t.Fatalf("expected no saved images, got %#v", saved)
+	}
+}

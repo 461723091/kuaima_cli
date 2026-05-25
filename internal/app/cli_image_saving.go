@@ -11,6 +11,9 @@ func saveResponseImages(ctx context.Context, c *client, resp *responsePayload, d
 }
 
 func saveResponseImagesWithSaver(saver *responseImageSaver, resp *responsePayload) ([]string, error) {
+	if saver == nil {
+		return nil, nil
+	}
 	saved, err := saver.saveResponse(resp)
 	if err != nil {
 		return nil, err

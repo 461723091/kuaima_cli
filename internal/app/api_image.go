@@ -1,6 +1,7 @@
 package app
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -17,6 +18,16 @@ func (c *client) createImageGeneration(ctx context.Context, req imageGenerationR
 
 func (c *client) createImageEdit(ctx context.Context, req imageEditRequest) (*responsePayload, error) {
 	return c.createImageRequest(ctx, "/v1/images/edits", req, "image edit")
+}
+
+func (c *client) createImageGenerationStream(ctx context.Context, req imageGenerationRequest, onImage func(imageCandidate) error) (*responsePayload, error) {
+	req.Stream = true
+	return c.createImageRequestStream(ctx, "/v1/images/generations", req, "image generation", onImage)
+}
+
+func (c *client) createImageEditStream(ctx context.Context, req imageEditRequest, onImage func(imageCandidate) error) (*responsePayload, error) {
+	req.Stream = true
+	return c.createImageRequestStream(ctx, "/v1/images/edits", req, "image edit", onImage)
 }
 
 func (c *client) createImageRequest(ctx context.Context, path string, req any, operation string) (*responsePayload, error) {
@@ -50,4 +61,125 @@ func (c *client) createImageRequest(ctx context.Context, path string, req any, o
 		return nil, fmt.Errorf("%s failed: %s: %s", operation, httpResp.Status, strings.TrimSpace(string(data)))
 	}
 	return decodeResponse(data)
+}
+
+func (c *client) createImageRequestStream(ctx context.Context, path string, req any, operation string, onImage func(imageCandidate) error) (*responsePayload, error) {
+	body, err := json.Marshal(req)
+	if err != nil {
+		return nil, err
+	}
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+path, bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	httpReq.Header.Set("Authorization", "Bearer "+c.apiKey)
+	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("Accept", "text/event-stream")
+	c.logRequest(httpReq, body)
+
+	started := time.Now()
+	var firstByte time.Time
+	httpResp, err := c.httpClient.Do(withFirstByteTrace(httpReq, &firstByte))
+	if err != nil {
+		return nil, err
+	}
+	defer httpResp.Body.Close()
+	c.logResponseStatus(httpResp)
+	if httpResp.StatusCode < 200 || httpResp.StatusCode >= 300 {
+		data, _ := io.ReadAll(httpResp.Body)
+		c.logResponseBody(data)
+		c.logTiming(started, firstByte)
+		return nil, fmt.Errorf("%s failed: %s: %s", operation, httpResp.Status, strings.TrimSpace(string(data)))
+	}
+
+	var rawStream bytes.Buffer
+	var outputs []responseOutput
+	scanner := bufio.NewScanner(httpResp.Body)
+	scanner.Buffer(make([]byte, 0, 64*1024), 30*1024*1024)
+	for scanner.Scan() {
+		line := scanner.Text()
+		rawStream.WriteString(line)
+		rawStream.WriteByte('\n')
+		if !strings.HasPrefix(line, "data:") {
+			continue
+		}
+		data := strings.TrimSpace(strings.TrimPrefix(line, "data:"))
+		if data == "" || data == "[DONE]" {
+			continue
+		}
+		var event struct {
+			Type            string    `json:"type"`
+			B64JSON         string    `json:"b64_json"`
+			PartialImageB64 string    `json:"partial_image_b64"`
+			URL             string    `json:"url"`
+			ImageURL        string    `json:"image_url"`
+			Error           *apiError `json:"error"`
+			Data            []struct {
+				B64JSON  string `json:"b64_json"`
+				URL      string `json:"url"`
+				ImageURL string `json:"image_url"`
+			} `json:"data"`
+		}
+		if err := json.Unmarshal([]byte(data), &event); err != nil {
+			continue
+		}
+		if event.Error != nil {
+			return nil, fmt.Errorf("API error: %s", event.Error.Message)
+		}
+
+		candidates := imageStreamEventCandidates(event.B64JSON, event.PartialImageB64, event.URL, event.ImageURL, event.Data)
+		for _, candidate := range candidates {
+			item := ensureResponseOutput(&outputs, len(outputs))
+			item.Type = "image_generation_call"
+			item.Status = "completed"
+			if candidate.Kind == "base64" {
+				item.Result = candidate.Value
+			} else {
+				item.Content = []responseContent{{Type: "output_image", ImageURL: candidate.Value}}
+			}
+			if onImage != nil {
+				if err := onImage(candidate); err != nil {
+					return nil, err
+				}
+			}
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		return nil, err
+	}
+	c.logResponseBody(rawStream.Bytes())
+	c.logTiming(started, firstByte)
+	return &responsePayload{Output: outputs, Raw: rawStream.Bytes()}, nil
+}
+
+func imageStreamEventCandidates(b64JSON, partialImageB64, url, imageURL string, data []struct {
+	B64JSON  string `json:"b64_json"`
+	URL      string `json:"url"`
+	ImageURL string `json:"image_url"`
+}) []imageCandidate {
+	var candidates []imageCandidate
+	if strings.TrimSpace(partialImageB64) != "" {
+		candidates = append(candidates, imageCandidate{Kind: "base64", Value: partialImageB64})
+	}
+	if strings.TrimSpace(b64JSON) != "" {
+		candidates = append(candidates, imageCandidate{Kind: "base64", Value: b64JSON})
+	}
+	if strings.TrimSpace(imageURL) != "" {
+		candidates = append(candidates, classifyImageValue(imageURL))
+	}
+	if strings.TrimSpace(url) != "" {
+		candidates = append(candidates, classifyImageValue(url))
+	}
+	for _, item := range data {
+		if strings.TrimSpace(item.B64JSON) != "" {
+			candidates = append(candidates, imageCandidate{Kind: "base64", Value: item.B64JSON})
+		}
+		if strings.TrimSpace(item.ImageURL) != "" {
+			candidates = append(candidates, classifyImageValue(item.ImageURL))
+		}
+		if strings.TrimSpace(item.URL) != "" {
+			candidates = append(candidates, classifyImageValue(item.URL))
+		}
+	}
+	return candidates
 }

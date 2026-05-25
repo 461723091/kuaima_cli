@@ -26,6 +26,7 @@ type responseRequest struct {
 type imageGenerationRequest struct {
 	Model             string `json:"model"`
 	Prompt            string `json:"prompt"`
+	Stream            bool   `json:"stream,omitempty"`
 	N                 int    `json:"n,omitempty"`
 	Size              string `json:"size,omitempty"`
 	Quality           string `json:"quality,omitempty"`
@@ -38,6 +39,7 @@ type imageGenerationRequest struct {
 type imageEditRequest struct {
 	Model             string     `json:"model"`
 	Prompt            string     `json:"prompt"`
+	Stream            bool       `json:"stream,omitempty"`
 	Images            []imageRef `json:"images"`
 	Mask              *imageRef  `json:"mask,omitempty"`
 	N                 int        `json:"n,omitempty"`

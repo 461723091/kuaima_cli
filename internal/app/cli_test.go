@@ -33,6 +33,7 @@ func TestInputOptionsBuildInputWithImageAttachment(t *testing.T) {
 func TestImageCommandSharedFlagsParse(t *testing.T) {
 	fs := newFlagSet("image")
 	opts := addClientFlags(fs)
+	stream := fs.Bool("stream", false, "stream image generation events")
 	saveDir := addSaveImagesFlag(fs, ".")
 	inputOpts := addInputFlags(fs)
 	imageOpts := addImageFlags(fs, appConfig{})
@@ -47,6 +48,7 @@ func TestImageCommandSharedFlagsParse(t *testing.T) {
 		"-image-background", "transparent",
 		"-image-moderation", "low",
 		"-image-action", "edit",
+		"-stream",
 		"-file-format", "url",
 		"-file", "https://example.com/reference.png",
 		"-image-mask", "https://example.com/mask.png",
@@ -59,6 +61,9 @@ func TestImageCommandSharedFlagsParse(t *testing.T) {
 
 	if opts.imageGenerationModel() != "image-model" {
 		t.Fatalf("unexpected image model: %q", opts.imageGenerationModel())
+	}
+	if !*stream {
+		t.Fatal("expected stream to be true")
 	}
 	if *inputOpts.fileFormat != fileFormatURL {
 		t.Fatalf("unexpected file format: %q", *inputOpts.fileFormat)

@@ -3,6 +3,8 @@ package app
 import (
 	"context"
 	"errors"
+	"fmt"
+	"os"
 	"strings"
 )
 
@@ -13,6 +15,7 @@ func runImage(args []string) error {
 	}
 	fs := newFlagSet("image")
 	opts := addClientFlagsWithConfig(fs, cfg)
+	stream := fs.Bool("stream", configBool(cfg.Stream, false), "stream image generation events")
 	saveDir := addSaveImagesFlagWithConfig(fs, cfg, ".")
 	inputOpts := addInputFlagsWithConfig(fs, cfg)
 	imageOpts := addImageFlags(fs, cfg)
@@ -41,8 +44,19 @@ func runImage(args []string) error {
 		return err
 	}
 	var resp *responsePayload
+	imageSaver := newResponseImageSaver(context.Background(), c.httpClient, *saveDir)
 	if len(images) == 0 {
-		resp, err = c.createImageGeneration(context.Background(), imageOpts.generationRequest(opts.imageGenerationModel(), promptWithTextFiles(prompt, textFiles)))
+		req := imageOpts.generationRequest(opts.imageGenerationModel(), promptWithTextFiles(prompt, textFiles))
+		if *stream {
+			resp, err = c.createImageGenerationStream(context.Background(), req, func(candidate imageCandidate) error {
+				return saveStreamImage(imageSaver, candidate)
+			})
+			if err == nil {
+				fmt.Fprintln(os.Stdout)
+			}
+		} else {
+			resp, err = c.createImageGeneration(context.Background(), req)
+		}
 	} else {
 		editPrompt := promptWithTextFiles(prompt, textFiles)
 		if strings.TrimSpace(editPrompt) == "" {
@@ -60,13 +74,23 @@ func runImage(args []string) error {
 			}
 			mask = &maskRef
 		}
-		resp, err = c.createImageEdit(context.Background(), imageOpts.editRequest(opts.imageGenerationModel(), editPrompt, refs, mask))
+		req := imageOpts.editRequest(opts.imageGenerationModel(), editPrompt, refs, mask)
+		if *stream {
+			resp, err = c.createImageEditStream(context.Background(), req, func(candidate imageCandidate) error {
+				return saveStreamImage(imageSaver, candidate)
+			})
+			if err == nil {
+				fmt.Fprintln(os.Stdout)
+			}
+		} else {
+			resp, err = c.createImageEdit(context.Background(), req)
+		}
 	}
 	if err != nil {
 		return err
 	}
 
-	saved, err := saveResponseImages(context.Background(), c, resp, *saveDir)
+	saved, err := saveResponseImagesWithSaver(imageSaver, resp)
 	if err != nil {
 		return err
 	}

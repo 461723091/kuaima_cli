@@ -196,3 +196,85 @@ func TestCreateResponseStreamKeepsPartialImageWithoutDone(t *testing.T) {
 		t.Fatalf("unexpected partial image result: %+v", resp.Output[0])
 	}
 }
+
+func TestCreateImageGenerationStreamSendsStreamAndEmitsImages(t *testing.T) {
+	imageSeen := make(chan struct{})
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/images/generations" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		if r.Header.Get("Accept") != "text/event-stream" {
+			t.Fatalf("unexpected accept header: %q", r.Header.Get("Accept"))
+		}
+		data, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(string(data), `"stream":true`) {
+			t.Fatalf("request body missing stream=true: %s", string(data))
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = w.Write([]byte("data: {\"type\":\"image_generation.partial_image\",\"partial_image_b64\":\"partial-image\"}\n\n"))
+		if flusher, ok := w.(http.Flusher); ok {
+			flusher.Flush()
+		}
+		select {
+		case <-imageSeen:
+		case <-time.After(time.Second):
+			t.Fatal("image callback did not run before completed event")
+		}
+		_, _ = w.Write([]byte("data: {\"type\":\"image_generation.completed\",\"b64_json\":\"final-image\"}\n\n"))
+		_, _ = w.Write([]byte("data: [DONE]\n\n"))
+	}))
+	defer server.Close()
+
+	c, err := newClient(server.URL, "", "secret-token", "", "", false, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+
+	var images []string
+	resp, err := c.createImageGenerationStream(t.Context(), imageGenerationRequest{Model: "test-model", Prompt: "draw"}, func(candidate imageCandidate) error {
+		if len(images) == 0 {
+			close(imageSeen)
+		}
+		images = append(images, candidate.Value)
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(images) != 2 || images[0] != "partial-image" || images[1] != "final-image" {
+		t.Fatalf("unexpected streamed images: %#v", images)
+	}
+	if len(resp.Output) != 2 || resp.Output[1].Result != "final-image" {
+		t.Fatalf("unexpected stream response: %+v", resp.Output)
+	}
+}
+
+func TestCreateImageEditStreamUsesEditEndpoint(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/images/edits" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = w.Write([]byte("data: {\"type\":\"image_edit.completed\",\"data\":[{\"b64_json\":\"edited-image\"}]}\n\n"))
+		_, _ = w.Write([]byte("data: [DONE]\n\n"))
+	}))
+	defer server.Close()
+
+	c, err := newClient(server.URL, "", "secret-token", "", "", false, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+
+	resp, err := c.createImageEditStream(t.Context(), imageEditRequest{Model: "test-model", Prompt: "edit", Images: []imageRef{{ImageURL: "https://example.com/a.png"}}}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(resp.Output) != 1 || resp.Output[0].Result != "edited-image" {
+		t.Fatalf("unexpected edit stream response: %+v", resp.Output)
+	}
+}
