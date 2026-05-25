@@ -1,4 +1,4 @@
-package main
+package app
 
 import (
 	"bytes"
@@ -11,61 +11,11 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/url"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"time"
 )
-
-type userLoginResponse struct {
-	Message string `json:"message"`
-	Success bool   `json:"success"`
-	Data    struct {
-		Token string `json:"token"`
-	} `json:"data"`
-}
-
-type tokenUsage struct {
-	Object         string              `json:"object"`
-	Name           string              `json:"name"`
-	Subscriptions  []tokenSubscription `json:"subscriptions"`
-	TotalGranted   int64               `json:"total_granted"`
-	TotalUsed      int64               `json:"total_used"`
-	TotalAvailable int64               `json:"total_available"`
-	UnlimitedQuota bool                `json:"unlimited_quota"`
-	ExpiresAt      int64               `json:"expires_at"`
-}
-
-type tokenSubscription struct {
-	Subscription subscriptionPlan `json:"subscription"`
-}
-
-type subscriptionPlan struct {
-	ID            int64  `json:"id"`
-	UserID        int64  `json:"user_id"`
-	PlanID        int64  `json:"plan_id"`
-	AmountTotal   int64  `json:"amount_total"`
-	AmountUsed    int64  `json:"amount_used"`
-	StartTime     int64  `json:"start_time"`
-	EndTime       int64  `json:"end_time"`
-	Status        string `json:"status"`
-	Source        string `json:"source"`
-	LastResetTime int64  `json:"last_reset_time"`
-	NextResetTime int64  `json:"next_reset_time"`
-	UpgradeGroup  string `json:"upgrade_group"`
-	PrevUserGroup string `json:"prev_user_group"`
-	CreatedAt     int64  `json:"created_at"`
-	UpdatedAt     int64  `json:"updated_at"`
-}
-
-type tokenUsageResponse struct {
-	Code    bool       `json:"code"`
-	Message string     `json:"message"`
-	Data    tokenUsage `json:"data"`
-}
 
 func ensureAPIKey(ctx context.Context, baseURL, username, password string, verbose bool, logWriter io.Writer) (string, error) {
 	cfg, err := loadAppConfig()
@@ -275,65 +225,4 @@ func randomHex(n int) (string, error) {
 		return "", err
 	}
 	return hex.EncodeToString(buf), nil
-}
-
-func rechargeURL(baseURL, username, password string, now time.Time) (string, error) {
-	endpoint, err := url.Parse(strings.TrimRight(baseURL, "/") + "/api/user/ulogin2")
-	if err != nil {
-		return "", err
-	}
-	password = MD5(fmt.Sprintf("%s%d%s", password, now.Unix(), username))
-	query := endpoint.Query()
-	query.Set("username", username)
-	query.Set("password", password)
-	query.Set("create_time", fmt.Sprintf("%d", now.Unix()))
-	endpoint.RawQuery = query.Encode()
-	return endpoint.String(), nil
-}
-
-func openBrowser(rawURL string) error {
-	var cmd *exec.Cmd
-	switch runtime.GOOS {
-	case "windows":
-		cmd = exec.Command("rundll32", "url.dll,FileProtocolHandler", rawURL)
-	case "darwin":
-		cmd = exec.Command("open", rawURL)
-	default:
-		cmd = exec.Command("xdg-open", rawURL)
-	}
-	return cmd.Start()
-}
-
-func (c *client) getTokenUsage(ctx context.Context) (*tokenUsage, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/api/usage/token/2", nil)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Authorization", "Bearer "+c.apiKey)
-	req.Header.Set("Accept", "application/json")
-	c.logRequest(req, nil)
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-	data, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
-	c.logResponse(resp, data)
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("usage request failed: %s: %s", resp.Status, strings.TrimSpace(string(data)))
-	}
-	var payload tokenUsageResponse
-	if err := json.Unmarshal(data, &payload); err != nil {
-		return nil, fmt.Errorf("decode usage response: %w", err)
-	}
-	if !payload.Code {
-		if strings.TrimSpace(payload.Message) == "" {
-			payload.Message = "usage request failed"
-		}
-		return nil, errors.New(payload.Message)
-	}
-	return &payload.Data, nil
 }

@@ -1,6 +1,6 @@
 
 build:
-	go build -buildvcs=false -o dist/kuaima_cli.exe
+	go build -buildvcs=false -o dist/kuaima_cli.exe ./cmd/kuaima_cli
 
 build_skill:
 	powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build_skill.ps1

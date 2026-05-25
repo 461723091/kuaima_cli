@@ -1,4 +1,4 @@
-package main
+package app
 
 import (
 	"bytes"
@@ -53,7 +53,7 @@ func TestCreateResponseWritesLogFile(t *testing.T) {
 			t.Fatalf("log missing %q:\n%s", want, log)
 		}
 	}
-	prefixPattern := regexp.MustCompile(`(?m)^\[\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3}\] \[kuaima_cli\.\(\*client\)\.createResponse\] --- (request|response|timing) ---$`)
+	prefixPattern := regexp.MustCompile(`(?m)^\[\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3}\] \[app\.\(\*client\)\.createResponse\] --- (request|response|timing) ---$`)
 	if matches := prefixPattern.FindAllString(log, -1); len(matches) != 3 {
 		t.Fatalf("expected request/response/timing prefixes, got %d:\n%s", len(matches), log)
 	}

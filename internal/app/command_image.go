@@ -1,0 +1,77 @@
+package app
+
+import (
+	"context"
+	"errors"
+	"strings"
+)
+
+func runImage(args []string) error {
+	cfg, err := loadAppConfig()
+	if err != nil {
+		return err
+	}
+	fs := newFlagSet("image")
+	opts := addClientFlagsWithConfig(fs, cfg)
+	saveDir := addSaveImagesFlagWithConfig(fs, cfg, ".")
+	inputOpts := addInputFlagsWithConfig(fs, cfg)
+	imageOpts := addImageFlags(fs, cfg)
+	if err := parseFlags(fs, args); err != nil {
+		return err
+	}
+	if err := imageOpts.validate(); err != nil {
+		return err
+	}
+	if err := persistConfigFlags(fs, cfg); err != nil {
+		return err
+	}
+
+	prompt := strings.TrimSpace(strings.Join(fs.Args(), " "))
+	if !inputOpts.hasPromptOrAttachments(prompt) {
+		return errors.New("必须提供图片提示词或附件")
+	}
+
+	c, err := opts.newClient()
+	if err != nil {
+		return err
+	}
+	defer c.Close()
+	images, textFiles, err := collectInputAttachments(prompt, *inputOpts.attachments)
+	if err != nil {
+		return err
+	}
+	var resp *responsePayload
+	if len(images) == 0 {
+		resp, err = c.createImageGeneration(context.Background(), imageOpts.generationRequest(opts.imageGenerationModel(), promptWithTextFiles(prompt, textFiles)))
+	} else {
+		editPrompt := promptWithTextFiles(prompt, textFiles)
+		if strings.TrimSpace(editPrompt) == "" {
+			return errors.New("must provide an image edit prompt")
+		}
+		refs, refsErr := imageRefs(context.Background(), c, images, *inputOpts.fileFormat)
+		if refsErr != nil {
+			return refsErr
+		}
+		var mask *imageRef
+		if imageOpts.mask != nil && strings.TrimSpace(*imageOpts.mask) != "" {
+			maskRef, maskErr := imageRefFromInput(context.Background(), c, *imageOpts.mask, *inputOpts.fileFormat)
+			if maskErr != nil {
+				return maskErr
+			}
+			mask = &maskRef
+		}
+		resp, err = c.createImageEdit(context.Background(), imageOpts.editRequest(opts.imageGenerationModel(), editPrompt, refs, mask))
+	}
+	if err != nil {
+		return err
+	}
+
+	saved, err := saveResponseImages(context.Background(), c, resp, *saveDir)
+	if err != nil {
+		return err
+	}
+	if strings.TrimSpace(*saveDir) != "" && len(saved) == 0 {
+		return errors.New("响应中没有图片")
+	}
+	return nil
+}
