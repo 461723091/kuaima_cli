@@ -76,6 +76,28 @@ func TestConfigDefaultsHaveLowestUserPriority(t *testing.T) {
 	}
 }
 
+func TestStreamDefaultsToTrue(t *testing.T) {
+	fs := newFlagSet("ask")
+	opts := addResponseFlagsWithConfig(fs, appConfig{})
+	if err := parseFlags(fs, nil); err != nil {
+		t.Fatal(err)
+	}
+	if !*opts.stream {
+		t.Fatal("expected stream to default to true")
+	}
+}
+
+func TestStreamConfigCanDisableDefault(t *testing.T) {
+	fs := newFlagSet("ask")
+	opts := addResponseFlagsWithConfig(fs, appConfig{Stream: boolPtr(false)})
+	if err := parseFlags(fs, nil); err != nil {
+		t.Fatal(err)
+	}
+	if *opts.stream {
+		t.Fatal("expected config stream=false to disable stream")
+	}
+}
+
 func TestPersistConfigFlagsUpdatesOnlyExplicitPersistentFlags(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("KUAIMA_CONFIG_DIR", dir)

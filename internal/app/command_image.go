@@ -15,7 +15,7 @@ func runImage(args []string) error {
 	}
 	fs := newFlagSet("image")
 	opts := addClientFlagsWithConfig(fs, cfg)
-	stream := fs.Bool("stream", configBool(cfg.Stream, false), "stream image generation events")
+	stream := fs.Bool("stream", configBool(cfg.Stream, true), "stream image generation events")
 	saveDir := addSaveImagesFlagWithConfig(fs, cfg, ".")
 	inputOpts := addInputFlagsWithConfig(fs, cfg)
 	imageOpts := addImageFlags(fs, cfg)

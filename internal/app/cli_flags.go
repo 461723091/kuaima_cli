@@ -83,7 +83,7 @@ func addResponseFlagsWithConfig(fs *flag.FlagSet, cfg appConfig) responseOptions
 	return responseOptions{
 		clientOptions: addClientFlagsWithConfig(fs, cfg),
 		system:        fs.String("system", configString(cfg.System, ""), "可选的系统/开发者指令"),
-		stream:        fs.Bool("stream", configBool(cfg.Stream, false), "实时打印服务端返回的文本增量"),
+		stream:        fs.Bool("stream", configBool(cfg.Stream, true), "实时打印服务端返回的文本增量"),
 	}
 }
 

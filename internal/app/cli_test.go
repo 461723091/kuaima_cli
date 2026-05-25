@@ -33,7 +33,7 @@ func TestInputOptionsBuildInputWithImageAttachment(t *testing.T) {
 func TestImageCommandSharedFlagsParse(t *testing.T) {
 	fs := newFlagSet("image")
 	opts := addClientFlags(fs)
-	stream := fs.Bool("stream", false, "stream image generation events")
+	stream := fs.Bool("stream", true, "stream image generation events")
 	saveDir := addSaveImagesFlag(fs, ".")
 	inputOpts := addInputFlags(fs)
 	imageOpts := addImageFlags(fs, appConfig{})
@@ -97,6 +97,17 @@ func TestImageCommandSharedFlagsParse(t *testing.T) {
 	editReq := imageOpts.editRequest(opts.imageGenerationModel(), "generate a variant", []imageRef{{ImageURL: "https://example.com/reference.png"}}, &imageRef{ImageURL: *imageOpts.mask})
 	if editReq.Model != "image-model" || editReq.Prompt != "generate a variant" || len(editReq.Images) != 1 || editReq.Mask == nil || editReq.Mask.ImageURL != "https://example.com/mask.png" || editReq.N != 3 || editReq.Size != "1536x1024" || editReq.OutputCompression == nil || *editReq.OutputCompression != 80 {
 		t.Fatalf("unexpected image edit request: %#v", editReq)
+	}
+}
+
+func TestImageStreamDefaultsToTrue(t *testing.T) {
+	fs := newFlagSet("image")
+	stream := fs.Bool("stream", configBool(appConfig{}.Stream, true), "stream image generation events")
+	if err := parseFlags(fs, nil); err != nil {
+		t.Fatal(err)
+	}
+	if !*stream {
+		t.Fatal("expected image stream to default to true")
 	}
 }
 
