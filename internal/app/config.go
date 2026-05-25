@@ -11,6 +11,16 @@ import (
 	"strings"
 )
 
+const (
+	configDirName  = ".kuaima"
+	configFileName = "config.json"
+)
+
+var (
+	executablePath = os.Executable
+	userHomeDir    = os.UserHomeDir
+)
+
 type appConfig struct {
 	Model                  *string `json:"model,omitempty"`
 	ImageModel             *string `json:"image_model,omitempty"`
@@ -42,19 +52,10 @@ func loadAppConfig() (appConfig, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			oldPath := filepath.Join(filepath.Dir(path), "conf.json")
-			oldData, oldErr := os.ReadFile(oldPath)
-			if oldErr == nil {
-				sourcePath = oldPath
-				data = oldData
-			} else if errors.Is(oldErr, os.ErrNotExist) {
-				if err := saveAppConfig(appConfig{}); err != nil {
-					return appConfig{}, err
-				}
-				return appConfig{}, nil
-			} else {
-				return appConfig{}, oldErr
+			if err := saveAppConfig(appConfig{}); err != nil {
+				return appConfig{}, err
 			}
+			return appConfig{}, nil
 		} else {
 			return appConfig{}, err
 		}
@@ -75,7 +76,7 @@ func saveAppConfig(cfg appConfig) error {
 	if err != nil {
 		return err
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
+	if err := ensureAppConfigDir(filepath.Dir(path)); err != nil {
 		return err
 	}
 	data, err := json.MarshalIndent(cfg, "", "  ")
@@ -88,13 +89,60 @@ func saveAppConfig(cfg appConfig) error {
 
 func appConfigPath() (string, error) {
 	if dir := strings.TrimSpace(os.Getenv("KUAIMA_CONFIG_DIR")); dir != "" {
-		return filepath.Join(dir, "config.json"), nil
+		return filepath.Join(dir, configFileName), nil
 	}
-	home, err := os.UserHomeDir()
+
+	executableConfigPath, executableConfigDir := executableAppConfigPath()
+	if executableConfigPath != "" && fileExists(executableConfigPath) {
+		_ = hideAppConfigDir(executableConfigDir)
+		return executableConfigPath, nil
+	}
+
+	homeConfigPath, homeErr := homeAppConfigPath()
+	if homeErr == nil && fileExists(homeConfigPath) {
+		_ = hideAppConfigDir(filepath.Dir(homeConfigPath))
+		return homeConfigPath, nil
+	}
+
+	if executableConfigPath != "" {
+		if err := ensureAppConfigDir(executableConfigDir); err == nil {
+			return executableConfigPath, nil
+		}
+	}
+
+	if homeErr != nil {
+		return "", homeErr
+	}
+	return homeConfigPath, nil
+}
+
+func executableAppConfigPath() (string, string) {
+	exePath, err := executablePath()
+	if err != nil {
+		return "", ""
+	}
+	dir := filepath.Join(filepath.Dir(exePath), configDirName)
+	return filepath.Join(dir, configFileName), dir
+}
+
+func homeAppConfigPath() (string, error) {
+	home, err := userHomeDir()
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(home, ".kuaima", "config.json"), nil
+	return filepath.Join(home, configDirName, configFileName), nil
+}
+
+func ensureAppConfigDir(dir string) error {
+	if err := os.MkdirAll(dir, 0700); err != nil {
+		return err
+	}
+	return hideAppConfigDir(dir)
+}
+
+func fileExists(path string) bool {
+	info, err := os.Stat(path)
+	return err == nil && !info.IsDir()
 }
 
 func configString(value *string, fallback string) string {

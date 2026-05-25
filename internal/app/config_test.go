@@ -158,6 +158,63 @@ func TestConfigSaveImagesAllowsEmptyValue(t *testing.T) {
 	}
 }
 
+func TestLoadAppConfigPrefersExecutableDirBeforeHome(t *testing.T) {
+	exeDir := t.TempDir()
+	homeDir := t.TempDir()
+	resetConfigPathFuncs(t, filepath.Join(exeDir, "kuaima_cli.exe"), homeDir)
+	t.Setenv("KUAIMA_CONFIG_DIR", "")
+
+	exeConfigDir := filepath.Join(exeDir, configDirName)
+	homeConfigDir := filepath.Join(homeDir, configDirName)
+	if err := os.MkdirAll(exeConfigDir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(homeConfigDir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(exeConfigDir, configFileName), []byte(`{"model":"exe-model"}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(homeConfigDir, configFileName), []byte(`{"model":"home-model"}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := loadAppConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if configString(cfg.Model, "") != "exe-model" {
+		t.Fatalf("expected executable-dir config, got %#v", cfg.Model)
+	}
+}
+
+func TestLoadAppConfigCreatesInExecutableDirBeforeHome(t *testing.T) {
+	exeDir := t.TempDir()
+	homeDir := t.TempDir()
+	resetConfigPathFuncs(t, filepath.Join(exeDir, "kuaima_cli.exe"), homeDir)
+	t.Setenv("KUAIMA_CONFIG_DIR", "")
+
+	cfg, err := loadAppConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Model != nil {
+		t.Fatalf("expected empty config, got %#v", cfg)
+	}
+
+	exeConfig := filepath.Join(exeDir, configDirName, configFileName)
+	data, err := os.ReadFile(exeConfig)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(data) != "{}\n" {
+		t.Fatalf("expected empty executable-dir config file, got %q", string(data))
+	}
+	if fileExists(filepath.Join(homeDir, configDirName, configFileName)) {
+		t.Fatal("did not expect home config to be created")
+	}
+}
+
 func TestLoadAppConfigMissingFile(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("KUAIMA_CONFIG_DIR", dir)
@@ -177,16 +234,18 @@ func TestLoadAppConfigMissingFile(t *testing.T) {
 	}
 }
 
-func TestLoadAppConfigReadsOldConfigPath(t *testing.T) {
-	dir := t.TempDir()
-	t.Setenv("KUAIMA_CONFIG_DIR", dir)
-	writeTestFile(t, filepath.Join(dir, "conf.json"), []byte(`{"api_key":"old-key"}`))
-
-	cfg, err := loadAppConfig()
-	if err != nil {
-		t.Fatal(err)
+func resetConfigPathFuncs(t *testing.T, exePath, homeDir string) {
+	t.Helper()
+	oldExecutablePath := executablePath
+	oldUserHomeDir := userHomeDir
+	executablePath = func() (string, error) {
+		return exePath, nil
 	}
-	if configString(cfg.APIKey, "") != "old-key" {
-		t.Fatalf("expected old config api key, got %#v", cfg.APIKey)
+	userHomeDir = func() (string, error) {
+		return homeDir, nil
 	}
+	t.Cleanup(func() {
+		executablePath = oldExecutablePath
+		userHomeDir = oldUserHomeDir
+	})
 }

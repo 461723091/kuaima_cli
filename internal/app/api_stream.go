@@ -53,7 +53,8 @@ func (c *client) createResponseStreamWithImages(ctx context.Context, req respons
 	var rawStream bytes.Buffer
 	var firstToken time.Time
 	scanner := bufio.NewScanner(httpResp.Body)
-	scanner.Buffer(make([]byte, 0, 64*1024), 10*1024*1024)
+	//单张4k图base64比较大
+	scanner.Buffer(make([]byte, 0, 64*1024), 30*1024*1024)
 	for scanner.Scan() {
 		line := scanner.Text()
 		rawStream.WriteString(line)
