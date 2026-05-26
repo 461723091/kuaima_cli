@@ -29,16 +29,11 @@ const HISTORY_DB_NAME = "kuaima.webui.history.v1";
 const HISTORY_STORE = "items";
 const HISTORY_LIMIT = 50;
 const SETTINGS_KEY = "kuaima.webui.settings.v1";
-const BROWSER_SAVE_DB_NAME = "kuaima.webui.browserSave.v1";
-const BROWSER_SAVE_STORE = "handles";
-const BROWSER_SAVE_HANDLE_ID = "outputDirectory";
 
 let selectedPayment = null;
 let selectedImages = [];
 let draggedImageIndex = -1;
 let historyDBPromise = null;
-let browserSaveDBPromise = null;
-let browserSaveDirHandle = null;
 let activeGenerationController = null;
 const imagePreviewURLs = new WeakMap();
 
@@ -569,7 +564,7 @@ async function renderHistory() {
     '</strong><p>' + esc(item.prompt || "") + '</p></div>' +
     '<div class="history-actions">' +
     '<button class="btn small" type="button" data-history-action="restore" data-history-id="' + esc(item.id) +
-    '">恢复参数</button>' +
+    '">复用</button>' +
     '<button class="btn small danger" type="button" data-history-action="delete" data-history-id="' + esc(item.id) +
     '">删除</button></div></div>' +
     '<div class="history-meta">' + esc(item.image_model || "-") + ' · ' +
@@ -679,171 +674,48 @@ function openImagePreview(button) {
   $("#imageModal").hidden = false;
 }
 
-function supportsBrowserDirectoryPicker() {
-  return "showDirectoryPicker" in window;
-}
-
-function openBrowserSaveDB() {
-  if (!("indexedDB" in window)) {
-    return Promise.resolve(null);
-  }
-  if (!browserSaveDBPromise) {
-    browserSaveDBPromise = new Promise((resolve, reject) => {
-      const request = indexedDB.open(BROWSER_SAVE_DB_NAME, 1);
-      request.onupgradeneeded = () => {
-        const db = request.result;
-        if (!db.objectStoreNames.contains(BROWSER_SAVE_STORE)) {
-          db.createObjectStore(BROWSER_SAVE_STORE);
-        }
-      };
-      request.onsuccess = () => resolve(request.result);
-      request.onerror = () => reject(request.error);
-    });
-  }
-  return browserSaveDBPromise;
-}
-
-async function readBrowserSaveDirHandle() {
-  const db = await openBrowserSaveDB();
-  if (!db) {
-    return null;
-  }
-  return requestResult(db.transaction(BROWSER_SAVE_STORE, "readonly").objectStore(BROWSER_SAVE_STORE).get(BROWSER_SAVE_HANDLE_ID));
-}
-
-async function writeBrowserSaveDirHandle(handle) {
-  const db = await openBrowserSaveDB();
-  if (!db) {
-    return;
-  }
-  await new Promise((resolve, reject) => {
-    const tx = db.transaction(BROWSER_SAVE_STORE, "readwrite");
-    tx.objectStore(BROWSER_SAVE_STORE).put(handle, BROWSER_SAVE_HANDLE_ID);
-    tx.oncomplete = resolve;
-    tx.onerror = () => reject(tx.error);
-  });
-}
-
-async function ensureBrowserSavePermission(handle, mode = "readwrite") {
-  if (!handle || !handle.queryPermission || !handle.requestPermission) {
-    return false;
-  }
-  const opts = { mode };
-  if ((await handle.queryPermission(opts)) === "granted") {
-    return true;
-  }
-  return (await handle.requestPermission(opts)) === "granted";
-}
-
-function browserSaveFileName(url, index) {
-  const raw = decodeURIComponent(String(url || "").split("?")[0].split("/").pop() || "");
-  const fallback = "response-image-" + String(index + 1).padStart(2, "0") + ".png";
-  const name = (raw || fallback).replace(/[\\/:*?"<>|]/g, "_").trim();
-  return name || fallback;
-}
-
-async function uniqueBrowserFileName(dirHandle, name) {
-  const dot = name.lastIndexOf(".");
-  const stem = dot > 0 ? name.slice(0, dot) : name;
-  const ext = dot > 0 ? name.slice(dot) : "";
-  for (let index = 0; index < 1000; index++) {
-    const candidate = index === 0 ? name : stem + "-" + String(index).padStart(2, "0") + ext;
-    try {
-      await dirHandle.getFileHandle(candidate, { create: false });
-    } catch (error) {
-      if (error && error.name === "NotFoundError") {
-        return candidate;
-      }
-      throw error;
-    }
-  }
-  return stem + "-" + Date.now() + ext;
-}
-
-async function saveImagesToBrowserDirectory(images) {
-  if (!browserSaveDirHandle || !Array.isArray(images) || images.length === 0) {
-    return 0;
-  }
-  if (!(await ensureBrowserSavePermission(browserSaveDirHandle))) {
-    throw new Error("未获得浏览器目录写入权限");
-  }
-  let saved = 0;
-  for (let index = 0; index < images.length; index++) {
-    const response = await fetch(images[index]);
-    if (!response.ok) {
-      throw new Error("读取生成图片失败：" + response.statusText);
-    }
-    const blob = await response.blob();
-    const name = await uniqueBrowserFileName(browserSaveDirHandle, browserSaveFileName(images[index], index));
-    const fileHandle = await browserSaveDirHandle.getFileHandle(name, { create: true });
-    const writable = await fileHandle.createWritable();
-    await writable.write(blob);
-    await writable.close();
-    saved++;
-  }
-  return saved;
-}
-
-function updateBrowserSaveStatus(message, isError = false) {
+function updateSaveDirStatus(message, isError = false) {
   const status = $("#saveDirStatus");
   status.textContent = message;
   status.className = isError ? "status error" : "status";
 }
 
-async function initBrowserSaveDirectory() {
-  if (!supportsBrowserDirectoryPicker()) {
-    $("#chooseOutputDir").disabled = true;
-    updateBrowserSaveStatus("当前浏览器不支持直接选择保存目录");
-    return;
-  }
-  try {
-    browserSaveDirHandle = await readBrowserSaveDirHandle();
-    if (browserSaveDirHandle) {
-      const granted = browserSaveDirHandle.queryPermission &&
-        (await browserSaveDirHandle.queryPermission({ mode: "readwrite" })) === "granted";
-      updateBrowserSaveStatus(granted
-        ? "已选择：" + browserSaveDirHandle.name
-        : "已选择：" + browserSaveDirHandle.name + "，生成时会重新请求授权");
-    } else {
-      updateBrowserSaveStatus("未选择时仅保存到 WebUI 默认输出目录");
-    }
-  } catch (error) {
-    updateBrowserSaveStatus(error.message, true);
-  }
+function currentOutputDir() {
+  return String($("#genForm").elements.save_dir.value || "").trim();
 }
 
 async function chooseOutputDir() {
-  if (!supportsBrowserDirectoryPicker()) {
-    updateBrowserSaveStatus("当前浏览器不支持直接选择保存目录", true);
+  const saveDir = currentOutputDir();
+  if (!saveDir) {
+    updateSaveDirStatus("请输入图片生成结果目录", true);
     return;
   }
   try {
-    browserSaveDirHandle = await window.showDirectoryPicker({ id: "kuaima-webui-output", mode: "readwrite" });
-    if (!(await ensureBrowserSavePermission(browserSaveDirHandle))) {
-      throw new Error("未获得浏览器目录写入权限");
-    }
-    await writeBrowserSaveDirHandle(browserSaveDirHandle);
-    updateBrowserSaveStatus("已选择：" + browserSaveDirHandle.name);
+    const result = await api("/api/output/set", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ save_dir: saveDir }),
+    });
+    $("#genForm").elements.save_dir.value = result.save_dir || saveDir;
+    updateSaveDirStatus("已应用：" + (result.save_dir || saveDir));
   } catch (error) {
-    if (error && error.name === "AbortError") {
-      return;
-    }
-    updateBrowserSaveStatus(error.message, true);
+    updateSaveDirStatus(error.message, true);
   }
 }
 
 async function openDefaultOutputDir() {
-  const status = $("#saveDirStatus");
-  status.textContent = "正在打开默认输出目录...";
-  status.className = "status";
+  const saveDir = currentOutputDir();
+  updateSaveDirStatus("正在打开输出目录...");
   try {
-    await api("/api/output/open", { method: "POST" });
-    status.textContent = browserSaveDirHandle
-      ? "已选择：" + browserSaveDirHandle.name
-      : "已打开默认输出目录";
+    const result = await api("/api/output/open", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ save_dir: saveDir }),
+    });
+    $("#genForm").elements.save_dir.value = result.save_dir || saveDir;
+    updateSaveDirStatus("已打开：" + (result.save_dir || saveDir));
   } catch (error) {
-    status.textContent = error.message;
-    status.className = "status error";
+    updateSaveDirStatus(error.message, true);
   }
 }
 
@@ -956,15 +828,7 @@ $("#genForm").onsubmit = async (event) => {
   $("#genStatus").className = "status gen-status loading";
   try {
     const result = await generateStream(event.target, activeGenerationController.signal);
-    let browserSaved = 0;
-    try {
-      browserSaved = await saveImagesToBrowserDirectory(result.images);
-    } catch (error) {
-      updateBrowserSaveStatus(error.message, true);
-    }
-    $("#genStatus").textContent = browserSaved > 0
-      ? "已保存 " + result.saved.length + " 张，另存到浏览器目录 " + browserSaved + " 张"
-      : "已保存 " + result.saved.length + " 张";
+    $("#genStatus").textContent = "已保存 " + result.saved.length + " 张";
     $("#genStatus").className = "status gen-status";
     await saveHistory(result);
     loadBalance();
@@ -1190,4 +1054,3 @@ renderHistory().catch((error) => {
 });
 loadBalance();
 loadRechargeInfo();
-initBrowserSaveDirectory();

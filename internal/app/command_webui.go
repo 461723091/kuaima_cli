@@ -80,6 +80,28 @@ func runWebUIWithOptions(args []string, runtimeOpts webUIRuntimeOptions) error {
 		return err
 	}
 
+	releaseInstance, acquired, err := acquireWebUIInstance()
+	if err != nil {
+		return err
+	}
+	if !acquired {
+		url := readWebUIInstanceURL()
+		if url == "" {
+			url = "http://" + strings.TrimSpace(*addr)
+		}
+		if *open {
+			_ = openBrowser(url)
+		}
+		message := "Web UI 已经在运行: " + url
+		if runtimeOpts.HideConsole {
+			notifyWebUIAlreadyRunning(message)
+		} else {
+			fmt.Println(message)
+		}
+		return nil
+	}
+	defer releaseInstance()
+
 	ln, err := net.Listen("tcp", strings.TrimSpace(*addr))
 	if err != nil {
 		return err
@@ -102,6 +124,8 @@ func runWebUIWithOptions(args []string, runtimeOpts webUIRuntimeOptions) error {
 	ui.routes(mux)
 
 	url := "http://" + ln.Addr().String()
+	_ = writeWebUIInstanceURL(url)
+	defer removeWebUIInstanceURL()
 	if runtimeOpts.HideConsole {
 		hideWebUIConsole()
 	} else {
@@ -137,6 +161,7 @@ func (s *webUIServer) routes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/recharge/info", s.handleRechargeInfo)
 	mux.HandleFunc("/api/recharge/pay", s.handleRechargePay)
 	mux.HandleFunc("/api/qr", s.handleQR)
+	mux.HandleFunc("/api/output/set", s.handleSetOutputDir)
 	mux.HandleFunc("/api/output/open", s.handleOpenOutputDir)
 	mux.HandleFunc("/outputs/", s.handleOutputFile)
 	assets, err := fs.Sub(webUIAssets, "webui")
@@ -194,7 +219,11 @@ func (s *webUIServer) handleGenerate(w http.ResponseWriter, r *http.Request) {
 	defer c.Close()
 
 	ctx := r.Context()
-	saveDir := s.saveDirectory()
+	saveDir, err := s.saveDirectoryFromForm(r)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
 	var resp *responsePayload
 	if webUIImageEndpoint(r) == "response" {
 		saved, text, err := s.handleGenerateWithResponses(ctx, c, opts, s.modelFromForm(r), prompt, refs, saveDir)
@@ -267,7 +296,11 @@ func (s *webUIServer) handleGenerateStream(w http.ResponseWriter, r *http.Reques
 	stream.send("status", map[string]string{"message": "已连接，正在请求生成接口..."})
 
 	ctx := r.Context()
-	saveDir := s.saveDirectory()
+	saveDir, err := s.saveDirectoryFromForm(r)
+	if err != nil {
+		stream.send("error", map[string]string{"error": err.Error()})
+		return
+	}
 	saver := newResponseImageSaver(ctx, c.httpClient, saveDir)
 	var saved []string
 	saveAndSend := func(candidate imageCandidate) error {
@@ -450,12 +483,29 @@ func (s *webUIServer) handleOpenOutputDir(w http.ResponseWriter, r *http.Request
 		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
-	dir := s.saveDirectory()
-	if err := os.MkdirAll(dir, 0755); err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+	dir, err := s.saveDirectoryFromBody(r)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 	if err := openFile(dir); err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"save_dir": dir})
+}
+
+func (s *webUIServer) handleSetOutputDir(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	dir, err := s.saveDirectoryFromBody(r)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if err := persistWebUISaveDir(dir); err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -631,6 +681,62 @@ func (s *webUIServer) saveDirectory() string {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.saveDir
+}
+
+func (s *webUIServer) saveDirectoryFromForm(r *http.Request) (string, error) {
+	value := strings.TrimSpace(r.FormValue("save_dir"))
+	if value == "" {
+		return s.saveDirectory(), nil
+	}
+	dir, err := s.setSaveDirectory(value)
+	if err != nil {
+		return "", err
+	}
+	return dir, persistWebUISaveDir(dir)
+}
+
+func (s *webUIServer) saveDirectoryFromBody(r *http.Request) (string, error) {
+	value := strings.TrimSpace(r.FormValue("save_dir"))
+	if value == "" && strings.Contains(r.Header.Get("Content-Type"), "application/json") {
+		var req struct {
+			SaveDir string `json:"save_dir"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil && !errors.Is(err, io.EOF) {
+			return "", err
+		}
+		value = req.SaveDir
+	}
+	if value == "" {
+		return s.saveDirectory(), nil
+	}
+	return s.setSaveDirectory(value)
+}
+
+func (s *webUIServer) setSaveDirectory(value string) (string, error) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return "", errors.New("output directory is required")
+	}
+	dir, err := filepath.Abs(value)
+	if err != nil {
+		return "", err
+	}
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return "", err
+	}
+	s.mu.Lock()
+	s.saveDir = dir
+	s.mu.Unlock()
+	return dir, nil
+}
+
+func persistWebUISaveDir(dir string) error {
+	cfg, err := loadAppConfig()
+	if err != nil {
+		return err
+	}
+	cfg.SaveImages = stringPtr(dir)
+	return saveAppConfig(cfg)
 }
 
 func (s *webUIServer) publicImageURLs(saved []string, saveDir string) []string {
