@@ -113,12 +113,12 @@ function renderImagePreviews() {
   list.className = "image-preview-list";
   list.innerHTML = selectedImages.map((file, index) => (
     '<div class="image-preview-item" draggable="true" data-image-index="' + index + '">' +
-      '<img src="' + esc(imagePreviewURL(file)) + '" alt="' + esc(file.name) + '">' +
-      '<div class="image-preview-meta"><strong>' + esc(file.name) + '</strong><span>' +
-      esc(formatFileSize(file.size)) + ' · 拖动调整顺序</span></div>' +
-      '<div class="image-preview-actions">' +
-        '<button type="button" title="删除" data-image-action="remove" data-image-index="' + index + '">×</button>' +
-      '</div>' +
+    '<img src="' + esc(imagePreviewURL(file)) + '" alt="' + esc(file.name) + '">' +
+    '<div class="image-preview-meta"><strong>' + esc(file.name) + '</strong><span>' +
+    esc(formatFileSize(file.size)) + ' · 拖动调整顺序</span></div>' +
+    '<div class="image-preview-actions">' +
+    '<button type="button" title="删除" data-image-action="remove" data-image-index="' + index + '">×</button>' +
+    '</div>' +
     '</div>'
   )).join("");
 }
@@ -164,6 +164,41 @@ function qualityLabel(value) {
     medium: "中等",
     high: "高",
   })[value] || value || "-";
+}
+
+function endpointLabel(value) {
+  return value === "response" ? "Response 接口" : "Image 接口";
+}
+
+function looksLikeInsufficientBalance(message) {
+  const lower = String(message || "").toLowerCase();
+  return [
+    "insufficient_quota",
+    "insufficient quota",
+    "insufficient credits",
+    "insufficient balance",
+    "out of credits",
+    "quota exceeded",
+    "balance_not_enough",
+    "not enough balance",
+    "余额不足",
+    "额度不足",
+    "额度失败",
+    "余额不够",
+    "额度不够",
+    "欠费",
+    "recharge",
+    "充值",
+  ].some((needle) => lower.includes(needle));
+}
+
+function handleOperationError(error, statusElement) {
+  statusElement.textContent = error.message;
+  statusElement.className = "status error";
+  if (looksLikeInsufficientBalance(error.message)) {
+    setBillingOpen(true);
+    loadRechargeInfo();
+  }
 }
 
 function setBillingOpen(open) {
@@ -228,12 +263,12 @@ function renderAmountOptions(info) {
 function renderPlans(info) {
   $("#plans").innerHTML = (info.plans || []).filter((plan) => plan.enabled).map((plan) => (
     '<div class="plan-card">' +
-      '<div><b>' + esc(plan.title) + '</b><p>' + esc(plan.subtitle || "订阅套餐") + '</p></div>' +
-      '<div class="plan-quota"><span>额度</span><strong>' + esc(formatQuota(plan.total_amount)) + '</strong></div>' +
-      '<div class="plan-price"><strong>￥' + esc(formatAmount(plan.price_amount)) + '</strong><span>' +
-      esc(plan.duration_value) + esc(plan.duration_unit) + '</span></div>' +
-      '<button class="btn small" type="button" data-plan-id="' + Number(plan.id) +
-      '" data-plan-title="' + esc(plan.title) + '">订阅</button>' +
+    '<div><b>' + esc(plan.title) + '</b><p>' + esc(plan.subtitle || "订阅套餐") + '</p></div>' +
+    '<div class="plan-quota"><span>额度</span><strong>' + esc(formatQuota(plan.total_amount)) + '</strong></div>' +
+    '<div class="plan-price"><strong>￥' + esc(formatAmount(plan.price_amount)) + '</strong><span>' +
+    esc(plan.duration_value) + esc(plan.duration_unit) + '</span></div>' +
+    '<button class="btn small" type="button" data-plan-id="' + Number(plan.id) +
+    '" data-plan-title="' + esc(plan.title) + '">订阅</button>' +
     '</div>'
   )).join("") || '<span class="status">暂无套餐</span>';
 }
@@ -298,6 +333,7 @@ function saveHistory(result) {
     image_model: form.elements.image_model.value,
     image_count: form.elements.image_count.value,
     image_quality: form.elements.image_quality.value,
+    image_endpoint: form.elements.image_endpoint.value,
     ratio: $("#ratioSelect").value,
     resolution: $("#resolutionSelect").value,
     image_size: $('[name="image_size"]').value,
@@ -330,17 +366,17 @@ function renderHistory() {
   }
   panel.innerHTML = history.map((item) => (
     '<article class="history-item" data-history-id="' + esc(item.id) + '">' +
-      '<div class="history-head"><div><strong>' + esc(formatHistoryTime(item.created_at)) +
-      '</strong><p>' + esc(item.prompt || "") + '</p></div>' +
-      '<button class="btn small" type="button" data-history-action="restore" data-history-id="' + esc(item.id) +
-      '">恢复参数</button></div>' +
-      '<div class="history-meta">' + esc(item.image_model || "-") + ' · ' +
-      esc(item.image_size || "-") + ' · ' + esc(qualityLabel(item.image_quality)) +
-      ' · 参考图 ' + esc(item.reference_count || 0) + ' 张</div>' +
-      '<div class="history-images">' + (item.images || []).map((url) => (
-        '<button type="button" data-history-action="use-image" data-image-url="' + esc(url) +
-        '" title="作为参考图"><img src="' + esc(url) + '" alt="历史图片"><span>作为参考图</span></button>'
-      )).join("") + '</div>' +
+    '<div class="history-head"><div><strong>' + esc(formatHistoryTime(item.created_at)) +
+    '</strong><p>' + esc(item.prompt || "") + '</p></div>' +
+    '<button class="btn small" type="button" data-history-action="restore" data-history-id="' + esc(item.id) +
+    '">恢复参数</button></div>' +
+    '<div class="history-meta">' + esc(item.image_model || "-") + ' · ' +
+    esc(endpointLabel(item.image_endpoint)) + ' · ' + esc(item.image_size || "-") + ' · ' + esc(qualityLabel(item.image_quality)) +
+    ' · 参考图 ' + esc(item.reference_count || 0) + ' 张</div>' +
+    '<div class="history-images">' + (item.images || []).map((url) => (
+      '<button type="button" data-history-action="use-image" data-image-url="' + esc(url) +
+      '" title="作为参考图"><img src="' + esc(url) + '" alt="历史图片"><span>作为参考图</span></button>'
+    )).join("") + '</div>' +
     '</article>'
   )).join("");
 }
@@ -355,6 +391,7 @@ function restoreHistory(id) {
   form.elements.image_model.value = item.image_model || form.elements.image_model.value;
   form.elements.image_count.value = item.image_count || form.elements.image_count.value;
   form.elements.image_quality.value = item.image_quality || form.elements.image_quality.value;
+  form.elements.image_endpoint.value = item.image_endpoint || form.elements.image_endpoint.value;
   if (item.ratio) {
     $("#ratioSelect").value = item.ratio;
   }
@@ -427,6 +464,11 @@ $("#genForm").onsubmit = async (event) => {
   event.preventDefault();
   updateSize();
   syncImageInput();
+  const submitButton = event.target.querySelector('button[type="submit"]');
+  if (submitButton) {
+    submitButton.disabled = true;
+    submitButton.textContent = "生成中...";
+  }
   $("#genStatus").textContent = "生成中...";
   $("#genStatus").className = "status";
   try {
@@ -446,8 +488,12 @@ $("#genForm").onsubmit = async (event) => {
     showResultView("gallery");
     loadBalance();
   } catch (error) {
-    $("#genStatus").textContent = error.message;
-    $("#genStatus").className = "status error";
+    handleOperationError(error, $("#genStatus"));
+  } finally {
+    if (submitButton) {
+      submitButton.disabled = false;
+      submitButton.textContent = "生成图片";
+    }
   }
 };
 

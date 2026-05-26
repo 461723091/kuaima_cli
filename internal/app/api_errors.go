@@ -58,6 +58,7 @@ func looksLikeInsufficientBalance(message string) bool {
 		"not enough balance",
 		"余额不足",
 		"额度不足",
+		"额度失败",
 		"余额不够",
 		"额度不够",
 		"欠费",

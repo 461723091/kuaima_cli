@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"embed"
 	"encoding/base64"
 	"encoding/json"
@@ -176,6 +177,19 @@ func (s *webUIServer) handleGenerate(w http.ResponseWriter, r *http.Request) {
 
 	ctx := r.Context()
 	var resp *responsePayload
+	if webUIImageEndpoint(r) == "response" {
+		saved, text, err := s.handleGenerateWithResponses(ctx, c, opts, s.modelFromForm(r), prompt, refs)
+		if err != nil {
+			writeError(w, http.StatusBadGateway, err.Error())
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{
+			"images": s.publicImageURLs(saved),
+			"saved":  saved,
+			"text":   text,
+		})
+		return
+	}
 	if len(refs) == 0 {
 		req := opts.generationRequest(s.modelFromForm(r), prompt)
 		resp, err = c.createImageGeneration(ctx, req)
@@ -197,6 +211,48 @@ func (s *webUIServer) handleGenerate(w http.ResponseWriter, r *http.Request) {
 		"saved":  saved,
 		"text":   strings.TrimSpace(resp.OutputText),
 	})
+}
+
+func (s *webUIServer) handleGenerateWithResponses(ctx context.Context, c *client, opts imageOptions, imageModel, prompt string, refs []imageRef) ([]string, string, error) {
+	content := []inputContent{{
+		Type: "input_text",
+		Text: prompt,
+	}}
+	for _, ref := range refs {
+		content = append(content, inputContent{
+			Type:     "input_image",
+			ImageURL: ref.ImageURL,
+		})
+	}
+	tool := opts.responseTool()
+	imageModel = strings.TrimSpace(imageModel)
+	addAutoString(tool, "model", &imageModel)
+	req := responseRequest{
+		Model: strings.TrimSpace(*s.clientOpts.model),
+		Input: []inputMessage{{
+			Role:    "user",
+			Content: content,
+		}},
+		Tools: []map[string]any{tool},
+	}
+	runCount := opts.responseRunCount()
+	var saved []string
+	var texts []string
+	for i := 0; i < runCount; i++ {
+		resp, err := c.createResponse(ctx, req)
+		if err != nil {
+			return saved, strings.Join(texts, "\n\n"), err
+		}
+		more, err := saveImagesFromResponse(ctx, c.httpClient, resp, s.saveDir)
+		if err != nil {
+			return saved, strings.Join(texts, "\n\n"), err
+		}
+		saved = append(saved, more...)
+		if text := strings.TrimSpace(resp.OutputText); text != "" {
+			texts = append(texts, text)
+		}
+	}
+	return saved, strings.Join(texts, "\n\n"), nil
 }
 
 func (s *webUIServer) handleBalance(w http.ResponseWriter, r *http.Request) {
@@ -317,6 +373,15 @@ func (s *webUIServer) modelFromForm(r *http.Request) string {
 		return model
 	}
 	return s.defaults.ImageModel
+}
+
+func webUIImageEndpoint(r *http.Request) string {
+	switch strings.ToLower(strings.TrimSpace(r.FormValue("image_endpoint"))) {
+	case "response", "responses":
+		return "response"
+	default:
+		return "image"
+	}
 }
 
 func (s *webUIServer) imageOptionsFromForm(r *http.Request) (imageOptions, error) {
