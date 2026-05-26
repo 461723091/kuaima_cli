@@ -9,131 +9,149 @@
   <link rel="stylesheet" href="/app.css">
 </head>
 <body>
-  <div class="top">
-    <div class="brand">快马 AI WebUI</div>
-    <div class="tabs">
-      <button class="active" data-tab="image">生图</button>
-      <button data-tab="balance">余额</button>
-      <button data-tab="recharge">充值</button>
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark"></span>
+      <span>快马 AI WebUI</span>
     </div>
-  </div>
+    <div class="wallet-pill">
+      <span>可用余额</span>
+      <strong id="balanceTop">读取中...</strong>
+    </div>
+  </header>
 
-  <main class="wrap">
-    <section id="image" class="view active">
-      <div class="grid">
-        <form id="genForm" class="panel">
-          <h2>图片生成</h2>
-          <div class="field">
-            <label>提示词</label>
-            <textarea name="prompt" required placeholder="描述要生成或编辑的图片"></textarea>
-          </div>
-          <div class="field">
-            <label>参考图（可选，多张为改图）</label>
-            <input name="images" type="file" accept="image/*" multiple>
-          </div>
-          <div class="row">
-            <div class="field">
-              <label>模型</label>
-              <input name="image_model">
-            </div>
-            <div class="field">
-              <label>尺寸</label>
-              <input name="image_size" placeholder="auto">
-            </div>
-          </div>
-          <div class="row">
-            <div class="field">
-              <label>质量</label>
-              <select name="image_quality">
-                <option>auto</option>
-                <option>low</option>
-                <option>medium</option>
-                <option>high</option>
-              </select>
-            </div>
-            <div class="field">
-              <label>张数</label>
-              <input name="image_count" type="number" min="1" max="10">
-            </div>
-          </div>
-          <div class="row">
-            <div class="field">
-              <label>格式</label>
-              <select name="image_output_format">
-                <option value="">默认</option>
-                <option>png</option>
-                <option>jpeg</option>
-                <option>webp</option>
-              </select>
-            </div>
-            <div class="field">
-              <label>压缩（-1 表示默认）</label>
-              <input name="image_output_compression" type="number" min="-1" max="100">
-            </div>
-          </div>
-          <div class="row">
-            <div class="field">
-              <label>背景</label>
-              <select name="image_background">
-                <option>auto</option>
-                <option>transparent</option>
-                <option>opaque</option>
-              </select>
-            </div>
-            <div class="field">
-              <label>审核</label>
-              <select name="image_moderation">
-                <option value="">默认</option>
-                <option>auto</option>
-                <option>low</option>
-              </select>
-            </div>
-          </div>
-          <div class="actions">
-            <button class="btn primary" type="submit">生成</button>
-            <span id="genStatus" class="status"></span>
-          </div>
-        </form>
-
-        <div class="panel">
-          <h2>结果</h2>
-          <div id="gallery" class="gallery"></div>
+  <main class="workspace">
+    <section class="hero-panel">
+      <div>
+        <p class="eyebrow">Image Studio</p>
+        <h1>图像生成工作台</h1>
+      </div>
+      <div class="hero-stats">
+        <div>
+          <span>账号</span>
+          <strong id="accountName">-</strong>
+        </div>
+        <div>
+          <span>已消耗</span>
+          <strong id="usedTop">-</strong>
         </div>
       </div>
     </section>
 
-    <section id="balance" class="view">
-      <div class="panel">
-        <div class="actions">
-          <button id="balanceBtn" class="btn primary">刷新余额</button>
-          <span id="balanceStatus" class="status"></span>
+    <section class="layout">
+      <form id="genForm" class="panel generator">
+        <div class="panel-head">
+          <div>
+            <p class="eyebrow">Prompt</p>
+            <h2>生成参数</h2>
+          </div>
+          <button class="btn primary" type="submit">生成图片</button>
         </div>
-        <div id="balanceBox" class="section-body"></div>
-      </div>
-    </section>
 
-    <section id="recharge" class="view">
-      <div class="grid">
-        <div class="panel">
-          <h2>直接充值</h2>
+        <div class="field">
+          <label>提示词</label>
+          <textarea name="prompt" required placeholder="描述你想生成或编辑的图片，例如：未来感产品海报，金属材质，柔和棚拍灯光，高级科技风。"></textarea>
+        </div>
+
+        <div class="field">
+          <label>参考图，可多选</label>
+          <input name="images" type="file" accept="image/*" multiple>
+        </div>
+
+        <div class="row">
           <div class="field">
-            <label>金额（元）</label>
-            <input id="amount" type="number" min="1" step="0.01" placeholder="100">
+            <label>模型</label>
+            <select name="image_model">
+              <option value="gpt-image-2">gpt-image-2</option>
+              <option value="gpt-image-1.5">gpt-image-1.5</option>
+              <option value="gpt-image-1">gpt-image-1</option>
+            </select>
           </div>
-          <button id="amountPay" class="btn primary">生成支付</button>
+          <div class="field">
+            <label>张数</label>
+            <input name="image_count" type="number" min="1" max="10" value="1">
+          </div>
+        </div>
 
-          <h2 class="subhead">订阅套餐</h2>
-          <div class="actions">
-            <button id="loadPlans" class="btn">加载套餐</button>
-            <span id="rechargeStatus" class="status"></span>
+        <input name="image_size" type="hidden" value="1024x1024">
+        <div class="row">
+          <div class="field">
+            <label>比例</label>
+            <select id="ratioSelect">
+              <option value="1:1">1:1</option>
+              <option value="2:3">2:3</option>
+              <option value="3:2">3:2</option>
+            </select>
           </div>
-          <div id="plans" class="section-body"></div>
+          <div class="field">
+            <label>分辨率</label>
+            <select id="resolutionSelect">
+              <option value="1k">1k</option>
+              <option value="2k">2k</option>
+              <option value="4k">4k</option>
+            </select>
+          </div>
         </div>
-        <div class="panel">
-          <h2>支付</h2>
-          <div id="payment"></div>
+
+        <div class="field compact">
+          <label>质量</label>
+          <select name="image_quality">
+            <option>auto</option>
+            <option>low</option>
+            <option>medium</option>
+            <option>high</option>
+          </select>
         </div>
-      </div>
+
+        <div class="form-footer">
+          <span id="sizePreview">1024x1024</span>
+          <span id="genStatus" class="status"></span>
+        </div>
+      </form>
+
+      <section class="panel results">
+        <div class="panel-head">
+          <div>
+            <p class="eyebrow">Output</p>
+            <h2>结果预览</h2>
+          </div>
+        </div>
+        <div id="gallery" class="gallery empty">生成后的图片会显示在这里</div>
+      </section>
+
+      <aside class="panel wallet">
+        <div class="panel-head">
+          <div>
+            <p class="eyebrow">Billing</p>
+            <h2>余额与充值</h2>
+          </div>
+          <button id="refreshBilling" class="icon-btn" type="button" title="刷新">↻</button>
+        </div>
+
+        <div id="balanceBox" class="balance-card">
+          <span class="status">正在读取余额...</span>
+        </div>
+
+        <div class="field">
+          <label>直接充值</label>
+          <div id="amountOptions" class="chip-grid"></div>
+          <div class="amount-row">
+            <input id="amount" type="number" min="1" step="0.01" placeholder="输入金额">
+            <button id="amountPay" class="btn" type="button">支付</button>
+          </div>
+        </div>
+
+        <div class="section-title">
+          <span>套餐</span>
+          <span id="rechargeStatus" class="status"></span>
+        </div>
+        <div id="plans" class="plans"></div>
+
+        <div class="section-title">
+          <span>支付</span>
+        </div>
+        <div id="payment" class="payment-empty">选择金额或套餐后显示二维码</div>
+      </aside>
     </section>
   </main>
 

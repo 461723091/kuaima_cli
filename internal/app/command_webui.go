@@ -306,15 +306,15 @@ func (s *webUIServer) modelFromForm(r *http.Request) string {
 func (s *webUIServer) imageOptionsFromForm(r *http.Request) (imageOptions, error) {
 	size := formDefault(r, "image_size", s.defaults.ImageSize)
 	quality := formDefault(r, "image_quality", s.defaults.ImageQuality)
-	outputFormat := formDefault(r, "image_output_format", s.defaults.OutputFormat)
-	background := formDefault(r, "image_background", s.defaults.Background)
-	moderation := formDefault(r, "image_moderation", s.defaults.Moderation)
+	outputFormat := strings.TrimSpace(r.FormValue("image_output_format"))
+	background := strings.TrimSpace(r.FormValue("image_background"))
+	moderation := strings.TrimSpace(r.FormValue("image_moderation"))
 	action := "auto"
 	count, err := formInt(r, "image_count", s.defaults.ImageCount)
 	if err != nil {
 		return imageOptions{}, err
 	}
-	compression, err := formInt(r, "image_output_compression", s.defaults.OutputCompression)
+	compression, err := formInt(r, "image_output_compression", -1)
 	if err != nil {
 		return imageOptions{}, err
 	}
