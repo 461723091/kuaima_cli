@@ -77,10 +77,10 @@
                 <span>参考图</span>
               </label>
               <input id="imageInput" class="sr-only" name="images" type="file" accept="image/*" multiple>
-              <span id="genStatus" class="status"></span>
               <button class="btn primary" type="submit">生成图片</button>
             </div>
           </div>
+          <div id="genStatus" class="status gen-status"></div>
           <div id="imagePreviewList" class="image-preview-list empty">上传参考图后可预览、删除和调整顺序</div>
         </div>
 
@@ -150,8 +150,8 @@
           <div class="field compact">
             <label>端点</label>
             <select name="image_endpoint">
-              <option value="image">Image 接口</option>
               <option value="response">Response 接口</option>
+              <option value="image">Image 接口</option>
             </select>
           </div>
         </details>

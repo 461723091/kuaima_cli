@@ -27,6 +27,7 @@ const SIZE_LOOKUP = Object.entries(SIZE_MATRIX).reduce((lookup, [resolution, rat
 
 const HISTORY_KEY = "kuaima.webui.imageHistory.v1";
 const HISTORY_LIMIT = 50;
+const SETTINGS_KEY = "kuaima.webui.settings.v1";
 
 let selectedPayment = null;
 let selectedImages = [];
@@ -168,6 +169,49 @@ function qualityLabel(value) {
 
 function endpointLabel(value) {
   return value === "response" ? "Response 接口" : "Image 接口";
+}
+
+function readSettings() {
+  try {
+    const value = JSON.parse(localStorage.getItem(SETTINGS_KEY) || "{}");
+    return value && typeof value === "object" ? value : {};
+  } catch {
+    return {};
+  }
+}
+
+function saveSettings() {
+  const form = $("#genForm");
+  const settings = {
+    image_model: form.elements.image_model.value,
+    image_count: form.elements.image_count.value,
+    image_quality: form.elements.image_quality.value,
+    image_endpoint: form.elements.image_endpoint.value || "response",
+    ratio: $("#ratioSelect").value,
+    resolution: $("#resolutionSelect").value,
+  };
+  localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+}
+
+function applySettings(settings) {
+  const form = $("#genForm");
+  if (settings.image_model) {
+    form.elements.image_model.value = settings.image_model;
+  }
+  if (settings.image_count) {
+    form.elements.image_count.value = settings.image_count;
+  }
+  if (settings.image_quality) {
+    form.elements.image_quality.value = settings.image_quality;
+  }
+  form.elements.image_endpoint.value = settings.image_endpoint || form.elements.image_endpoint.value || "response";
+  if (settings.ratio) {
+    $("#ratioSelect").value = settings.ratio;
+  }
+  if (settings.resolution) {
+    $("#resolutionSelect").value = settings.resolution;
+  }
+  updateSize();
 }
 
 function looksLikeInsufficientBalance(message) {
@@ -324,11 +368,27 @@ function writeHistory(items) {
   localStorage.setItem(HISTORY_KEY, JSON.stringify(items.slice(0, HISTORY_LIMIT)));
 }
 
-function saveHistory(result) {
+function historyKey(item) {
+  return [
+    item.status || "success",
+    item.prompt || "",
+    item.image_model || "",
+    item.image_endpoint || "",
+    item.image_size || "",
+    item.image_quality || "",
+    item.image_count || "",
+    item.reference_count || 0,
+    (item.images || []).join(","),
+    item.error || "",
+  ].join("\n");
+}
+
+function saveHistory(result, extra = {}) {
   const form = $("#genForm");
   const item = {
     id: String(Date.now()),
     created_at: new Date().toISOString(),
+    status: extra.status || "success",
     prompt: form.elements.prompt.value,
     image_model: form.elements.image_model.value,
     image_count: form.elements.image_count.value,
@@ -339,8 +399,11 @@ function saveHistory(result) {
     image_size: $('[name="image_size"]').value,
     reference_count: selectedImages.length,
     images: result.images || [],
+    error: extra.error || "",
   };
-  writeHistory([item].concat(readHistory()));
+  const key = historyKey(item);
+  const deduped = readHistory().filter((entry) => historyKey(entry) !== key);
+  writeHistory([item].concat(deduped));
   renderHistory();
 }
 
@@ -365,15 +428,17 @@ function renderHistory() {
     return;
   }
   panel.innerHTML = history.map((item) => (
-    '<article class="history-item" data-history-id="' + esc(item.id) + '">' +
-    '<div class="history-head"><div><strong>' + esc(formatHistoryTime(item.created_at)) +
-    '</strong><p>' + esc(item.prompt || "") + '</p></div>' +
-    '<button class="btn small" type="button" data-history-action="restore" data-history-id="' + esc(item.id) +
-    '">恢复参数</button></div>' +
-    '<div class="history-meta">' + esc(item.image_model || "-") + ' · ' +
-    esc(endpointLabel(item.image_endpoint)) + ' · ' + esc(item.image_size || "-") + ' · ' + esc(qualityLabel(item.image_quality)) +
-    ' · 参考图 ' + esc(item.reference_count || 0) + ' 张</div>' +
-    '<div class="history-images">' + (item.images || []).map((url) => (
+    '<article class="history-item ' + esc(item.status === "failed" ? "failed" : "") + '" data-history-id="' + esc(item.id) + '">' +
+      '<div class="history-head"><div><strong>' + esc(formatHistoryTime(item.created_at)) +
+      (item.status === "failed" ? ' · 失败' : '') +
+      '</strong><p>' + esc(item.prompt || "") + '</p></div>' +
+      '<button class="btn small" type="button" data-history-action="restore" data-history-id="' + esc(item.id) +
+      '">恢复参数</button></div>' +
+      '<div class="history-meta">' + esc(item.image_model || "-") + ' · ' +
+      esc(endpointLabel(item.image_endpoint)) + ' · ' + esc(item.image_size || "-") + ' · ' + esc(qualityLabel(item.image_quality)) +
+      ' · 参考图 ' + esc(item.reference_count || 0) + ' 张</div>' +
+      (item.error ? '<div class="history-error">' + esc(item.error) + '</div>' : '') +
+      '<div class="history-images">' + (item.images || []).map((url) => (
       '<button type="button" data-history-action="use-image" data-image-url="' + esc(url) +
       '" title="作为参考图"><img src="' + esc(url) + '" alt="历史图片"><span>作为参考图</span></button>'
     )).join("") + '</div>' +
@@ -437,6 +502,7 @@ async function initConfig() {
     }
   }
   applySize(config.image_size);
+  applySettings(readSettings());
 }
 
 $("#ratioSelect").onchange = updateSize;
@@ -464,6 +530,7 @@ $("#genForm").onsubmit = async (event) => {
   event.preventDefault();
   updateSize();
   syncImageInput();
+  saveSettings();
   const submitButton = event.target.querySelector('button[type="submit"]');
   if (submitButton) {
     submitButton.disabled = true;
@@ -488,6 +555,7 @@ $("#genForm").onsubmit = async (event) => {
     showResultView("gallery");
     loadBalance();
   } catch (error) {
+    saveHistory({ images: [] }, { status: "failed", error: error.message });
     handleOperationError(error, $("#genStatus"));
   } finally {
     if (submitButton) {
@@ -496,6 +564,14 @@ $("#genForm").onsubmit = async (event) => {
     }
   }
 };
+
+["change", "input"].forEach((eventName) => {
+  $("#genForm").addEventListener(eventName, (event) => {
+    if (event.target.matches("select,input[type='number']")) {
+      saveSettings();
+    }
+  });
+});
 
 $("#amountPay").onclick = async () => {
   try {
