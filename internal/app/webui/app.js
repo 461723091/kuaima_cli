@@ -25,6 +25,8 @@ const SIZE_LOOKUP = Object.entries(SIZE_MATRIX).reduce((lookup, [resolution, rat
   return lookup;
 }, {});
 
+let selectedPayment = null;
+
 function esc(value) {
   return String(value == null ? "" : value).replace(/[&<>"']/g, (char) => ({
     "&": "&amp;",
@@ -79,24 +81,38 @@ function discountText(discount) {
   return (value * 10).toFixed(1).replace(/\.0$/, "") + " 折";
 }
 
+function formatQuota(value) {
+  const quota = Number(value);
+  if (!Number.isFinite(quota) || quota <= 0) {
+    return "-";
+  }
+  return Math.round(quota) + " (￥" + (quota / 500000).toFixed(2) + ")";
+}
+
+function setBillingOpen(open) {
+  const dropdown = $("#billingDropdown");
+  dropdown.hidden = !open;
+  $("#toggleBillingTop").setAttribute("aria-expanded", String(open));
+}
+
+function toggleBilling() {
+  setBillingOpen($("#billingDropdown").hidden);
+}
+
+function selectAmount(amount) {
+  selectedPayment = { amount: Number(amount) };
+  $("#amount").value = amount;
+  document.querySelectorAll("[data-amount],[data-plan-id]").forEach((item) => item.classList.remove("selected"));
+  const chip = document.querySelector('[data-amount="' + CSS.escape(String(amount)) + '"]');
+  if (chip) {
+    chip.classList.add("selected");
+  }
+}
+
 function renderBalance(usage) {
   $("#balanceTop").textContent = usage.total_available_text || "-";
   $("#usedTop").textContent = usage.total_used_text || "-";
   $("#accountName").textContent = usage.name || "-";
-
-  const subscriptions = (usage.subscriptions || []).map((item) => (
-    '<div class="subscription">' +
-      '<div><span>套餐状态</span><strong>' + esc(item.status || "-") + '</strong></div>' +
-      '<div><span>可用</span><strong>' + esc(item.available || "-") + '</strong></div>' +
-      '<div><span>周期</span><strong>' + esc(item.start || "-") + ' - ' + esc(item.end || "-") + '</strong></div>' +
-    '</div>'
-  )).join("");
-
-  $("#balanceBox").innerHTML =
-    '<div class="balance-total"><span>当前可用</span><strong>' + esc(usage.total_available_text || "-") +
-    '</strong></div><div class="balance-meta"><span>账号</span><b>' + esc(usage.name || "-") +
-    '</b></div><div class="balance-meta"><span>已消耗</span><b>' + esc(usage.total_used_text || "-") +
-    '</b></div>' + subscriptions;
 }
 
 async function loadBalance() {
@@ -105,7 +121,18 @@ async function loadBalance() {
     renderBalance(usage);
   } catch (error) {
     $("#balanceTop").textContent = "读取失败";
-    $("#balanceBox").innerHTML = '<span class="status error">' + esc(error.message) + '</span>';
+    $("#usedTop").textContent = error.message;
+  }
+}
+
+async function loadAccountLink() {
+  try {
+    const result = await api("/api/account/link");
+    $("#usageDetailLink").href = result.url || "#";
+  } catch (error) {
+    $("#usageDetailLink").removeAttribute("href");
+    $("#usageDetailLink").textContent = "使用详情链接获取失败";
+    $("#usageDetailLink").classList.add("error");
   }
 }
 
@@ -125,9 +152,11 @@ function renderPlans(info) {
   $("#plans").innerHTML = (info.plans || []).filter((plan) => plan.enabled).map((plan) => (
     '<div class="plan-card">' +
       '<div><b>' + esc(plan.title) + '</b><p>' + esc(plan.subtitle || "订阅套餐") + '</p></div>' +
+      '<div class="plan-quota"><span>额度</span><strong>' + esc(formatQuota(plan.total_amount)) + '</strong></div>' +
       '<div class="plan-price"><strong>￥' + esc(formatAmount(plan.price_amount)) + '</strong><span>' +
       esc(plan.duration_value) + esc(plan.duration_unit) + '</span></div>' +
-      '<button class="btn small" type="button" data-plan-id="' + Number(plan.id) + '">购买</button>' +
+      '<button class="btn small" type="button" data-plan-id="' + Number(plan.id) +
+      '" data-plan-title="' + esc(plan.title) + '">订阅</button>' +
     '</div>'
   )).join("") || '<span class="status">暂无套餐</span>';
 }
@@ -148,15 +177,26 @@ async function loadRechargeInfo() {
 }
 
 async function pay(body) {
-  $("#payment").innerHTML = '<span class="status">正在创建支付订单...</span>';
+  openPaymentModal('<span class="status">正在创建支付订单...</span>');
   const payment = await api("/api/recharge/pay", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
-  $("#payment").innerHTML = '<div class="paybox"><img src="' + esc(payment.qr) +
-    '" alt="支付二维码"><div><span>订单号</span><strong>' + esc(payment.trade_no || "-") +
-    '</strong><a href="' + esc(payment.url) + '" target="_blank">打开支付链接</a></div></div>';
+  setBillingOpen(false);
+  openPaymentModal('<a class="paybox modal-paybox" href="' + esc(payment.url) +
+    '" target="_blank"><img src="' + esc(payment.qr) +
+    '" alt="支付二维码"><div><span>微信扫一扫支付</span><strong>订单号 ' +
+    esc(payment.trade_no || "-") + '</strong></div></a>');
+}
+
+function openPaymentModal(content) {
+  $("#paymentModalBody").innerHTML = content;
+  $("#paymentModal").hidden = false;
+}
+
+function closePaymentModal() {
+  $("#paymentModal").hidden = true;
 }
 
 async function initConfig() {
@@ -197,15 +237,12 @@ $("#genForm").onsubmit = async (event) => {
 
 $("#amountPay").onclick = async () => {
   try {
-    await pay({ amount: Number($("#amount").value || 0) });
+    const typedAmount = Number($("#amount").value || 0);
+    const body = typedAmount > 0 ? { amount: typedAmount } : selectedPayment;
+    await pay(body || {});
   } catch (error) {
-    $("#payment").innerHTML = '<span class="status error">' + esc(error.message) + '</span>';
+    openPaymentModal('<span class="status error">' + esc(error.message) + '</span>');
   }
-};
-
-$("#refreshBilling").onclick = () => {
-  loadBalance();
-  loadRechargeInfo();
 };
 
 document.addEventListener("click", async (event) => {
@@ -214,15 +251,41 @@ document.addEventListener("click", async (event) => {
   if (!amountButton && !planButton) {
     return;
   }
-  try {
-    if (amountButton) {
-      $("#amount").value = amountButton.dataset.amount;
-      await pay({ amount: Number(amountButton.dataset.amount) });
-    } else {
+  if (amountButton) {
+    selectAmount(amountButton.dataset.amount);
+  } else {
+    try {
       await pay({ plan_id: Number(planButton.dataset.planId) });
+    } catch (error) {
+      openPaymentModal('<span class="status error">' + esc(error.message) + '</span>');
     }
-  } catch (error) {
-    $("#payment").innerHTML = '<span class="status error">' + esc(error.message) + '</span>';
+  }
+});
+
+document.addEventListener("click", (event) => {
+  if (!event.target.closest(".billing-menu")) {
+    setBillingOpen(false);
+  }
+});
+
+$("#amount").oninput = () => {
+  const amount = Number($("#amount").value || 0);
+  if (amount > 0) {
+    selectedPayment = { amount };
+    document.querySelectorAll("[data-amount],[data-plan-id]").forEach((item) => item.classList.remove("selected"));
+  }
+};
+
+$("#toggleBillingTop").onclick = toggleBilling;
+$("#closePaymentModal").onclick = closePaymentModal;
+$("#paymentModal").onclick = (event) => {
+  if (event.target === $("#paymentModal")) {
+    closePaymentModal();
+  }
+};
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && !$("#paymentModal").hidden) {
+    closePaymentModal();
   }
 });
 
@@ -232,3 +295,4 @@ initConfig().catch((error) => {
 });
 loadBalance();
 loadRechargeInfo();
+loadAccountLink();

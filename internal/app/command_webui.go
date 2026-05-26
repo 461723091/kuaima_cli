@@ -17,6 +17,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 )
 
 //go:embed webui/*
@@ -123,6 +124,7 @@ func (s *webUIServer) routes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/config", s.handleConfig)
 	mux.HandleFunc("/api/generate", s.handleGenerate)
 	mux.HandleFunc("/api/balance", s.handleBalance)
+	mux.HandleFunc("/api/account/link", s.handleAccountLink)
 	mux.HandleFunc("/api/recharge/info", s.handleRechargeInfo)
 	mux.HandleFunc("/api/recharge/pay", s.handleRechargePay)
 	mux.HandleFunc("/api/qr", s.handleQR)
@@ -210,6 +212,20 @@ func (s *webUIServer) handleBalance(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, formatWebUsage(usage))
+}
+
+func (s *webUIServer) handleAccountLink(w http.ResponseWriter, r *http.Request) {
+	username, password, err := resolveRechargeCredentials(r.Context(), *s.clientOpts.baseURL, *s.clientOpts.username, *s.clientOpts.password, *s.clientOpts.verbose, nil)
+	if err != nil {
+		writeError(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	rawURL, err := rechargeURL(*s.clientOpts.baseURL, username, password, time.Now())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"url": rawURL})
 }
 
 func (s *webUIServer) handleRechargeInfo(w http.ResponseWriter, r *http.Request) {

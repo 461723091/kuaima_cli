@@ -14,9 +14,39 @@
       <span class="brand-mark"></span>
       <span>快马 AI WebUI</span>
     </div>
-    <div class="wallet-pill">
-      <span>可用余额</span>
-      <strong id="balanceTop">读取中...</strong>
+    <div class="billing-menu">
+      <button id="toggleBillingTop" class="wallet-pill" type="button" aria-expanded="false">
+        <span>可用余额</span>
+        <strong id="balanceTop">读取中...</strong>
+      </button>
+      <div id="billingDropdown" class="billing-dropdown" hidden>
+        <div class="menu-row">
+          <span>账号</span>
+          <strong id="accountName">-</strong>
+        </div>
+        <div class="menu-row">
+          <span>已消耗</span>
+          <strong id="usedTop">-</strong>
+        </div>
+        <a id="usageDetailLink" class="detail-link" href="#" target="_blank" rel="noreferrer">查看使用详情</a>
+
+        <div class="menu-divider"></div>
+
+        <div class="field">
+          <label>直接充值</label>
+          <div id="amountOptions" class="chip-grid"></div>
+          <div class="amount-row">
+            <input id="amount" type="number" min="1" step="0.01" placeholder="输入金额">
+            <button id="amountPay" class="btn" type="button">支付</button>
+          </div>
+        </div>
+
+        <div class="section-title">
+          <span>套餐</span>
+          <span id="rechargeStatus" class="status"></span>
+        </div>
+        <div id="plans" class="plans"></div>
+      </div>
     </div>
   </header>
 
@@ -25,16 +55,6 @@
       <div>
         <p class="eyebrow">Image Studio</p>
         <h1>图像生成工作台</h1>
-      </div>
-      <div class="hero-stats">
-        <div>
-          <span>账号</span>
-          <strong id="accountName">-</strong>
-        </div>
-        <div>
-          <span>已消耗</span>
-          <strong id="usedTop">-</strong>
-        </div>
       </div>
     </section>
 
@@ -118,42 +138,19 @@
         </div>
         <div id="gallery" class="gallery empty">生成后的图片会显示在这里</div>
       </section>
-
-      <aside class="panel wallet">
-        <div class="panel-head">
-          <div>
-            <p class="eyebrow">Billing</p>
-            <h2>余额与充值</h2>
-          </div>
-          <button id="refreshBilling" class="icon-btn" type="button" title="刷新">↻</button>
-        </div>
-
-        <div id="balanceBox" class="balance-card">
-          <span class="status">正在读取余额...</span>
-        </div>
-
-        <div class="field">
-          <label>直接充值</label>
-          <div id="amountOptions" class="chip-grid"></div>
-          <div class="amount-row">
-            <input id="amount" type="number" min="1" step="0.01" placeholder="输入金额">
-            <button id="amountPay" class="btn" type="button">支付</button>
-          </div>
-        </div>
-
-        <div class="section-title">
-          <span>套餐</span>
-          <span id="rechargeStatus" class="status"></span>
-        </div>
-        <div id="plans" class="plans"></div>
-
-        <div class="section-title">
-          <span>支付</span>
-        </div>
-        <div id="payment" class="payment-empty">选择金额或套餐后显示二维码</div>
-      </aside>
     </section>
   </main>
+
+  <div id="paymentModal" class="modal-backdrop" hidden>
+    <div class="payment-modal" role="dialog" aria-modal="true" aria-labelledby="paymentTitle">
+      <button id="closePaymentModal" class="modal-close" type="button" aria-label="关闭">×</button>
+      <p class="eyebrow">WeChat Pay</p>
+      <h2 id="paymentTitle">微信扫一扫支付</h2>
+      <div id="paymentModalBody" class="modal-body">
+        <span class="status">正在创建支付订单...</span>
+      </div>
+    </div>
+  </div>
 
   <script src="/app.js"></script>
 </body>
