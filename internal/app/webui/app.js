@@ -26,12 +26,16 @@ const SIZE_LOOKUP = Object.entries(SIZE_MATRIX).reduce((lookup, [resolution, rat
 }, {});
 
 const HISTORY_KEY = "kuaima.webui.imageHistory.v1";
+const HISTORY_DB_NAME = "kuaima.webui.history.v1";
+const HISTORY_STORE = "items";
 const HISTORY_LIMIT = 50;
 const SETTINGS_KEY = "kuaima.webui.settings.v1";
 
 let selectedPayment = null;
 let selectedImages = [];
 let draggedImageIndex = -1;
+let historyDBPromise = null;
+let activeGenerationController = null;
 const imagePreviewURLs = new WeakMap();
 
 function esc(value) {
@@ -51,6 +55,45 @@ async function api(url, options) {
     throw new Error(body.error || response.statusText);
   }
   return body;
+}
+
+async function apiStream(url, options, handlers) {
+  const response = await fetch(url, options);
+  if (!response.ok || !response.body) {
+    const body = await response.json().catch(() => ({}));
+    throw new Error(body.error || response.statusText);
+  }
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) {
+      break;
+    }
+    buffer += decoder.decode(value, { stream: true });
+    const chunks = buffer.split(/\r?\n\r?\n/);
+    buffer = chunks.pop() || "";
+    for (const chunk of chunks) {
+      const lines = chunk.split(/\r?\n/);
+      let event = "message";
+      const data = [];
+      lines.forEach((line) => {
+        if (line.startsWith("event:")) {
+          event = line.slice(6).trim();
+        } else if (line.startsWith("data:")) {
+          data.push(line.slice(5).trimStart());
+        }
+      });
+      if (data.length === 0) {
+        continue;
+      }
+      const payload = JSON.parse(data.join("\n"));
+      if (handlers[event]) {
+        handlers[event](payload);
+      }
+    }
+  }
 }
 
 function updateSize() {
@@ -355,7 +398,49 @@ function closePaymentModal() {
   $("#paymentModal").hidden = true;
 }
 
-function readHistory() {
+function openHistoryDB() {
+  if (!("indexedDB" in window)) {
+    return Promise.resolve(null);
+  }
+  if (!historyDBPromise) {
+    historyDBPromise = new Promise((resolve, reject) => {
+      const request = indexedDB.open(HISTORY_DB_NAME, 1);
+      request.onupgradeneeded = () => {
+        const db = request.result;
+        if (!db.objectStoreNames.contains(HISTORY_STORE)) {
+          db.createObjectStore(HISTORY_STORE, { keyPath: "id" });
+        }
+      };
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+  }
+  return historyDBPromise;
+}
+
+async function withHistoryStore(mode, callback) {
+  const db = await openHistoryDB();
+  if (!db) {
+    return callback(null);
+  }
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(HISTORY_STORE, mode);
+    const store = tx.objectStore(HISTORY_STORE);
+    let result;
+    tx.oncomplete = () => resolve(result);
+    tx.onerror = () => reject(tx.error);
+    result = callback(store);
+  });
+}
+
+function requestResult(request) {
+  return new Promise((resolve, reject) => {
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+async function readLegacyHistory() {
   try {
     const value = JSON.parse(localStorage.getItem(HISTORY_KEY) || "[]");
     return Array.isArray(value) ? value : [];
@@ -364,8 +449,81 @@ function readHistory() {
   }
 }
 
-function writeHistory(items) {
-  localStorage.setItem(HISTORY_KEY, JSON.stringify(items.slice(0, HISTORY_LIMIT)));
+async function readHistory() {
+  const db = await openHistoryDB();
+  if (!db) {
+    return readLegacyHistory();
+  }
+  const items = await requestResult(db.transaction(HISTORY_STORE, "readonly").objectStore(HISTORY_STORE).getAll());
+  return (Array.isArray(items) ? items : []).sort((a, b) => String(b.created_at || "").localeCompare(String(a.created_at || "")));
+}
+
+async function trimHistory() {
+  const items = await readHistory();
+  const stale = items.slice(HISTORY_LIMIT);
+  if (stale.length === 0) {
+    return;
+  }
+  await withHistoryStore("readwrite", (store) => {
+    stale.forEach((item) => store.delete(item.id));
+  });
+}
+
+async function writeHistory(items) {
+  const limited = items.slice(0, HISTORY_LIMIT);
+  const db = await openHistoryDB();
+  if (!db) {
+    localStorage.setItem(HISTORY_KEY, JSON.stringify(limited.map(({ references, ...item }) => item)));
+    return;
+  }
+  await withHistoryStore("readwrite", (store) => {
+    store.clear();
+    limited.forEach((item) => store.put(item));
+  });
+}
+
+async function putHistoryItem(item) {
+  const db = await openHistoryDB();
+  if (!db) {
+    const deduped = (await readLegacyHistory()).filter((entry) => historyKey(entry) !== historyKey(item));
+    const legacyItem = { ...item, references: [] };
+    localStorage.setItem(HISTORY_KEY, JSON.stringify([legacyItem].concat(deduped).slice(0, HISTORY_LIMIT)));
+    return;
+  }
+  const existing = await readHistory();
+  const duplicate = existing.find((entry) => historyKey(entry) === historyKey(item));
+  await withHistoryStore("readwrite", (store) => {
+    if (duplicate) {
+      store.delete(duplicate.id);
+    }
+    store.put(item);
+  });
+  await trimHistory();
+}
+
+async function deleteHistoryItem(id) {
+  const db = await openHistoryDB();
+  if (!db) {
+    const next = (await readLegacyHistory()).filter((entry) => entry.id !== id);
+    localStorage.setItem(HISTORY_KEY, JSON.stringify(next));
+    return;
+  }
+  await withHistoryStore("readwrite", (store) => {
+    store.delete(id);
+  });
+}
+
+async function migrateLegacyHistory() {
+  const legacy = await readLegacyHistory();
+  if (legacy.length === 0 || !(await openHistoryDB())) {
+    return;
+  }
+  const existing = await readHistory();
+  if (existing.length > 0) {
+    return;
+  }
+  await writeHistory(legacy);
+  localStorage.removeItem(HISTORY_KEY);
 }
 
 function historyKey(item) {
@@ -383,7 +541,16 @@ function historyKey(item) {
   ].join("\n");
 }
 
-function saveHistory(result, extra = {}) {
+function historyReferences() {
+  return selectedImages.map((file) => ({
+    name: file.name || "reference-image.png",
+    type: file.type || "image/png",
+    size: file.size || 0,
+    blob: file,
+  }));
+}
+
+async function saveHistory(result, extra = {}) {
   const form = $("#genForm");
   const item = {
     id: String(Date.now()),
@@ -398,13 +565,12 @@ function saveHistory(result, extra = {}) {
     resolution: $("#resolutionSelect").value,
     image_size: $('[name="image_size"]').value,
     reference_count: selectedImages.length,
+    references: historyReferences(),
     images: result.images || [],
     error: extra.error || "",
   };
-  const key = historyKey(item);
-  const deduped = readHistory().filter((entry) => historyKey(entry) !== key);
-  writeHistory([item].concat(deduped));
-  renderHistory();
+  await putHistoryItem(item);
+  await renderHistory();
 }
 
 function formatHistoryTime(value) {
@@ -420,25 +586,40 @@ function formatHistoryTime(value) {
   });
 }
 
-function renderHistory() {
+function historyReferencePreview(ref) {
+  if (!ref || !ref.blob) {
+    return "";
+  }
+  return URL.createObjectURL(ref.blob);
+}
+
+async function renderHistory() {
   const panel = $("#historyPanel");
-  const history = readHistory();
+  const history = await readHistory();
   if (history.length === 0) {
     panel.innerHTML = '<div class="history-empty">暂无历史记录</div>';
     return;
   }
   panel.innerHTML = history.map((item) => (
     '<article class="history-item ' + esc(item.status === "failed" ? "failed" : "") + '" data-history-id="' + esc(item.id) + '">' +
-      '<div class="history-head"><div><strong>' + esc(formatHistoryTime(item.created_at)) +
-      (item.status === "failed" ? ' · 失败' : '') +
-      '</strong><p>' + esc(item.prompt || "") + '</p></div>' +
-      '<button class="btn small" type="button" data-history-action="restore" data-history-id="' + esc(item.id) +
-      '">恢复参数</button></div>' +
-      '<div class="history-meta">' + esc(item.image_model || "-") + ' · ' +
-      esc(endpointLabel(item.image_endpoint)) + ' · ' + esc(item.image_size || "-") + ' · ' + esc(qualityLabel(item.image_quality)) +
-      ' · 参考图 ' + esc(item.reference_count || 0) + ' 张</div>' +
-      (item.error ? '<div class="history-error">' + esc(item.error) + '</div>' : '') +
-      '<div class="history-images">' + (item.images || []).map((url) => (
+    '<div class="history-head"><div><strong>' + esc(formatHistoryTime(item.created_at)) +
+    (item.status === "failed" ? ' · 失败' : '') +
+    '</strong><p>' + esc(item.prompt || "") + '</p></div>' +
+    '<div class="history-actions">' +
+    '<button class="btn small" type="button" data-history-action="restore" data-history-id="' + esc(item.id) +
+    '">恢复参数</button>' +
+    '<button class="btn small danger" type="button" data-history-action="delete" data-history-id="' + esc(item.id) +
+    '">删除</button></div></div>' +
+    '<div class="history-meta">' + esc(item.image_model || "-") + ' · ' +
+    esc(item.image_size || "-") + ' · ' + esc(qualityLabel(item.image_quality)) +
+    ' · 参考图 ' + esc(item.reference_count || 0) + ' 张</div>' +
+    (item.error ? '<div class="history-error">' + esc(item.error) + '</div>' : '') +
+    '<div class="history-images">' + (item.references || []).map((ref, index) => {
+      const preview = historyReferencePreview(ref);
+      return '<button type="button" data-history-action="use-reference" data-history-id="' + esc(item.id) +
+        '" data-reference-index="' + index + '" title="使用历史参考图"><img src="' + esc(preview) +
+        '" alt="历史参考图"><span>历史参考图</span></button>';
+    }).join("") + (item.images || []).map((url) => (
       '<button type="button" data-history-action="use-image" data-image-url="' + esc(url) +
       '" title="作为参考图"><img src="' + esc(url) + '" alt="历史图片"><span>作为参考图</span></button>'
     )).join("") + '</div>' +
@@ -446,8 +627,8 @@ function renderHistory() {
   )).join("");
 }
 
-function restoreHistory(id) {
-  const item = readHistory().find((entry) => entry.id === id);
+async function restoreHistory(id) {
+  const item = (await readHistory()).find((entry) => entry.id === id);
   if (!item) {
     return;
   }
@@ -463,12 +644,94 @@ function restoreHistory(id) {
   if (item.resolution) {
     $("#resolutionSelect").value = item.resolution;
   }
+  selectedImages = historyReferenceFiles(item);
+  syncImageInput();
+  renderImagePreviews();
   updateSize();
+  $("#genStatus").textContent = selectedImages.length > 0 ? "已恢复参数和参考图" : "已恢复参数";
+  $("#genStatus").className = "status gen-status";
+}
+
+function historyReferenceFiles(item) {
+  return (item.references || []).filter((ref) => ref && ref.blob).map((ref) => (
+    new File([ref.blob], ref.name || "history-reference.png", { type: ref.type || ref.blob.type || "image/png" })
+  ));
+}
+
+async function addHistoryReferenceAsImage(id, index) {
+  const item = (await readHistory()).find((entry) => entry.id === id);
+  const ref = item && item.references && item.references[Number(index)];
+  if (!ref || !ref.blob) {
+    throw new Error("历史参考图不存在");
+  }
+  selectedImages.push(new File([ref.blob], ref.name || "history-reference.png", { type: ref.type || ref.blob.type || "image/png" }));
+  syncImageInput();
+  renderImagePreviews();
+  $("#genStatus").textContent = "已添加历史参考图";
+  $("#genStatus").className = "status gen-status";
+}
+
+function renderGalleryImages(images) {
+  const unique = Array.from(new Set(images || []));
+  $("#gallery").classList.toggle("empty", unique.length === 0);
+  $("#gallery").innerHTML = unique.map((url) => (
+    '<div class="gallery-item"><a href="' + esc(url) +
+    '" target="_blank"><img src="' + esc(url) +
+    '" alt="生成结果"></a><button type="button" data-history-action="use-image" data-image-url="' +
+    esc(url) + '">作为参考图</button></div>'
+  )).join("") || '<div class="status">没有返回图片</div>';
+}
+
+function renderGalleryMessage(message, className = "status") {
+  $("#gallery").classList.add("empty");
+  $("#gallery").innerHTML = '<div class="' + esc(className) + '">' + esc(message) + '</div>';
+}
+
+async function generateStream(form, signal) {
+  const images = [];
+  const result = { images, saved: [], text: "" };
+  $("#gallery").classList.remove("empty");
+  $("#gallery").innerHTML = '<div class="generation-placeholder"><span class="spinner"></span><span>正在等待首张图片...</span></div>';
+  await apiStream("/api/generate/stream", {
+    method: "POST",
+    body: new FormData(form),
+    signal,
+  }, {
+    status(payload) {
+      $("#genStatus").textContent = payload.message || "生成中...";
+    },
+    text(payload) {
+      if (payload.text) {
+        result.text += payload.text;
+        $("#genStatus").textContent = result.text;
+      }
+    },
+    image(payload) {
+      if (payload.url && !images.includes(payload.url)) {
+        images.push(payload.url);
+        renderGalleryImages(images);
+      }
+    },
+    done(payload) {
+      result.saved = payload.saved || [];
+      result.text = payload.text || result.text;
+      (payload.images || []).forEach((url) => {
+        if (!images.includes(url)) {
+          images.push(url);
+        }
+      });
+      renderGalleryImages(images);
+    },
+    error(payload) {
+      throw new Error(payload.error || "生成失败");
+    },
+  });
+  return result;
 }
 
 async function addImageURLAsReference(url) {
   $("#genStatus").textContent = "正在添加历史图片...";
-  $("#genStatus").className = "status";
+  $("#genStatus").className = "status gen-status";
   const response = await fetch(url);
   if (!response.ok) {
     throw new Error("历史图片读取失败");
@@ -479,9 +742,10 @@ async function addImageURLAsReference(url) {
   syncImageInput();
   renderImagePreviews();
   $("#genStatus").textContent = "已添加历史图片";
+  $("#genStatus").className = "status gen-status";
 }
 
-function showResultView(view) {
+async function showResultView(view) {
   const isHistory = view === "history";
   $("#gallery").hidden = isHistory;
   $("#historyPanel").hidden = !isHistory;
@@ -489,7 +753,7 @@ function showResultView(view) {
     button.classList.toggle("active", button.dataset.resultView === view);
   });
   if (isHistory) {
-    renderHistory();
+    await renderHistory();
   }
 }
 
@@ -532,36 +796,47 @@ $("#genForm").onsubmit = async (event) => {
   syncImageInput();
   saveSettings();
   const submitButton = event.target.querySelector('button[type="submit"]');
+  const cancelButton = $("#cancelGenerate");
+  activeGenerationController = new AbortController();
   if (submitButton) {
     submitButton.disabled = true;
-    submitButton.textContent = "生成中...";
+    submitButton.innerHTML = '<span class="spinner small"></span><span>生成中...</span>';
   }
+  cancelButton.hidden = false;
   $("#genStatus").textContent = "生成中...";
-  $("#genStatus").className = "status";
+  $("#genStatus").className = "status gen-status loading";
   try {
-    const result = await api("/api/generate", {
-      method: "POST",
-      body: new FormData(event.target),
-    });
-    $("#gallery").classList.remove("empty");
-    $("#gallery").innerHTML = result.images.map((url) => (
-      '<div class="gallery-item"><a href="' + esc(url) +
-      '" target="_blank"><img src="' + esc(url) +
-      '" alt="生成结果"></a><button type="button" data-history-action="use-image" data-image-url="' +
-      esc(url) + '">作为参考图</button></div>'
-    )).join("") || '<div class="status">没有返回图片</div>';
+    const result = await generateStream(event.target, activeGenerationController.signal);
     $("#genStatus").textContent = "已保存 " + result.saved.length + " 张";
-    saveHistory(result);
-    showResultView("gallery");
+    $("#genStatus").className = "status gen-status";
+    await saveHistory(result);
+    await showResultView("gallery");
     loadBalance();
   } catch (error) {
-    saveHistory({ images: [] }, { status: "failed", error: error.message });
+    const canceled = error && error.name === "AbortError";
+    if ($("#gallery").querySelector(".generation-placeholder")) {
+      renderGalleryMessage(canceled ? "已取消生成" : "生成失败：" + error.message, canceled ? "status" : "status error");
+    }
+    if (canceled) {
+      $("#genStatus").textContent = "已取消生成";
+      $("#genStatus").className = "status gen-status";
+      return;
+    }
+    await saveHistory({ images: [] }, { status: "failed", error: error.message });
     handleOperationError(error, $("#genStatus"));
   } finally {
+    activeGenerationController = null;
+    cancelButton.hidden = true;
     if (submitButton) {
       submitButton.disabled = false;
       submitButton.textContent = "生成图片";
     }
+  }
+};
+
+$("#cancelGenerate").onclick = () => {
+  if (activeGenerationController) {
+    activeGenerationController.abort();
   }
 };
 
@@ -631,7 +906,7 @@ document.addEventListener("click", async (event) => {
 
   const resultTab = event.target.closest("[data-result-view]");
   if (resultTab) {
-    showResultView(resultTab.dataset.resultView);
+    await showResultView(resultTab.dataset.resultView);
     return;
   }
 
@@ -640,9 +915,14 @@ document.addEventListener("click", async (event) => {
     const action = historyButton.dataset.historyAction;
     try {
       if (action === "restore") {
-        restoreHistory(historyButton.dataset.historyId);
+        await restoreHistory(historyButton.dataset.historyId);
+      } else if (action === "delete") {
+        await deleteHistoryItem(historyButton.dataset.historyId);
+        await renderHistory();
       } else if (action === "use-image") {
         await addImageURLAsReference(historyButton.dataset.imageUrl);
+      } else if (action === "use-reference") {
+        await addHistoryReferenceAsImage(historyButton.dataset.historyId, historyButton.dataset.referenceIndex);
       }
     } catch (error) {
       $("#genStatus").textContent = error.message;
@@ -699,7 +979,9 @@ initConfig().catch((error) => {
   $("#genStatus").textContent = error.message;
   $("#genStatus").className = "status error";
 });
-renderHistory();
+migrateLegacyHistory().then(renderHistory).catch((error) => {
+  $("#historyPanel").innerHTML = '<div class="history-empty">历史读取失败：' + esc(error.message) + '</div>';
+});
 loadBalance();
 loadRechargeInfo();
 loadAccountLink();

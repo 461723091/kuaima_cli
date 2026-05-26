@@ -124,6 +124,7 @@ func runWebUIWithOptions(args []string, runtimeOpts webUIRuntimeOptions) error {
 func (s *webUIServer) routes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/config", s.handleConfig)
 	mux.HandleFunc("/api/generate", s.handleGenerate)
+	mux.HandleFunc("/api/generate/stream", s.handleGenerateStream)
 	mux.HandleFunc("/api/balance", s.handleBalance)
 	mux.HandleFunc("/api/account/link", s.handleAccountLink)
 	mux.HandleFunc("/api/recharge/info", s.handleRechargeInfo)
@@ -211,6 +212,143 @@ func (s *webUIServer) handleGenerate(w http.ResponseWriter, r *http.Request) {
 		"saved":  saved,
 		"text":   strings.TrimSpace(resp.OutputText),
 	})
+}
+
+func (s *webUIServer) handleGenerateStream(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	if err := r.ParseMultipartForm(80 << 20); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	prompt := strings.TrimSpace(r.FormValue("prompt"))
+	if prompt == "" {
+		writeError(w, http.StatusBadRequest, "prompt is required")
+		return
+	}
+	opts, err := s.imageOptionsFromForm(r)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	refs, err := uploadedImageRefs(r)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	c, err := s.clientOpts.newClient()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	defer c.Close()
+
+	stream := newWebUIEventStream(w)
+	stream.send("status", map[string]string{"message": "已连接，正在请求生成接口..."})
+
+	ctx := r.Context()
+	saver := newResponseImageSaver(ctx, c.httpClient, s.saveDir)
+	var saved []string
+	saveAndSend := func(candidate imageCandidate) error {
+		path, err := saver.saveCandidate(candidate)
+		if err != nil {
+			return err
+		}
+		if path == "" {
+			return nil
+		}
+		saved = append(saved, path)
+		urls := s.publicImageURLs([]string{path})
+		if len(urls) > 0 {
+			stream.send("image", map[string]string{"url": urls[0]})
+		}
+		return nil
+	}
+
+	var resp *responsePayload
+	if webUIImageEndpoint(r) == "response" {
+		resp, err = s.handleGenerateWithResponsesStream(ctx, c, opts, s.modelFromForm(r), prompt, refs, stream, saveAndSend)
+	} else if len(refs) == 0 {
+		req := opts.generationRequest(s.modelFromForm(r), prompt)
+		resp, err = c.createImageGenerationStream(ctx, req, saveAndSend)
+	} else {
+		req := opts.editRequest(s.modelFromForm(r), prompt, refs, nil)
+		resp, err = c.createImageEditStream(ctx, req, saveAndSend)
+	}
+	if err != nil {
+		stream.send("error", map[string]string{"error": err.Error()})
+		return
+	}
+	if saver != nil && resp != nil {
+		more, err := saver.saveResponse(resp)
+		if err != nil {
+			stream.send("error", map[string]string{"error": err.Error()})
+			return
+		}
+		for _, path := range more {
+			saved = append(saved, path)
+			urls := s.publicImageURLs([]string{path})
+			if len(urls) > 0 {
+				stream.send("image", map[string]string{"url": urls[0]})
+			}
+		}
+	}
+	text := ""
+	if resp != nil {
+		text = strings.TrimSpace(resp.OutputText)
+	}
+	stream.send("done", map[string]any{
+		"images": s.publicImageURLs(saved),
+		"saved":  saved,
+		"text":   text,
+	})
+}
+
+func (s *webUIServer) handleGenerateWithResponsesStream(ctx context.Context, c *client, opts imageOptions, imageModel, prompt string, refs []imageRef, stream *webUIEventStream, onImage func(imageCandidate) error) (*responsePayload, error) {
+	content := []inputContent{{
+		Type: "input_text",
+		Text: prompt,
+	}}
+	for _, ref := range refs {
+		content = append(content, inputContent{
+			Type:     "input_image",
+			ImageURL: ref.ImageURL,
+		})
+	}
+	tool := opts.responseTool()
+	imageModel = strings.TrimSpace(imageModel)
+	addAutoString(tool, "model", &imageModel)
+	req := responseRequest{
+		Model: strings.TrimSpace(*s.clientOpts.model),
+		Input: []inputMessage{{
+			Role:    "user",
+			Content: content,
+		}},
+		Tools: []map[string]any{tool},
+	}
+	runCount := opts.responseRunCount()
+	var combined responsePayload
+	var texts []string
+	for i := 0; i < runCount; i++ {
+		if runCount > 1 {
+			stream.send("status", map[string]string{"message": fmt.Sprintf("正在生成第 %d/%d 张...", i+1, runCount)})
+		}
+		resp, err := c.createResponseStreamWithImages(ctx, req, stream.textWriter(), onImage)
+		if err != nil {
+			return &combined, err
+		}
+		if resp == nil {
+			continue
+		}
+		combined.Output = append(combined.Output, resp.Output...)
+		if text := strings.TrimSpace(resp.OutputText); text != "" {
+			texts = append(texts, text)
+		}
+	}
+	combined.OutputText = strings.Join(texts, "\n\n")
+	return &combined, nil
 }
 
 func (s *webUIServer) handleGenerateWithResponses(ctx context.Context, c *client, opts imageOptions, imageModel, prompt string, refs []imageRef) ([]string, string, error) {
@@ -527,4 +665,48 @@ func writeError(w http.ResponseWriter, status int, message string) {
 		message = http.StatusText(status)
 	}
 	writeJSON(w, status, map[string]string{"error": message})
+}
+
+type webUIEventStream struct {
+	w       http.ResponseWriter
+	flusher http.Flusher
+}
+
+func newWebUIEventStream(w http.ResponseWriter) *webUIEventStream {
+	header := w.Header()
+	header.Set("Content-Type", "text/event-stream; charset=utf-8")
+	header.Set("Cache-Control", "no-cache")
+	header.Set("X-Accel-Buffering", "no")
+	w.WriteHeader(http.StatusOK)
+	flusher, _ := w.(http.Flusher)
+	return &webUIEventStream{w: w, flusher: flusher}
+}
+
+func (s *webUIEventStream) send(event string, value any) {
+	if s == nil {
+		return
+	}
+	data, err := json.Marshal(value)
+	if err != nil {
+		data = []byte(`{"error":"failed to encode stream event"}`)
+	}
+	fmt.Fprintf(s.w, "event: %s\ndata: %s\n\n", event, data)
+	if s.flusher != nil {
+		s.flusher.Flush()
+	}
+}
+
+func (s *webUIEventStream) textWriter() io.Writer {
+	return webUIStreamTextWriter{s: s}
+}
+
+type webUIStreamTextWriter struct {
+	s *webUIEventStream
+}
+
+func (w webUIStreamTextWriter) Write(p []byte) (int, error) {
+	if len(p) > 0 {
+		w.s.send("text", map[string]string{"text": string(p)})
+	}
+	return len(p), nil
 }

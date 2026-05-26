@@ -1,5 +1,6 @@
 <!doctype html>
 <html lang="zh-CN">
+
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -8,6 +9,7 @@
   <link rel="apple-touch-icon" href="/logo.png">
   <link rel="stylesheet" href="/app.css">
 </head>
+
 <body>
   <header class="topbar">
     <div class="brand">
@@ -77,6 +79,7 @@
                 <span>参考图</span>
               </label>
               <input id="imageInput" class="sr-only" name="images" type="file" accept="image/*" multiple>
+              <button id="cancelGenerate" class="btn cancel-generate" type="button" hidden>取消</button>
               <button class="btn primary" type="submit">生成图片</button>
             </div>
           </div>
@@ -139,12 +142,12 @@
           </div>
 
           <div class="field compact">
-            <label>质量</label>
+            <label>画质</label>
             <select name="image_quality">
               <option value="auto">自动</option>
               <option value="low">快速</option>
-              <option value="medium">中等</option>
-              <option value="high">高</option>
+              <option value="medium">标准</option>
+              <option value="high">高清</option>
             </select>
           </div>
           <div class="field compact">
@@ -187,4 +190,5 @@
 
   <script src="/app.js"></script>
 </body>
+
 </html>

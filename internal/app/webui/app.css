@@ -318,7 +318,7 @@ textarea {
 
 .composer-actions {
   display: grid;
-  grid-template-columns: auto 1fr;
+  grid-template-columns: auto auto 1fr;
   gap: 10px;
   align-items: center;
   padding: 10px;
@@ -328,6 +328,11 @@ textarea {
 
 .composer-actions .btn {
   justify-self: end;
+}
+
+.cancel-generate {
+  justify-self: end;
+  color: var(--danger);
 }
 
 .upload-button {
@@ -596,6 +601,10 @@ select {
 
 .btn {
   min-height: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
   padding: 9px 14px;
   font-weight: 760;
 }
@@ -611,6 +620,10 @@ select {
   min-height: 34px;
   padding: 7px 10px;
   white-space: nowrap;
+}
+
+.btn.danger {
+  color: var(--danger);
 }
 
 .icon-btn {
@@ -665,6 +678,38 @@ select {
   overflow-wrap: anywhere;
 }
 
+.gen-status.loading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.gen-status.loading::before,
+.spinner {
+  content: "";
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+  border: 2px solid rgba(37, 99, 235, 0.22);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+.spinner.small {
+  width: 14px;
+  height: 14px;
+  flex-basis: 14px;
+  border-color: rgba(255, 255, 255, 0.42);
+  border-top-color: #fff;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .error {
   color: var(--danger);
 }
@@ -698,6 +743,14 @@ select {
 
 .gallery-item {
   position: relative;
+}
+
+.generation-placeholder {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 180px;
+  color: var(--muted);
 }
 
 .gallery-item button {
@@ -780,6 +833,22 @@ select {
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 12px;
   align-items: start;
+}
+
+.history-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s ease;
+}
+
+.history-item:hover .history-actions,
+.history-item:focus-within .history-actions {
+  opacity: 1;
+  pointer-events: auto;
 }
 
 .history-head p {
