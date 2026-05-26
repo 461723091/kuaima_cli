@@ -47,6 +47,7 @@ var (
 	runtimeUser32           = syscall.NewLazyDLL("user32.dll")
 	runtimeShell32          = syscall.NewLazyDLL("shell32.dll")
 	procGetConsoleWindow    = runtimeKernel32.NewProc("GetConsoleWindow")
+	procFreeConsole         = runtimeKernel32.NewProc("FreeConsole")
 	procGetModuleHandleW    = runtimeKernel32.NewProc("GetModuleHandleW")
 	procShowWindow          = runtimeUser32.NewProc("ShowWindow")
 	procRegisterClassExW    = runtimeUser32.NewProc("RegisterClassExW")
@@ -128,6 +129,7 @@ func hideWebUIConsole() {
 	hwnd, _, _ := procGetConsoleWindow.Call()
 	if hwnd != 0 {
 		procShowWindow.Call(hwnd, swHide)
+		procFreeConsole.Call()
 	}
 }
 
