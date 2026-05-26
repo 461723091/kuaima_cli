@@ -11,6 +11,10 @@ const (
 )
 
 func Run(args []string) error {
+	if len(args) == 0 && launchedFromFileExplorer() {
+		return runWebUIAuto(nil)
+	}
+
 	if len(args) > 0 {
 		switch args[0] {
 		case "ask":
@@ -19,6 +23,8 @@ func Run(args []string) error {
 			return runChat(args[1:])
 		case "image":
 			return runImage(args[1:])
+		case "webui":
+			return runWebUI(args[1:])
 		//case "login":
 		//	return runLogin(args[1:])
 		case "balance":

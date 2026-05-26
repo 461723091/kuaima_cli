@@ -31,12 +31,16 @@ func printQRCode(w io.Writer, value string) error {
 }
 
 func writeQRCodePNG(path, value string, size int) error {
-	if size <= 0 {
-		size = 512
-	}
-	png, err := qrcode.Encode(value, qrcode.Medium, size)
+	png, err := qrcodePNG(value, size)
 	if err != nil {
 		return err
 	}
 	return os.WriteFile(path, png, 0600)
+}
+
+func qrcodePNG(value string, size int) ([]byte, error) {
+	if size <= 0 {
+		size = 512
+	}
+	return qrcode.Encode(value, qrcode.Medium, size)
 }

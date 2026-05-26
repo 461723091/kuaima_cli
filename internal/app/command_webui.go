@@ -1,0 +1,449 @@
+package app
+
+import (
+	"embed"
+	"encoding/base64"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"io/fs"
+	"mime"
+	"net"
+	"net/http"
+	"net/url"
+	"path"
+	"path/filepath"
+	"sort"
+	"strconv"
+	"strings"
+)
+
+//go:embed webui/*
+var webUIAssets embed.FS
+
+type webUIServer struct {
+	clientOpts clientOptions
+	defaults   webUIDefaults
+	saveDir    string
+}
+
+type webUIDefaults struct {
+	ImageModel        string `json:"image_model"`
+	ImageSize         string `json:"image_size"`
+	ImageQuality      string `json:"image_quality"`
+	ImageCount        int    `json:"image_count"`
+	OutputFormat      string `json:"image_output_format"`
+	OutputCompression int    `json:"image_output_compression"`
+	Background        string `json:"image_background"`
+	Moderation        string `json:"image_moderation"`
+}
+
+func runWebUI(args []string) error {
+	return runWebUIWithOptions(args, webUIRuntimeOptions{})
+}
+
+func runWebUIAuto(args []string) error {
+	return runWebUIWithOptions(args, webUIRuntimeOptions{HideConsole: true})
+}
+
+func runWebUIWithOptions(args []string, runtimeOpts webUIRuntimeOptions) error {
+	cfg, err := loadAppConfig()
+	if err != nil {
+		return err
+	}
+	fs := newFlagSet("webui")
+	opts := addClientFlagsWithConfig(fs, cfg)
+	imageOpts := addImageFlags(fs, cfg)
+	saveDir := addSaveImagesFlagWithConfig(fs, cfg, "kuaima_webui_outputs")
+	addr := fs.String("addr", "127.0.0.1:8790", "local listen address")
+	open := fs.Bool("open", true, "open the Web UI in the default browser")
+	if err := parseFlags(fs, args); err != nil {
+		return err
+	}
+	if err := imageOpts.validate(); err != nil {
+		return err
+	}
+	if err := persistConfigFlags(fs, cfg); err != nil {
+		return err
+	}
+	if strings.TrimSpace(*saveDir) == "" {
+		return errors.New("webui requires a non-empty -save-images directory")
+	}
+
+	ln, err := net.Listen("tcp", strings.TrimSpace(*addr))
+	if err != nil {
+		return err
+	}
+	ui := &webUIServer{
+		clientOpts: opts,
+		defaults: webUIDefaults{
+			ImageModel:        opts.imageGenerationModel(),
+			ImageSize:         stringValue(imageOpts.size),
+			ImageQuality:      stringValue(imageOpts.quality),
+			ImageCount:        intValue(imageOpts.count, 1),
+			OutputFormat:      stringValue(imageOpts.outputFormat),
+			OutputCompression: intValue(imageOpts.outputCompression, -1),
+			Background:        stringValue(imageOpts.background),
+			Moderation:        stringValue(imageOpts.moderation),
+		},
+		saveDir: strings.TrimSpace(*saveDir),
+	}
+	mux := http.NewServeMux()
+	ui.routes(mux)
+
+	url := "http://" + ln.Addr().String()
+	if runtimeOpts.HideConsole {
+		hideWebUIConsole()
+	} else {
+		fmt.Println("Web UI:", url)
+	}
+	if *open {
+		if err := openBrowser(url); err != nil {
+			if !runtimeOpts.HideConsole {
+				fmt.Println("open browser failed:", err)
+			}
+		}
+	}
+	server := &http.Server{Handler: mux}
+	stopTray := startWebUITray(url, func() {
+		_ = server.Close()
+	})
+	if stopTray != nil {
+		defer stopTray()
+	}
+	err = server.Serve(ln)
+	if errors.Is(err, http.ErrServerClosed) {
+		return nil
+	}
+	return err
+}
+
+func (s *webUIServer) routes(mux *http.ServeMux) {
+	mux.HandleFunc("/api/config", s.handleConfig)
+	mux.HandleFunc("/api/generate", s.handleGenerate)
+	mux.HandleFunc("/api/balance", s.handleBalance)
+	mux.HandleFunc("/api/recharge/info", s.handleRechargeInfo)
+	mux.HandleFunc("/api/recharge/pay", s.handleRechargePay)
+	mux.HandleFunc("/api/qr", s.handleQR)
+	if s.saveDir != "" {
+		mux.Handle("/outputs/", http.StripPrefix("/outputs/", http.FileServer(http.Dir(s.saveDir))))
+	}
+	assets, err := fs.Sub(webUIAssets, "webui")
+	if err != nil {
+		panic(err)
+	}
+	mux.Handle("/", http.FileServer(http.FS(assets)))
+}
+
+func (s *webUIServer) handleConfig(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, s.defaults)
+}
+
+func (s *webUIServer) handleGenerate(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	if err := r.ParseMultipartForm(80 << 20); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	prompt := strings.TrimSpace(r.FormValue("prompt"))
+	if prompt == "" {
+		writeError(w, http.StatusBadRequest, "prompt is required")
+		return
+	}
+	opts, err := s.imageOptionsFromForm(r)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	refs, err := uploadedImageRefs(r)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	c, err := s.clientOpts.newClient()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	defer c.Close()
+
+	ctx := r.Context()
+	var resp *responsePayload
+	if len(refs) == 0 {
+		req := opts.generationRequest(s.modelFromForm(r), prompt)
+		resp, err = c.createImageGeneration(ctx, req)
+	} else {
+		req := opts.editRequest(s.modelFromForm(r), prompt, refs, nil)
+		resp, err = c.createImageEdit(ctx, req)
+	}
+	if err != nil {
+		writeError(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	saved, err := saveImagesFromResponse(ctx, c.httpClient, resp, s.saveDir)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"images": s.publicImageURLs(saved),
+		"saved":  saved,
+		"text":   strings.TrimSpace(resp.OutputText),
+	})
+}
+
+func (s *webUIServer) handleBalance(w http.ResponseWriter, r *http.Request) {
+	c, err := s.clientOpts.newClient()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	defer c.Close()
+	usage, err := c.getTokenUsage(r.Context())
+	if err != nil {
+		writeError(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, formatWebUsage(usage))
+}
+
+func (s *webUIServer) handleRechargeInfo(w http.ResponseWriter, r *http.Request) {
+	c, err := s.clientOpts.newClient()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	defer c.Close()
+	info, err := c.getRechargeInfo(r.Context())
+	if err != nil {
+		writeError(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	sort.SliceStable(info.Plans, func(i, j int) bool {
+		if info.Plans[i].SortOrder != info.Plans[j].SortOrder {
+			return info.Plans[i].SortOrder < info.Plans[j].SortOrder
+		}
+		return info.Plans[i].ID < info.Plans[j].ID
+	})
+	writeJSON(w, http.StatusOK, info)
+}
+
+func (s *webUIServer) handleRechargePay(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	var req struct {
+		Amount        float64 `json:"amount"`
+		PlanID        int     `json:"plan_id"`
+		PaymentMethod string  `json:"payment_method"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if req.Amount <= 0 && req.PlanID <= 0 {
+		writeError(w, http.StatusBadRequest, "amount or plan_id is required")
+		return
+	}
+	if req.Amount > 0 && req.PlanID > 0 {
+		writeError(w, http.StatusBadRequest, "amount and plan_id cannot both be set")
+		return
+	}
+	if strings.TrimSpace(req.PaymentMethod) == "" {
+		req.PaymentMethod = defaultPaymentMethod
+	}
+	c, err := s.clientOpts.newClient()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	defer c.Close()
+	var payment *paymentData
+	if req.Amount > 0 {
+		payment, err = c.createRechargePayment(r.Context(), req.Amount, req.PaymentMethod)
+	} else {
+		payment, err = c.createSubscriptionPayment(r.Context(), req.PlanID, req.PaymentMethod)
+	}
+	if err != nil {
+		writeError(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{
+		"trade_no": payment.TradeNo,
+		"url":      payment.ScanCodeURL,
+		"qr":       "/api/qr?data=" + url.QueryEscape(payment.ScanCodeURL),
+	})
+}
+
+func (s *webUIServer) handleQR(w http.ResponseWriter, r *http.Request) {
+	value := strings.TrimSpace(r.URL.Query().Get("data"))
+	if value == "" {
+		writeError(w, http.StatusBadRequest, "data is required")
+		return
+	}
+	png, err := qrcodePNG(value, 256)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	w.Header().Set("Content-Type", "image/png")
+	_, _ = w.Write(png)
+}
+
+func (s *webUIServer) modelFromForm(r *http.Request) string {
+	if model := strings.TrimSpace(r.FormValue("image_model")); model != "" {
+		return model
+	}
+	return s.defaults.ImageModel
+}
+
+func (s *webUIServer) imageOptionsFromForm(r *http.Request) (imageOptions, error) {
+	size := formDefault(r, "image_size", s.defaults.ImageSize)
+	quality := formDefault(r, "image_quality", s.defaults.ImageQuality)
+	outputFormat := formDefault(r, "image_output_format", s.defaults.OutputFormat)
+	background := formDefault(r, "image_background", s.defaults.Background)
+	moderation := formDefault(r, "image_moderation", s.defaults.Moderation)
+	action := "auto"
+	count, err := formInt(r, "image_count", s.defaults.ImageCount)
+	if err != nil {
+		return imageOptions{}, err
+	}
+	compression, err := formInt(r, "image_output_compression", s.defaults.OutputCompression)
+	if err != nil {
+		return imageOptions{}, err
+	}
+	opts := imageOptions{
+		size:              &size,
+		quality:           &quality,
+		count:             &count,
+		outputFormat:      &outputFormat,
+		outputCompression: &compression,
+		background:        &background,
+		moderation:        &moderation,
+		action:            &action,
+	}
+	return opts, opts.validate()
+}
+
+func uploadedImageRefs(r *http.Request) ([]imageRef, error) {
+	if r.MultipartForm == nil || r.MultipartForm.File == nil {
+		return nil, nil
+	}
+	files := r.MultipartForm.File["images"]
+	if len(files) > 16 {
+		return nil, fmt.Errorf("too many image inputs: got %d, expected at most 16", len(files))
+	}
+	refs := make([]imageRef, 0, len(files))
+	for _, header := range files {
+		file, err := header.Open()
+		if err != nil {
+			return nil, err
+		}
+		data, readErr := io.ReadAll(file)
+		closeErr := file.Close()
+		if readErr != nil {
+			return nil, readErr
+		}
+		if closeErr != nil {
+			return nil, closeErr
+		}
+		mediaType := header.Header.Get("Content-Type")
+		if mediaType == "" {
+			mediaType = mime.TypeByExtension(filepath.Ext(header.Filename))
+		}
+		if mediaType == "" {
+			mediaType = http.DetectContentType(data)
+		}
+		if !strings.HasPrefix(mediaType, "image/") {
+			return nil, fmt.Errorf("%s is not an image", header.Filename)
+		}
+		refs = append(refs, imageRef{ImageURL: "data:" + mediaType + ";base64," + base64.StdEncoding.EncodeToString(data)})
+	}
+	return refs, nil
+}
+
+func (s *webUIServer) publicImageURLs(saved []string) []string {
+	urls := make([]string, 0, len(saved))
+	for _, p := range saved {
+		rel, err := filepath.Rel(s.saveDir, p)
+		if err != nil || strings.HasPrefix(rel, "..") || filepath.IsAbs(rel) {
+			continue
+		}
+		urls = append(urls, "/outputs/"+path.Clean(filepath.ToSlash(rel)))
+	}
+	return urls
+}
+
+func formatWebUsage(usage *tokenUsage) map[string]any {
+	subs := make([]map[string]any, 0, len(usage.Subscriptions))
+	for _, item := range usage.Subscriptions {
+		sub := item.Subscription
+		subs = append(subs, map[string]any{
+			"status":    sub.Status,
+			"available": formatQuotaAmount(sub.AmountTotal - sub.AmountUsed),
+			"used":      formatQuotaAmount(sub.AmountUsed),
+			"start":     formatTime(sub.StartTime),
+			"end":       formatTime(sub.EndTime),
+		})
+	}
+	return map[string]any{
+		"name":                 usage.Name,
+		"total_available":      usage.TotalAvailable,
+		"total_available_text": formatQuotaAmount(usage.TotalAvailable),
+		"total_used":           usage.TotalUsed,
+		"total_used_text":      formatQuotaAmount(usage.TotalUsed),
+		"subscriptions":        subs,
+	}
+}
+
+func formDefault(r *http.Request, name, fallback string) string {
+	if value := strings.TrimSpace(r.FormValue(name)); value != "" {
+		return value
+	}
+	return fallback
+}
+
+func formInt(r *http.Request, name string, fallback int) (int, error) {
+	value := strings.TrimSpace(r.FormValue(name))
+	if value == "" {
+		return fallback, nil
+	}
+	parsed, err := strconv.Atoi(value)
+	if err != nil {
+		return 0, fmt.Errorf("invalid %s: %w", name, err)
+	}
+	return parsed, nil
+}
+
+func stringValue(value *string) string {
+	if value == nil {
+		return ""
+	}
+	return *value
+}
+
+func intValue(value *int, fallback int) int {
+	if value == nil {
+		return fallback
+	}
+	return *value
+}
+
+func writeJSON(w http.ResponseWriter, status int, value any) {
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(value)
+}
+
+func writeError(w http.ResponseWriter, status int, message string) {
+	if strings.TrimSpace(message) == "" {
+		message = http.StatusText(status)
+	}
+	writeJSON(w, status, map[string]string{"error": message})
+}

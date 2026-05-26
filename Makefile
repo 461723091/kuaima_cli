@@ -8,6 +8,9 @@ build_skill:
 run:
 	dist/kuaima_cli.exe
 
+run_web:
+	dist/kuaima_cli.exe webui
+
 test:
 	dist/kuaima_cli.exe -stream false 你是什么模型
 
