@@ -26,6 +26,8 @@ const SIZE_LOOKUP = Object.entries(SIZE_MATRIX).reduce((lookup, [resolution, rat
 }, {});
 
 let selectedPayment = null;
+let selectedImages = [];
+const imagePreviewURLs = new WeakMap();
 
 function esc(value) {
   return String(value == null ? "" : value).replace(/[&<>"']/g, (char) => ({
@@ -52,6 +54,9 @@ function updateSize() {
   const size = SIZE_MATRIX[resolution][ratio];
   $('[name="image_size"]').value = size;
   $("#sizePreview").textContent = size;
+  document.querySelectorAll("[data-ratio]").forEach((button) => {
+    button.classList.toggle("active", button.dataset.ratio === ratio);
+  });
 }
 
 function applySize(size) {
@@ -63,6 +68,67 @@ function applySize(size) {
   $("#ratioSelect").value = match.ratio;
   $("#resolutionSelect").value = match.resolution;
   updateSize();
+}
+
+function syncImageInput() {
+  const input = $('[name="images"]');
+  if (typeof DataTransfer === "undefined") {
+    return;
+  }
+  const transfer = new DataTransfer();
+  selectedImages.forEach((file) => transfer.items.add(file));
+  input.files = transfer.files;
+}
+
+function renderImagePreviews() {
+  const list = $("#imagePreviewList");
+  if (selectedImages.length === 0) {
+    list.className = "image-preview-list empty";
+    list.textContent = "上传参考图后可预览、删除和调整顺序";
+    return;
+  }
+
+  list.className = "image-preview-list";
+  list.innerHTML = selectedImages.map((file, index) => (
+    '<div class="image-preview-item">' +
+      '<img src="' + esc(imagePreviewURL(file)) + '" alt="' + esc(file.name) + '">' +
+      '<div class="image-preview-meta"><strong>' + esc(file.name) + '</strong><span>' +
+      esc(formatFileSize(file.size)) + '</span></div>' +
+      '<div class="image-preview-actions">' +
+        '<button type="button" title="上移" data-image-action="up" data-image-index="' + index + '">↑</button>' +
+        '<button type="button" title="下移" data-image-action="down" data-image-index="' + index + '">↓</button>' +
+        '<button type="button" title="删除" data-image-action="remove" data-image-index="' + index + '">×</button>' +
+      '</div>' +
+    '</div>'
+  )).join("");
+}
+
+function imagePreviewURL(file) {
+  if (!imagePreviewURLs.has(file)) {
+    imagePreviewURLs.set(file, URL.createObjectURL(file));
+  }
+  return imagePreviewURLs.get(file);
+}
+
+function formatFileSize(bytes) {
+  const size = Number(bytes);
+  if (!Number.isFinite(size)) {
+    return "";
+  }
+  if (size < 1024 * 1024) {
+    return Math.max(1, Math.round(size / 1024)) + " KB";
+  }
+  return (size / 1024 / 1024).toFixed(1) + " MB";
+}
+
+function moveImage(from, to) {
+  if (to < 0 || to >= selectedImages.length) {
+    return;
+  }
+  const [file] = selectedImages.splice(from, 1);
+  selectedImages.splice(to, 0, file);
+  syncImageInput();
+  renderImagePreviews();
 }
 
 function formatAmount(value) {
@@ -212,6 +278,23 @@ async function initConfig() {
 
 $("#ratioSelect").onchange = updateSize;
 $("#resolutionSelect").onchange = updateSize;
+document.querySelectorAll("[data-ratio]").forEach((button) => {
+  button.onclick = () => {
+    $("#ratioSelect").value = button.dataset.ratio;
+    updateSize();
+  };
+});
+
+$('[name="images"]').onclick = (event) => {
+  event.target.value = "";
+  setTimeout(syncImageInput, 1000);
+};
+
+$('[name="images"]').onchange = (event) => {
+  selectedImages = selectedImages.concat(Array.from(event.target.files || []));
+  syncImageInput();
+  renderImagePreviews();
+};
 
 $("#genForm").onsubmit = async (event) => {
   event.preventDefault();
@@ -246,6 +329,22 @@ $("#amountPay").onclick = async () => {
 };
 
 document.addEventListener("click", async (event) => {
+  const imageButton = event.target.closest("[data-image-action]");
+  if (imageButton) {
+    const index = Number(imageButton.dataset.imageIndex);
+    const action = imageButton.dataset.imageAction;
+    if (action === "remove") {
+      selectedImages.splice(index, 1);
+      syncImageInput();
+      renderImagePreviews();
+    } else if (action === "up") {
+      moveImage(index, index - 1);
+    } else if (action === "down") {
+      moveImage(index, index + 1);
+    }
+    return;
+  }
+
   const amountButton = event.target.closest("[data-amount]");
   const planButton = event.target.closest("[data-plan-id]");
   if (!amountButton && !planButton) {

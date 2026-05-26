@@ -65,17 +65,23 @@
             <p class="eyebrow">Prompt</p>
             <h2>生成参数</h2>
           </div>
-          <button class="btn primary" type="submit">生成图片</button>
         </div>
 
-        <div class="field">
+        <div class="field prompt-field">
           <label>提示词</label>
-          <textarea name="prompt" required placeholder="描述你想生成或编辑的图片，例如：未来感产品海报，金属材质，柔和棚拍灯光，高级科技风。"></textarea>
-        </div>
-
-        <div class="field">
-          <label>参考图，可多选</label>
-          <input name="images" type="file" accept="image/*" multiple>
+          <div class="prompt-composer">
+            <textarea name="prompt" required placeholder="描述你想生成或编辑的图片，例如：未来感产品海报，金属材质，柔和棚拍灯光，高级科技风。"></textarea>
+            <div class="composer-actions">
+              <label class="upload-button" for="imageInput" title="上传参考图">
+                <span class="upload-icon">+</span>
+                <span>参考图</span>
+              </label>
+              <input id="imageInput" class="sr-only" name="images" type="file" accept="image/*" multiple>
+              <span id="genStatus" class="status"></span>
+              <button class="btn primary" type="submit">生成图片</button>
+            </div>
+          </div>
+          <div id="imagePreviewList" class="image-preview-list empty">上传参考图后可预览、删除和调整顺序</div>
         </div>
 
         <div class="row">
@@ -94,39 +100,54 @@
         </div>
 
         <input name="image_size" type="hidden" value="1024x1024">
-        <div class="row">
-          <div class="field">
-            <label>比例</label>
-            <select id="ratioSelect">
-              <option value="1:1">1:1</option>
-              <option value="2:3">2:3</option>
-              <option value="3:2">3:2</option>
+        <details class="advanced-options">
+          <summary>
+            <span>高级选项</span>
+            <span id="sizePreview">1024x1024</span>
+          </summary>
+          <div class="row">
+            <div class="field">
+              <label>比例</label>
+              <select id="ratioSelect" class="sr-only" aria-label="比例">
+                <option value="1:1">1:1</option>
+                <option value="2:3">2:3</option>
+                <option value="3:2">3:2</option>
+              </select>
+              <div class="ratio-options" role="group" aria-label="比例">
+                <button class="ratio-option active" type="button" data-ratio="1:1">
+                  <span class="ratio-icon square"></span>
+                  <span><b>1:1</b><small>方形</small></span>
+                </button>
+                <button class="ratio-option" type="button" data-ratio="2:3">
+                  <span class="ratio-icon portrait"></span>
+                  <span><b>2:3</b><small>竖版</small></span>
+                </button>
+                <button class="ratio-option" type="button" data-ratio="3:2">
+                  <span class="ratio-icon landscape"></span>
+                  <span><b>3:2</b><small>横版</small></span>
+                </button>
+              </div>
+            </div>
+            <div class="field">
+              <label>分辨率</label>
+              <select id="resolutionSelect">
+                <option value="1k">1k</option>
+                <option value="2k">2k</option>
+                <option value="4k">4k</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="field compact">
+            <label>质量</label>
+            <select name="image_quality">
+              <option value="auto">自动</option>
+              <option value="low">快速</option>
+              <option value="medium">中等</option>
+              <option value="high">高</option>
             </select>
           </div>
-          <div class="field">
-            <label>分辨率</label>
-            <select id="resolutionSelect">
-              <option value="1k">1k</option>
-              <option value="2k">2k</option>
-              <option value="4k">4k</option>
-            </select>
-          </div>
-        </div>
-
-        <div class="field compact">
-          <label>质量</label>
-          <select name="image_quality">
-            <option>auto</option>
-            <option>low</option>
-            <option>medium</option>
-            <option>high</option>
-          </select>
-        </div>
-
-        <div class="form-footer">
-          <span id="sizePreview">1024x1024</span>
-          <span id="genStatus" class="status"></span>
-        </div>
+        </details>
       </form>
 
       <section class="panel results">
