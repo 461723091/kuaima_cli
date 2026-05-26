@@ -25,8 +25,12 @@ const SIZE_LOOKUP = Object.entries(SIZE_MATRIX).reduce((lookup, [resolution, rat
   return lookup;
 }, {});
 
+const HISTORY_KEY = "kuaima.webui.imageHistory.v1";
+const HISTORY_LIMIT = 50;
+
 let selectedPayment = null;
 let selectedImages = [];
+let draggedImageIndex = -1;
 const imagePreviewURLs = new WeakMap();
 
 function esc(value) {
@@ -80,29 +84,6 @@ function syncImageInput() {
   input.files = transfer.files;
 }
 
-function renderImagePreviews() {
-  const list = $("#imagePreviewList");
-  if (selectedImages.length === 0) {
-    list.className = "image-preview-list empty";
-    list.textContent = "上传参考图后可预览、删除和调整顺序";
-    return;
-  }
-
-  list.className = "image-preview-list";
-  list.innerHTML = selectedImages.map((file, index) => (
-    '<div class="image-preview-item">' +
-      '<img src="' + esc(imagePreviewURL(file)) + '" alt="' + esc(file.name) + '">' +
-      '<div class="image-preview-meta"><strong>' + esc(file.name) + '</strong><span>' +
-      esc(formatFileSize(file.size)) + '</span></div>' +
-      '<div class="image-preview-actions">' +
-        '<button type="button" title="上移" data-image-action="up" data-image-index="' + index + '">↑</button>' +
-        '<button type="button" title="下移" data-image-action="down" data-image-index="' + index + '">↓</button>' +
-        '<button type="button" title="删除" data-image-action="remove" data-image-index="' + index + '">×</button>' +
-      '</div>' +
-    '</div>'
-  )).join("");
-}
-
 function imagePreviewURL(file) {
   if (!imagePreviewURLs.has(file)) {
     imagePreviewURLs.set(file, URL.createObjectURL(file));
@@ -121,8 +102,29 @@ function formatFileSize(bytes) {
   return (size / 1024 / 1024).toFixed(1) + " MB";
 }
 
+function renderImagePreviews() {
+  const list = $("#imagePreviewList");
+  if (selectedImages.length === 0) {
+    list.className = "image-preview-list empty";
+    list.textContent = "上传参考图后可预览，拖动调整顺序";
+    return;
+  }
+
+  list.className = "image-preview-list";
+  list.innerHTML = selectedImages.map((file, index) => (
+    '<div class="image-preview-item" draggable="true" data-image-index="' + index + '">' +
+      '<img src="' + esc(imagePreviewURL(file)) + '" alt="' + esc(file.name) + '">' +
+      '<div class="image-preview-meta"><strong>' + esc(file.name) + '</strong><span>' +
+      esc(formatFileSize(file.size)) + ' · 拖动调整顺序</span></div>' +
+      '<div class="image-preview-actions">' +
+        '<button type="button" title="删除" data-image-action="remove" data-image-index="' + index + '">×</button>' +
+      '</div>' +
+    '</div>'
+  )).join("");
+}
+
 function moveImage(from, to) {
-  if (to < 0 || to >= selectedImages.length) {
+  if (from === to || to < 0 || to >= selectedImages.length) {
     return;
   }
   const [file] = selectedImages.splice(from, 1);
@@ -153,6 +155,15 @@ function formatQuota(value) {
     return "-";
   }
   return Math.round(quota) + " (￥" + (quota / 500000).toFixed(2) + ")";
+}
+
+function qualityLabel(value) {
+  return ({
+    auto: "自动",
+    low: "快速",
+    medium: "中等",
+    high: "高",
+  })[value] || value || "-";
 }
 
 function setBillingOpen(open) {
@@ -265,6 +276,121 @@ function closePaymentModal() {
   $("#paymentModal").hidden = true;
 }
 
+function readHistory() {
+  try {
+    const value = JSON.parse(localStorage.getItem(HISTORY_KEY) || "[]");
+    return Array.isArray(value) ? value : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeHistory(items) {
+  localStorage.setItem(HISTORY_KEY, JSON.stringify(items.slice(0, HISTORY_LIMIT)));
+}
+
+function saveHistory(result) {
+  const form = $("#genForm");
+  const item = {
+    id: String(Date.now()),
+    created_at: new Date().toISOString(),
+    prompt: form.elements.prompt.value,
+    image_model: form.elements.image_model.value,
+    image_count: form.elements.image_count.value,
+    image_quality: form.elements.image_quality.value,
+    ratio: $("#ratioSelect").value,
+    resolution: $("#resolutionSelect").value,
+    image_size: $('[name="image_size"]').value,
+    reference_count: selectedImages.length,
+    images: result.images || [],
+  };
+  writeHistory([item].concat(readHistory()));
+  renderHistory();
+}
+
+function formatHistoryTime(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return "-";
+  }
+  return date.toLocaleString("zh-CN", {
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function renderHistory() {
+  const panel = $("#historyPanel");
+  const history = readHistory();
+  if (history.length === 0) {
+    panel.innerHTML = '<div class="history-empty">暂无历史记录</div>';
+    return;
+  }
+  panel.innerHTML = history.map((item) => (
+    '<article class="history-item" data-history-id="' + esc(item.id) + '">' +
+      '<div class="history-head"><div><strong>' + esc(formatHistoryTime(item.created_at)) +
+      '</strong><p>' + esc(item.prompt || "") + '</p></div>' +
+      '<button class="btn small" type="button" data-history-action="restore" data-history-id="' + esc(item.id) +
+      '">恢复参数</button></div>' +
+      '<div class="history-meta">' + esc(item.image_model || "-") + ' · ' +
+      esc(item.image_size || "-") + ' · ' + esc(qualityLabel(item.image_quality)) +
+      ' · 参考图 ' + esc(item.reference_count || 0) + ' 张</div>' +
+      '<div class="history-images">' + (item.images || []).map((url) => (
+        '<button type="button" data-history-action="use-image" data-image-url="' + esc(url) +
+        '" title="作为参考图"><img src="' + esc(url) + '" alt="历史图片"><span>作为参考图</span></button>'
+      )).join("") + '</div>' +
+    '</article>'
+  )).join("");
+}
+
+function restoreHistory(id) {
+  const item = readHistory().find((entry) => entry.id === id);
+  if (!item) {
+    return;
+  }
+  const form = $("#genForm");
+  form.elements.prompt.value = item.prompt || "";
+  form.elements.image_model.value = item.image_model || form.elements.image_model.value;
+  form.elements.image_count.value = item.image_count || form.elements.image_count.value;
+  form.elements.image_quality.value = item.image_quality || form.elements.image_quality.value;
+  if (item.ratio) {
+    $("#ratioSelect").value = item.ratio;
+  }
+  if (item.resolution) {
+    $("#resolutionSelect").value = item.resolution;
+  }
+  updateSize();
+}
+
+async function addImageURLAsReference(url) {
+  $("#genStatus").textContent = "正在添加历史图片...";
+  $("#genStatus").className = "status";
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error("历史图片读取失败");
+  }
+  const blob = await response.blob();
+  const name = decodeURIComponent(String(url).split("/").pop() || "history-image.png");
+  selectedImages.push(new File([blob], name, { type: blob.type || "image/png" }));
+  syncImageInput();
+  renderImagePreviews();
+  $("#genStatus").textContent = "已添加历史图片";
+}
+
+function showResultView(view) {
+  const isHistory = view === "history";
+  $("#gallery").hidden = isHistory;
+  $("#historyPanel").hidden = !isHistory;
+  document.querySelectorAll("[data-result-view]").forEach((button) => {
+    button.classList.toggle("active", button.dataset.resultView === view);
+  });
+  if (isHistory) {
+    renderHistory();
+  }
+}
+
 async function initConfig() {
   const config = await api("/api/config");
   for (const [key, value] of Object.entries(config)) {
@@ -278,6 +404,7 @@ async function initConfig() {
 
 $("#ratioSelect").onchange = updateSize;
 $("#resolutionSelect").onchange = updateSize;
+
 document.querySelectorAll("[data-ratio]").forEach((button) => {
   button.onclick = () => {
     $("#ratioSelect").value = button.dataset.ratio;
@@ -299,6 +426,7 @@ $('[name="images"]').onchange = (event) => {
 $("#genForm").onsubmit = async (event) => {
   event.preventDefault();
   updateSize();
+  syncImageInput();
   $("#genStatus").textContent = "生成中...";
   $("#genStatus").className = "status";
   try {
@@ -308,9 +436,14 @@ $("#genForm").onsubmit = async (event) => {
     });
     $("#gallery").classList.remove("empty");
     $("#gallery").innerHTML = result.images.map((url) => (
-      '<a href="' + esc(url) + '" target="_blank"><img src="' + esc(url) + '" alt="生成结果"></a>'
+      '<div class="gallery-item"><a href="' + esc(url) +
+      '" target="_blank"><img src="' + esc(url) +
+      '" alt="生成结果"></a><button type="button" data-history-action="use-image" data-image-url="' +
+      esc(url) + '">作为参考图</button></div>'
     )).join("") || '<div class="status">没有返回图片</div>';
     $("#genStatus").textContent = "已保存 " + result.saved.length + " 张";
+    saveHistory(result);
+    showResultView("gallery");
     loadBalance();
   } catch (error) {
     $("#genStatus").textContent = error.message;
@@ -328,19 +461,70 @@ $("#amountPay").onclick = async () => {
   }
 };
 
+document.addEventListener("dragstart", (event) => {
+  const item = event.target.closest(".image-preview-item");
+  if (!item) {
+    return;
+  }
+  draggedImageIndex = Number(item.dataset.imageIndex);
+  item.classList.add("dragging");
+  event.dataTransfer.effectAllowed = "move";
+});
+
+document.addEventListener("dragend", (event) => {
+  const item = event.target.closest(".image-preview-item");
+  if (item) {
+    item.classList.remove("dragging");
+  }
+  draggedImageIndex = -1;
+});
+
+document.addEventListener("dragover", (event) => {
+  if (event.target.closest(".image-preview-item")) {
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "move";
+  }
+});
+
+document.addEventListener("drop", (event) => {
+  const item = event.target.closest(".image-preview-item");
+  if (!item || draggedImageIndex < 0) {
+    return;
+  }
+  event.preventDefault();
+  moveImage(draggedImageIndex, Number(item.dataset.imageIndex));
+});
+
 document.addEventListener("click", async (event) => {
   const imageButton = event.target.closest("[data-image-action]");
   if (imageButton) {
     const index = Number(imageButton.dataset.imageIndex);
-    const action = imageButton.dataset.imageAction;
-    if (action === "remove") {
+    if (imageButton.dataset.imageAction === "remove") {
       selectedImages.splice(index, 1);
       syncImageInput();
       renderImagePreviews();
-    } else if (action === "up") {
-      moveImage(index, index - 1);
-    } else if (action === "down") {
-      moveImage(index, index + 1);
+    }
+    return;
+  }
+
+  const resultTab = event.target.closest("[data-result-view]");
+  if (resultTab) {
+    showResultView(resultTab.dataset.resultView);
+    return;
+  }
+
+  const historyButton = event.target.closest("[data-history-action]");
+  if (historyButton) {
+    const action = historyButton.dataset.historyAction;
+    try {
+      if (action === "restore") {
+        restoreHistory(historyButton.dataset.historyId);
+      } else if (action === "use-image") {
+        await addImageURLAsReference(historyButton.dataset.imageUrl);
+      }
+    } catch (error) {
+      $("#genStatus").textContent = error.message;
+      $("#genStatus").className = "status error";
     }
     return;
   }
@@ -382,6 +566,7 @@ $("#paymentModal").onclick = (event) => {
     closePaymentModal();
   }
 };
+
 document.addEventListener("keydown", (event) => {
   if (event.key === "Escape" && !$("#paymentModal").hidden) {
     closePaymentModal();
@@ -392,6 +577,7 @@ initConfig().catch((error) => {
   $("#genStatus").textContent = error.message;
   $("#genStatus").className = "status error";
 });
+renderHistory();
 loadBalance();
 loadRechargeInfo();
 loadAccountLink();
