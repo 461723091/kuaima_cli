@@ -635,9 +635,10 @@ async function addHistoryReferenceAsImage(id, index) {
 
 function renderGalleryImages(images) {
   const unique = Array.from(new Set(images || []));
-  setResultsVisible(unique.length > 0);
+  setResultsVisible(true);
   if (unique.length === 0) {
-    $("#gallery").innerHTML = "";
+    $("#gallery").classList.add("empty");
+    $("#gallery").innerHTML = '<div class="status">没有返回图片</div>';
     return;
   }
   $("#gallery").classList.remove("empty");
@@ -800,7 +801,9 @@ async function initBrowserSaveDirectory() {
     if (browserSaveDirHandle) {
       const granted = browserSaveDirHandle.queryPermission &&
         (await browserSaveDirHandle.queryPermission({ mode: "readwrite" })) === "granted";
-      updateBrowserSaveStatus(granted ? "已选择：" + browserSaveDirHandle.name : "点击选择文件夹后保存到本地目录");
+      updateBrowserSaveStatus(granted
+        ? "已选择：" + browserSaveDirHandle.name
+        : "已选择：" + browserSaveDirHandle.name + "，生成时会重新请求授权");
     } else {
       updateBrowserSaveStatus("未选择时仅保存到 WebUI 默认输出目录");
     }
@@ -826,6 +829,21 @@ async function chooseOutputDir() {
       return;
     }
     updateBrowserSaveStatus(error.message, true);
+  }
+}
+
+async function openDefaultOutputDir() {
+  const status = $("#saveDirStatus");
+  status.textContent = "正在打开默认输出目录...";
+  status.className = "status";
+  try {
+    await api("/api/output/open", { method: "POST" });
+    status.textContent = browserSaveDirHandle
+      ? "已选择：" + browserSaveDirHandle.name
+      : "已打开默认输出目录";
+  } catch (error) {
+    status.textContent = error.message;
+    status.className = "status error";
   }
 }
 
@@ -1135,6 +1153,7 @@ $("#toggleHistory").onclick = () => {
   $("#toggleHistory").textContent = collapsed ? "›" : "‹";
 };
 $("#chooseOutputDir").onclick = chooseOutputDir;
+$("#openDefaultOutputDir").onclick = openDefaultOutputDir;
 $("#closePaymentModal").onclick = closePaymentModal;
 $("#closeImageModal").onclick = () => {
   $("#imageModal").hidden = true;

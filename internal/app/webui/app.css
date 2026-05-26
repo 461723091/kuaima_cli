@@ -697,7 +697,7 @@ select {
 
 .output-dir-row {
   display: grid;
-  grid-template-columns: auto;
+  grid-template-columns: auto auto;
   gap: 8px;
   align-items: center;
   justify-content: start;

@@ -13,6 +13,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"os"
 	"path"
 	"path/filepath"
 	"sort"
@@ -136,6 +137,7 @@ func (s *webUIServer) routes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/recharge/info", s.handleRechargeInfo)
 	mux.HandleFunc("/api/recharge/pay", s.handleRechargePay)
 	mux.HandleFunc("/api/qr", s.handleQR)
+	mux.HandleFunc("/api/output/open", s.handleOpenOutputDir)
 	mux.HandleFunc("/outputs/", s.handleOutputFile)
 	assets, err := fs.Sub(webUIAssets, "webui")
 	if err != nil {
@@ -441,6 +443,23 @@ func (s *webUIServer) handleAccountLink(w http.ResponseWriter, r *http.Request) 
 
 func (s *webUIServer) handleOutputFile(w http.ResponseWriter, r *http.Request) {
 	http.StripPrefix("/outputs/", http.FileServer(http.Dir(s.saveDirectory()))).ServeHTTP(w, r)
+}
+
+func (s *webUIServer) handleOpenOutputDir(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	dir := s.saveDirectory()
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if err := openFile(dir); err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"save_dir": dir})
 }
 
 func (s *webUIServer) handleRechargeInfo(w http.ResponseWriter, r *http.Request) {
