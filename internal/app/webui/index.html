@@ -61,6 +61,17 @@
     </section>
 
     <section class="layout">
+      <aside id="historySidebar" class="panel history-sidebar">
+        <div class="panel-head">
+          <div>
+            <p class="eyebrow">History</p>
+            <h2>历史记录</h2>
+          </div>
+          <button id="toggleHistory" class="icon-btn" type="button" aria-label="收起历史记录" aria-expanded="true">‹</button>
+        </div>
+        <div id="historyPanel" class="history-panel"></div>
+      </aside>
+
       <form id="genForm" class="panel generator">
         <div class="panel-head">
           <div>
@@ -158,21 +169,24 @@
             </select>
           </div>
         </details>
+
+        <div class="output-dir-box">
+          <label>图片生成结果目录</label>
+          <div class="output-dir-row">
+            <button id="chooseOutputDir" class="btn small" type="button">选择文件夹</button>
+          </div>
+          <div id="saveDirStatus" class="status"></div>
+        </div>
       </form>
 
-      <section class="panel results">
+      <section id="resultsPanel" class="panel results" hidden>
         <div class="panel-head">
           <div>
             <p class="eyebrow">Output</p>
             <h2>结果预览</h2>
           </div>
-          <div class="result-tabs">
-            <button class="active" type="button" data-result-view="gallery">结果</button>
-            <button type="button" data-result-view="history">历史</button>
-          </div>
         </div>
-        <div id="gallery" class="gallery empty">生成后的图片会显示在这里</div>
-        <div id="historyPanel" class="history-panel" hidden></div>
+        <div id="gallery" class="gallery"></div>
       </section>
     </section>
   </main>
@@ -185,6 +199,20 @@
       <div id="paymentModalBody" class="modal-body">
         <span class="status">正在创建支付订单...</span>
       </div>
+    </div>
+  </div>
+
+  <div id="imageModal" class="modal-backdrop image-modal-backdrop" hidden>
+    <div class="image-modal" role="dialog" aria-modal="true" aria-labelledby="imagePreviewTitle">
+      <button id="closeImageModal" class="modal-close" type="button" aria-label="关闭">×</button>
+      <div class="image-modal-head">
+        <div>
+          <p class="eyebrow">Preview</p>
+          <h2 id="imagePreviewTitle">图片预览</h2>
+        </div>
+        <span id="imageModalSize" class="image-size-label">-</span>
+      </div>
+      <img id="imageModalImg" alt="生成结果预览">
     </div>
   </div>
 

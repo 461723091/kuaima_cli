@@ -18,6 +18,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -27,6 +28,7 @@ var webUIAssets embed.FS
 type webUIServer struct {
 	clientOpts clientOptions
 	defaults   webUIDefaults
+	mu         sync.RWMutex
 	saveDir    string
 }
 
@@ -72,6 +74,10 @@ func runWebUIWithOptions(args []string, runtimeOpts webUIRuntimeOptions) error {
 	if strings.TrimSpace(*saveDir) == "" {
 		return errors.New("webui requires a non-empty -save-images directory")
 	}
+	absSaveDir, err := filepath.Abs(strings.TrimSpace(*saveDir))
+	if err != nil {
+		return err
+	}
 
 	ln, err := net.Listen("tcp", strings.TrimSpace(*addr))
 	if err != nil {
@@ -89,7 +95,7 @@ func runWebUIWithOptions(args []string, runtimeOpts webUIRuntimeOptions) error {
 			Background:        stringValue(imageOpts.background),
 			Moderation:        stringValue(imageOpts.moderation),
 		},
-		saveDir: strings.TrimSpace(*saveDir),
+		saveDir: absSaveDir,
 	}
 	mux := http.NewServeMux()
 	ui.routes(mux)
@@ -130,9 +136,7 @@ func (s *webUIServer) routes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/recharge/info", s.handleRechargeInfo)
 	mux.HandleFunc("/api/recharge/pay", s.handleRechargePay)
 	mux.HandleFunc("/api/qr", s.handleQR)
-	if s.saveDir != "" {
-		mux.Handle("/outputs/", http.StripPrefix("/outputs/", http.FileServer(http.Dir(s.saveDir))))
-	}
+	mux.HandleFunc("/outputs/", s.handleOutputFile)
 	assets, err := fs.Sub(webUIAssets, "webui")
 	if err != nil {
 		panic(err)
@@ -141,7 +145,18 @@ func (s *webUIServer) routes(mux *http.ServeMux) {
 }
 
 func (s *webUIServer) handleConfig(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, s.defaults)
+	data, err := json.Marshal(s.defaults)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	var value map[string]any
+	if err := json.Unmarshal(data, &value); err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	value["save_dir"] = s.saveDirectory()
+	writeJSON(w, http.StatusOK, value)
 }
 
 func (s *webUIServer) handleGenerate(w http.ResponseWriter, r *http.Request) {
@@ -177,15 +192,16 @@ func (s *webUIServer) handleGenerate(w http.ResponseWriter, r *http.Request) {
 	defer c.Close()
 
 	ctx := r.Context()
+	saveDir := s.saveDirectory()
 	var resp *responsePayload
 	if webUIImageEndpoint(r) == "response" {
-		saved, text, err := s.handleGenerateWithResponses(ctx, c, opts, s.modelFromForm(r), prompt, refs)
+		saved, text, err := s.handleGenerateWithResponses(ctx, c, opts, s.modelFromForm(r), prompt, refs, saveDir)
 		if err != nil {
 			writeError(w, http.StatusBadGateway, err.Error())
 			return
 		}
 		writeJSON(w, http.StatusOK, map[string]any{
-			"images": s.publicImageURLs(saved),
+			"images": s.publicImageURLs(saved, saveDir),
 			"saved":  saved,
 			"text":   text,
 		})
@@ -202,13 +218,13 @@ func (s *webUIServer) handleGenerate(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadGateway, err.Error())
 		return
 	}
-	saved, err := saveImagesFromResponse(ctx, c.httpClient, resp, s.saveDir)
+	saved, err := saveImagesFromResponse(ctx, c.httpClient, resp, saveDir)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
-		"images": s.publicImageURLs(saved),
+		"images": s.publicImageURLs(saved, saveDir),
 		"saved":  saved,
 		"text":   strings.TrimSpace(resp.OutputText),
 	})
@@ -249,7 +265,8 @@ func (s *webUIServer) handleGenerateStream(w http.ResponseWriter, r *http.Reques
 	stream.send("status", map[string]string{"message": "已连接，正在请求生成接口..."})
 
 	ctx := r.Context()
-	saver := newResponseImageSaver(ctx, c.httpClient, s.saveDir)
+	saveDir := s.saveDirectory()
+	saver := newResponseImageSaver(ctx, c.httpClient, saveDir)
 	var saved []string
 	saveAndSend := func(candidate imageCandidate) error {
 		path, err := saver.saveCandidate(candidate)
@@ -260,7 +277,7 @@ func (s *webUIServer) handleGenerateStream(w http.ResponseWriter, r *http.Reques
 			return nil
 		}
 		saved = append(saved, path)
-		urls := s.publicImageURLs([]string{path})
+		urls := s.publicImageURLs([]string{path}, saveDir)
 		if len(urls) > 0 {
 			stream.send("image", map[string]string{"url": urls[0]})
 		}
@@ -289,7 +306,7 @@ func (s *webUIServer) handleGenerateStream(w http.ResponseWriter, r *http.Reques
 		}
 		for _, path := range more {
 			saved = append(saved, path)
-			urls := s.publicImageURLs([]string{path})
+			urls := s.publicImageURLs([]string{path}, saveDir)
 			if len(urls) > 0 {
 				stream.send("image", map[string]string{"url": urls[0]})
 			}
@@ -300,7 +317,7 @@ func (s *webUIServer) handleGenerateStream(w http.ResponseWriter, r *http.Reques
 		text = strings.TrimSpace(resp.OutputText)
 	}
 	stream.send("done", map[string]any{
-		"images": s.publicImageURLs(saved),
+		"images": s.publicImageURLs(saved, saveDir),
 		"saved":  saved,
 		"text":   text,
 	})
@@ -351,7 +368,7 @@ func (s *webUIServer) handleGenerateWithResponsesStream(ctx context.Context, c *
 	return &combined, nil
 }
 
-func (s *webUIServer) handleGenerateWithResponses(ctx context.Context, c *client, opts imageOptions, imageModel, prompt string, refs []imageRef) ([]string, string, error) {
+func (s *webUIServer) handleGenerateWithResponses(ctx context.Context, c *client, opts imageOptions, imageModel, prompt string, refs []imageRef, saveDir string) ([]string, string, error) {
 	content := []inputContent{{
 		Type: "input_text",
 		Text: prompt,
@@ -381,7 +398,7 @@ func (s *webUIServer) handleGenerateWithResponses(ctx context.Context, c *client
 		if err != nil {
 			return saved, strings.Join(texts, "\n\n"), err
 		}
-		more, err := saveImagesFromResponse(ctx, c.httpClient, resp, s.saveDir)
+		more, err := saveImagesFromResponse(ctx, c.httpClient, resp, saveDir)
 		if err != nil {
 			return saved, strings.Join(texts, "\n\n"), err
 		}
@@ -420,6 +437,10 @@ func (s *webUIServer) handleAccountLink(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"url": rawURL})
+}
+
+func (s *webUIServer) handleOutputFile(w http.ResponseWriter, r *http.Request) {
+	http.StripPrefix("/outputs/", http.FileServer(http.Dir(s.saveDirectory()))).ServeHTTP(w, r)
 }
 
 func (s *webUIServer) handleRechargeInfo(w http.ResponseWriter, r *http.Request) {
@@ -587,10 +608,16 @@ func uploadedImageRefs(r *http.Request) ([]imageRef, error) {
 	return refs, nil
 }
 
-func (s *webUIServer) publicImageURLs(saved []string) []string {
+func (s *webUIServer) saveDirectory() string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.saveDir
+}
+
+func (s *webUIServer) publicImageURLs(saved []string, saveDir string) []string {
 	urls := make([]string, 0, len(saved))
 	for _, p := range saved {
-		rel, err := filepath.Rel(s.saveDir, p)
+		rel, err := filepath.Rel(saveDir, p)
 		if err != nil || strings.HasPrefix(rel, "..") || filepath.IsAbs(rel) {
 			continue
 		}

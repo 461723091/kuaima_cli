@@ -25,18 +25,26 @@ const SIZE_LOOKUP = Object.entries(SIZE_MATRIX).reduce((lookup, [resolution, rat
   return lookup;
 }, {});
 
-const HISTORY_KEY = "kuaima.webui.imageHistory.v1";
 const HISTORY_DB_NAME = "kuaima.webui.history.v1";
 const HISTORY_STORE = "items";
 const HISTORY_LIMIT = 50;
 const SETTINGS_KEY = "kuaima.webui.settings.v1";
+const BROWSER_SAVE_DB_NAME = "kuaima.webui.browserSave.v1";
+const BROWSER_SAVE_STORE = "handles";
+const BROWSER_SAVE_HANDLE_ID = "outputDirectory";
 
 let selectedPayment = null;
 let selectedImages = [];
 let draggedImageIndex = -1;
 let historyDBPromise = null;
+let browserSaveDBPromise = null;
+let browserSaveDirHandle = null;
 let activeGenerationController = null;
 const imagePreviewURLs = new WeakMap();
+
+function setResultsVisible(visible) {
+  $("#resultsPanel").hidden = !visible;
+}
 
 function esc(value) {
   return String(value == null ? "" : value).replace(/[&<>"']/g, (char) => ({
@@ -325,14 +333,8 @@ async function loadBalance() {
 }
 
 async function loadAccountLink() {
-  try {
-    const result = await api("/api/account/link");
-    $("#usageDetailLink").href = result.url || "#";
-  } catch (error) {
-    $("#usageDetailLink").removeAttribute("href");
-    $("#usageDetailLink").textContent = "使用详情链接获取失败";
-    $("#usageDetailLink").classList.add("error");
-  }
+  const result = await api("/api/account/link");
+  return result.url || "";
 }
 
 function renderAmountOptions(info) {
@@ -440,19 +442,10 @@ function requestResult(request) {
   });
 }
 
-async function readLegacyHistory() {
-  try {
-    const value = JSON.parse(localStorage.getItem(HISTORY_KEY) || "[]");
-    return Array.isArray(value) ? value : [];
-  } catch {
-    return [];
-  }
-}
-
 async function readHistory() {
   const db = await openHistoryDB();
   if (!db) {
-    return readLegacyHistory();
+    return [];
   }
   const items = await requestResult(db.transaction(HISTORY_STORE, "readonly").objectStore(HISTORY_STORE).getAll());
   return (Array.isArray(items) ? items : []).sort((a, b) => String(b.created_at || "").localeCompare(String(a.created_at || "")));
@@ -469,25 +462,9 @@ async function trimHistory() {
   });
 }
 
-async function writeHistory(items) {
-  const limited = items.slice(0, HISTORY_LIMIT);
-  const db = await openHistoryDB();
-  if (!db) {
-    localStorage.setItem(HISTORY_KEY, JSON.stringify(limited.map(({ references, ...item }) => item)));
-    return;
-  }
-  await withHistoryStore("readwrite", (store) => {
-    store.clear();
-    limited.forEach((item) => store.put(item));
-  });
-}
-
 async function putHistoryItem(item) {
   const db = await openHistoryDB();
   if (!db) {
-    const deduped = (await readLegacyHistory()).filter((entry) => historyKey(entry) !== historyKey(item));
-    const legacyItem = { ...item, references: [] };
-    localStorage.setItem(HISTORY_KEY, JSON.stringify([legacyItem].concat(deduped).slice(0, HISTORY_LIMIT)));
     return;
   }
   const existing = await readHistory();
@@ -504,26 +481,11 @@ async function putHistoryItem(item) {
 async function deleteHistoryItem(id) {
   const db = await openHistoryDB();
   if (!db) {
-    const next = (await readLegacyHistory()).filter((entry) => entry.id !== id);
-    localStorage.setItem(HISTORY_KEY, JSON.stringify(next));
     return;
   }
   await withHistoryStore("readwrite", (store) => {
     store.delete(id);
   });
-}
-
-async function migrateLegacyHistory() {
-  const legacy = await readLegacyHistory();
-  if (legacy.length === 0 || !(await openHistoryDB())) {
-    return;
-  }
-  const existing = await readHistory();
-  if (existing.length > 0) {
-    return;
-  }
-  await writeHistory(legacy);
-  localStorage.removeItem(HISTORY_KEY);
 }
 
 function historyKey(item) {
@@ -673,23 +635,204 @@ async function addHistoryReferenceAsImage(id, index) {
 
 function renderGalleryImages(images) {
   const unique = Array.from(new Set(images || []));
-  $("#gallery").classList.toggle("empty", unique.length === 0);
+  setResultsVisible(unique.length > 0);
+  if (unique.length === 0) {
+    $("#gallery").innerHTML = "";
+    return;
+  }
+  $("#gallery").classList.remove("empty");
   $("#gallery").innerHTML = unique.map((url) => (
-    '<div class="gallery-item"><a href="' + esc(url) +
-    '" target="_blank"><img src="' + esc(url) +
-    '" alt="生成结果"></a><button type="button" data-history-action="use-image" data-image-url="' +
+    '<div class="gallery-item"><button class="gallery-preview" type="button" data-preview-image="' + esc(url) +
+    '"><img src="' + esc(url) +
+    '" alt="生成结果"><span class="image-size-label" data-image-size>读取尺寸...</span></button>' +
+    '<button class="gallery-use" type="button" data-history-action="use-image" data-image-url="' +
     esc(url) + '">作为参考图</button></div>'
-  )).join("") || '<div class="status">没有返回图片</div>';
+  )).join("");
 }
 
 function renderGalleryMessage(message, className = "status") {
+  setResultsVisible(Boolean(message));
   $("#gallery").classList.add("empty");
   $("#gallery").innerHTML = '<div class="' + esc(className) + '">' + esc(message) + '</div>';
+}
+
+function imageDimensionsText(img) {
+  if (!img || !img.naturalWidth || !img.naturalHeight) {
+    return "尺寸读取中";
+  }
+  return img.naturalWidth + " × " + img.naturalHeight + " px";
+}
+
+function updateLoadedImageSize(img) {
+  const item = img.closest(".gallery-item");
+  const label = item && item.querySelector("[data-image-size]");
+  if (label) {
+    label.textContent = imageDimensionsText(img);
+  }
+}
+
+function openImagePreview(button) {
+  const img = button.querySelector("img");
+  $("#imageModalImg").src = button.dataset.previewImage || (img && img.src) || "";
+  $("#imageModalSize").textContent = imageDimensionsText(img);
+  $("#imageModal").hidden = false;
+}
+
+function supportsBrowserDirectoryPicker() {
+  return "showDirectoryPicker" in window;
+}
+
+function openBrowserSaveDB() {
+  if (!("indexedDB" in window)) {
+    return Promise.resolve(null);
+  }
+  if (!browserSaveDBPromise) {
+    browserSaveDBPromise = new Promise((resolve, reject) => {
+      const request = indexedDB.open(BROWSER_SAVE_DB_NAME, 1);
+      request.onupgradeneeded = () => {
+        const db = request.result;
+        if (!db.objectStoreNames.contains(BROWSER_SAVE_STORE)) {
+          db.createObjectStore(BROWSER_SAVE_STORE);
+        }
+      };
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+  }
+  return browserSaveDBPromise;
+}
+
+async function readBrowserSaveDirHandle() {
+  const db = await openBrowserSaveDB();
+  if (!db) {
+    return null;
+  }
+  return requestResult(db.transaction(BROWSER_SAVE_STORE, "readonly").objectStore(BROWSER_SAVE_STORE).get(BROWSER_SAVE_HANDLE_ID));
+}
+
+async function writeBrowserSaveDirHandle(handle) {
+  const db = await openBrowserSaveDB();
+  if (!db) {
+    return;
+  }
+  await new Promise((resolve, reject) => {
+    const tx = db.transaction(BROWSER_SAVE_STORE, "readwrite");
+    tx.objectStore(BROWSER_SAVE_STORE).put(handle, BROWSER_SAVE_HANDLE_ID);
+    tx.oncomplete = resolve;
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+async function ensureBrowserSavePermission(handle, mode = "readwrite") {
+  if (!handle || !handle.queryPermission || !handle.requestPermission) {
+    return false;
+  }
+  const opts = { mode };
+  if ((await handle.queryPermission(opts)) === "granted") {
+    return true;
+  }
+  return (await handle.requestPermission(opts)) === "granted";
+}
+
+function browserSaveFileName(url, index) {
+  const raw = decodeURIComponent(String(url || "").split("?")[0].split("/").pop() || "");
+  const fallback = "response-image-" + String(index + 1).padStart(2, "0") + ".png";
+  const name = (raw || fallback).replace(/[\\/:*?"<>|]/g, "_").trim();
+  return name || fallback;
+}
+
+async function uniqueBrowserFileName(dirHandle, name) {
+  const dot = name.lastIndexOf(".");
+  const stem = dot > 0 ? name.slice(0, dot) : name;
+  const ext = dot > 0 ? name.slice(dot) : "";
+  for (let index = 0; index < 1000; index++) {
+    const candidate = index === 0 ? name : stem + "-" + String(index).padStart(2, "0") + ext;
+    try {
+      await dirHandle.getFileHandle(candidate, { create: false });
+    } catch (error) {
+      if (error && error.name === "NotFoundError") {
+        return candidate;
+      }
+      throw error;
+    }
+  }
+  return stem + "-" + Date.now() + ext;
+}
+
+async function saveImagesToBrowserDirectory(images) {
+  if (!browserSaveDirHandle || !Array.isArray(images) || images.length === 0) {
+    return 0;
+  }
+  if (!(await ensureBrowserSavePermission(browserSaveDirHandle))) {
+    throw new Error("未获得浏览器目录写入权限");
+  }
+  let saved = 0;
+  for (let index = 0; index < images.length; index++) {
+    const response = await fetch(images[index]);
+    if (!response.ok) {
+      throw new Error("读取生成图片失败：" + response.statusText);
+    }
+    const blob = await response.blob();
+    const name = await uniqueBrowserFileName(browserSaveDirHandle, browserSaveFileName(images[index], index));
+    const fileHandle = await browserSaveDirHandle.getFileHandle(name, { create: true });
+    const writable = await fileHandle.createWritable();
+    await writable.write(blob);
+    await writable.close();
+    saved++;
+  }
+  return saved;
+}
+
+function updateBrowserSaveStatus(message, isError = false) {
+  const status = $("#saveDirStatus");
+  status.textContent = message;
+  status.className = isError ? "status error" : "status";
+}
+
+async function initBrowserSaveDirectory() {
+  if (!supportsBrowserDirectoryPicker()) {
+    $("#chooseOutputDir").disabled = true;
+    updateBrowserSaveStatus("当前浏览器不支持直接选择保存目录");
+    return;
+  }
+  try {
+    browserSaveDirHandle = await readBrowserSaveDirHandle();
+    if (browserSaveDirHandle) {
+      const granted = browserSaveDirHandle.queryPermission &&
+        (await browserSaveDirHandle.queryPermission({ mode: "readwrite" })) === "granted";
+      updateBrowserSaveStatus(granted ? "已选择：" + browserSaveDirHandle.name : "点击选择文件夹后保存到本地目录");
+    } else {
+      updateBrowserSaveStatus("未选择时仅保存到 WebUI 默认输出目录");
+    }
+  } catch (error) {
+    updateBrowserSaveStatus(error.message, true);
+  }
+}
+
+async function chooseOutputDir() {
+  if (!supportsBrowserDirectoryPicker()) {
+    updateBrowserSaveStatus("当前浏览器不支持直接选择保存目录", true);
+    return;
+  }
+  try {
+    browserSaveDirHandle = await window.showDirectoryPicker({ id: "kuaima-webui-output", mode: "readwrite" });
+    if (!(await ensureBrowserSavePermission(browserSaveDirHandle))) {
+      throw new Error("未获得浏览器目录写入权限");
+    }
+    await writeBrowserSaveDirHandle(browserSaveDirHandle);
+    updateBrowserSaveStatus("已选择：" + browserSaveDirHandle.name);
+  } catch (error) {
+    if (error && error.name === "AbortError") {
+      return;
+    }
+    updateBrowserSaveStatus(error.message, true);
+  }
 }
 
 async function generateStream(form, signal) {
   const images = [];
   const result = { images, saved: [], text: "" };
+  setResultsVisible(true);
   $("#gallery").classList.remove("empty");
   $("#gallery").innerHTML = '<div class="generation-placeholder"><span class="spinner"></span><span>正在等待首张图片...</span></div>';
   await apiStream("/api/generate/stream", {
@@ -745,18 +888,6 @@ async function addImageURLAsReference(url) {
   $("#genStatus").className = "status gen-status";
 }
 
-async function showResultView(view) {
-  const isHistory = view === "history";
-  $("#gallery").hidden = isHistory;
-  $("#historyPanel").hidden = !isHistory;
-  document.querySelectorAll("[data-result-view]").forEach((button) => {
-    button.classList.toggle("active", button.dataset.resultView === view);
-  });
-  if (isHistory) {
-    await renderHistory();
-  }
-}
-
 async function initConfig() {
   const config = await api("/api/config");
   for (const [key, value] of Object.entries(config)) {
@@ -807,10 +938,17 @@ $("#genForm").onsubmit = async (event) => {
   $("#genStatus").className = "status gen-status loading";
   try {
     const result = await generateStream(event.target, activeGenerationController.signal);
-    $("#genStatus").textContent = "已保存 " + result.saved.length + " 张";
+    let browserSaved = 0;
+    try {
+      browserSaved = await saveImagesToBrowserDirectory(result.images);
+    } catch (error) {
+      updateBrowserSaveStatus(error.message, true);
+    }
+    $("#genStatus").textContent = browserSaved > 0
+      ? "已保存 " + result.saved.length + " 张，另存到浏览器目录 " + browserSaved + " 张"
+      : "已保存 " + result.saved.length + " 张";
     $("#genStatus").className = "status gen-status";
     await saveHistory(result);
-    await showResultView("gallery");
     loadBalance();
   } catch (error) {
     const canceled = error && error.name === "AbortError";
@@ -892,7 +1030,19 @@ document.addEventListener("drop", (event) => {
   moveImage(draggedImageIndex, Number(item.dataset.imageIndex));
 });
 
+document.addEventListener("load", (event) => {
+  if (event.target.matches(".gallery-preview img")) {
+    updateLoadedImageSize(event.target);
+  }
+}, true);
+
 document.addEventListener("click", async (event) => {
+  const previewButton = event.target.closest("[data-preview-image]");
+  if (previewButton) {
+    openImagePreview(previewButton);
+    return;
+  }
+
   const imageButton = event.target.closest("[data-image-action]");
   if (imageButton) {
     const index = Number(imageButton.dataset.imageIndex);
@@ -904,9 +1054,23 @@ document.addEventListener("click", async (event) => {
     return;
   }
 
-  const resultTab = event.target.closest("[data-result-view]");
-  if (resultTab) {
-    await showResultView(resultTab.dataset.resultView);
+  const usageLink = event.target.closest("#usageDetailLink");
+  if (usageLink) {
+    event.preventDefault();
+    const originalText = usageLink.textContent;
+    usageLink.textContent = "正在刷新链接...";
+    usageLink.classList.remove("error");
+    try {
+      const url = await loadAccountLink();
+      if (!url) {
+        throw new Error("使用详情链接为空");
+      }
+      window.open(url, "_blank", "noopener");
+      usageLink.textContent = originalText;
+    } catch (error) {
+      usageLink.textContent = "使用详情链接获取失败";
+      usageLink.classList.add("error");
+    }
     return;
   }
 
@@ -962,15 +1126,38 @@ $("#amount").oninput = () => {
 };
 
 $("#toggleBillingTop").onclick = toggleBilling;
+$("#toggleHistory").onclick = () => {
+  const sidebar = $("#historySidebar");
+  const collapsed = !sidebar.classList.contains("collapsed");
+  sidebar.classList.toggle("collapsed", collapsed);
+  $("#toggleHistory").setAttribute("aria-expanded", String(!collapsed));
+  $("#toggleHistory").setAttribute("aria-label", collapsed ? "展开历史记录" : "收起历史记录");
+  $("#toggleHistory").textContent = collapsed ? "›" : "‹";
+};
+$("#chooseOutputDir").onclick = chooseOutputDir;
 $("#closePaymentModal").onclick = closePaymentModal;
+$("#closeImageModal").onclick = () => {
+  $("#imageModal").hidden = true;
+  $("#imageModalImg").removeAttribute("src");
+};
 $("#paymentModal").onclick = (event) => {
   if (event.target === $("#paymentModal")) {
     closePaymentModal();
   }
 };
+$("#imageModal").onclick = (event) => {
+  if (event.target === $("#imageModal")) {
+    $("#closeImageModal").click();
+  }
+};
 
 document.addEventListener("keydown", (event) => {
-  if (event.key === "Escape" && !$("#paymentModal").hidden) {
+  if (event.key !== "Escape") {
+    return;
+  }
+  if (!$("#imageModal").hidden) {
+    $("#closeImageModal").click();
+  } else if (!$("#paymentModal").hidden) {
     closePaymentModal();
   }
 });
@@ -979,9 +1166,9 @@ initConfig().catch((error) => {
   $("#genStatus").textContent = error.message;
   $("#genStatus").className = "status error";
 });
-migrateLegacyHistory().then(renderHistory).catch((error) => {
+renderHistory().catch((error) => {
   $("#historyPanel").innerHTML = '<div class="history-empty">历史读取失败：' + esc(error.message) + '</div>';
 });
 loadBalance();
 loadRechargeInfo();
-loadAccountLink();
+initBrowserSaveDirectory();
