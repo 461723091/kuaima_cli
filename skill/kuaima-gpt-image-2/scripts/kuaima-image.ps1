@@ -78,24 +78,7 @@ foreach ($item in $File) {
 
 $argsList += $Prompt
 
-$configBase = $OutputDir
-if ($configBase.Trim() -eq "") {
-    $configBase = [System.IO.Path]::GetTempPath()
-}
-$configDir = Join-Path $configBase ".kuaima-config"
-New-Item -ItemType Directory -Force -Path $configDir | Out-Null
-
-$previousConfigDir = $env:KUAIMA_CONFIG_DIR
-$env:KUAIMA_CONFIG_DIR = $configDir
-
 & $exe @argsList
 $exitCode = $LASTEXITCODE
-
-if ($null -eq $previousConfigDir) {
-    Remove-Item Env:KUAIMA_CONFIG_DIR -ErrorAction SilentlyContinue
-}
-else {
-    $env:KUAIMA_CONFIG_DIR = $previousConfigDir
-}
 
 exit $exitCode

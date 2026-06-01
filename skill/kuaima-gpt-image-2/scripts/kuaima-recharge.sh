@@ -1,65 +1,46 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-prompt=""
-output_dir="./outputs"
-files=()
-mask=""
-size="auto"
-quality="auto"
-count="1"
-format=""
-compression="-1"
-background="auto"
-moderation=""
+print_only="false"
+amount="0"
+plan_id="0"
+payment_method="custom1_wxpay"
+qr_image="true"
+qr_file=""
 api_key=""
 base_url=""
+username=""
+password=""
 verbose_cli="false"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --prompt)
-      prompt="${2:-}"
+    --print-url)
+      print_only="true"
+      shift
+      ;;
+    --amount)
+      amount="${2:-0}"
       shift 2
       ;;
-    --output-dir)
-      output_dir="${2:-}"
+    --plan-id)
+      plan_id="${2:-0}"
       shift 2
       ;;
-    --file)
-      files+=("${2:-}")
+    --payment-method)
+      payment_method="${2:-}"
       shift 2
       ;;
-    --mask)
-      mask="${2:-}"
+    --qr-image)
+      qr_image="${2:-true}"
       shift 2
       ;;
-    --size)
-      size="${2:-}"
-      shift 2
+    --no-qr-image)
+      qr_image="false"
+      shift
       ;;
-    --quality)
-      quality="${2:-}"
-      shift 2
-      ;;
-    --count)
-      count="${2:-}"
-      shift 2
-      ;;
-    --format)
-      format="${2:-}"
-      shift 2
-      ;;
-    --compression)
-      compression="${2:-}"
-      shift 2
-      ;;
-    --background)
-      background="${2:-}"
-      shift 2
-      ;;
-    --moderation)
-      moderation="${2:-}"
+    --qr-file)
+      qr_file="${2:-}"
       shift 2
       ;;
     --api-key)
@@ -70,27 +51,34 @@ while [[ $# -gt 0 ]]; do
       base_url="${2:-}"
       shift 2
       ;;
+    --username)
+      username="${2:-}"
+      shift 2
+      ;;
+    --password)
+      password="${2:-}"
+      shift 2
+      ;;
     --verbose-cli)
       verbose_cli="true"
       shift
       ;;
     -h|--help)
       cat <<'EOF'
-Usage: kuaima-image.sh --prompt TEXT [options]
+Usage: kuaima-recharge.sh [options]
 
 Options:
-  --output-dir DIR
-  --file PATH_OR_URL       Repeat for multiple reference images.
-  --mask PATH_OR_URL
-  --size SIZE
-  --quality auto|low|medium|high
-  --count N
-  --format png|jpeg|webp
-  --compression N
-  --background auto|transparent|opaque
-  --moderation auto|low
+  --print-url
+  --amount N
+  --plan-id N
+  --payment-method NAME
+  --qr-image true|false
+  --no-qr-image
+  --qr-file PATH
   --api-key KEY
   --base-url URL
+  --username USER
+  --password PASS
   --verbose-cli
 EOF
       exit 0
@@ -101,11 +89,6 @@ EOF
       ;;
   esac
 done
-
-if [[ -z "${prompt//[[:space:]]/}" ]]; then
-  echo "Missing required --prompt." >&2
-  exit 2
-fi
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 skill_root="$(cd "$script_dir/.." && pwd)"
@@ -152,27 +135,25 @@ if [[ ! -f "$exe" ]]; then
   exit 1
 fi
 
-args=(
-  image
-  -image-model gpt-image-2
-  -save-images "$output_dir"
-  -image-size "$size"
-  -image-quality "$quality"
-  -image-count "$count"
-  -image-background "$background"
-)
+args=(recharge)
 
-if [[ -n "$format" ]]; then
-  args+=(-image-output-format "$format")
+if [[ "$print_only" == "true" ]]; then
+  args+=(-print-url)
 fi
-if [[ "$compression" != "-1" ]]; then
-  args+=(-image-output-compression "$compression")
+if [[ "${amount//[[:space:]]/}" != "" && "$amount" != "0" ]]; then
+  args+=(-amount "$amount")
 fi
-if [[ -n "$moderation" ]]; then
-  args+=(-image-moderation "$moderation")
+if [[ "${plan_id//[[:space:]]/}" != "" && "$plan_id" != "0" ]]; then
+  args+=(-plan-id "$plan_id")
 fi
-if [[ -n "$mask" ]]; then
-  args+=(-image-mask "$mask")
+if [[ -n "$payment_method" ]]; then
+  args+=(-payment-method "$payment_method")
+fi
+if [[ "$qr_image" == "false" ]]; then
+  args+=(-qr-image false)
+fi
+if [[ -n "$qr_file" ]]; then
+  args+=(-qr-file "$qr_file")
 fi
 if [[ -n "$api_key" ]]; then
   args+=(-api-key "$api_key")
@@ -180,16 +161,15 @@ fi
 if [[ -n "$base_url" ]]; then
   args+=(-base-url "$base_url")
 fi
+if [[ -n "$username" ]]; then
+  args+=(-username "$username")
+fi
+if [[ -n "$password" ]]; then
+  args+=(-password "$password")
+fi
 if [[ "$verbose_cli" == "true" ]]; then
   args+=(-v)
 fi
-for item in "${files[@]}"; do
-  if [[ -n "$item" ]]; then
-    args+=(-file "$item")
-  fi
-done
-
-args+=("$prompt")
 
 chmod +x "$exe" 2>/dev/null || true
 exec "$exe" "${args[@]}"

@@ -10,7 +10,6 @@ description: 一个通过内置 kuaima_cli 调用 gpt-image-2 的生图工具，
 ## 使用前提
 
 - Windows 使用 PowerShell 脚本，macOS 使用 bash 脚本。
-- API key 可通过 `KUAIMA_API_KEY`、`OPENAI_API_KEY` 环境变量提供，也可通过脚本参数传入。
 - 输出图片会保存到 `OutputDir` / `--output-dir` 指定目录。
 - 默认固定使用 `gpt-image-2`；如服务端后续支持该模型的新尺寸或新参数，优先透传给 CLI。
 
