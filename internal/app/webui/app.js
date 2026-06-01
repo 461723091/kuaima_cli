@@ -33,6 +33,7 @@ const SETTINGS_KEY = "kuaima.webui.settings.v1";
 let selectedPayment = null;
 let selectedImages = [];
 let draggedImageIndex = -1;
+let activeRechargeTab = "amount";
 let historyDBPromise = null;
 let historyStoragePersistRequested = false;
 let activeGenerationController = null;
@@ -131,6 +132,56 @@ function syncImageInput() {
   const transfer = new DataTransfer();
   selectedImages.forEach((file) => transfer.items.add(file));
   input.files = transfer.files;
+}
+
+function clipboardImageFiles(event) {
+  const clipboard = event && event.clipboardData;
+  if (!clipboard || !clipboard.items) {
+    return [];
+  }
+  return Array.from(clipboard.items)
+    .filter((item) => item.kind === "file")
+    .map((item) => item.getAsFile())
+    .filter((file) => file && String(file.type || "").startsWith("image/"));
+}
+
+async function addReferenceFiles(files, sourceText) {
+  const images = Array.from(files || []).filter((file) => file && String(file.type || "").startsWith("image/"));
+  if (images.length === 0) {
+    return false;
+  }
+  selectedImages = selectedImages.concat(images);
+  syncImageInput();
+  renderImagePreviews();
+  $("#genStatus").textContent = "已" + (sourceText || "添加") + images.length + "张参考图";
+  $("#genStatus").className = "status gen-status";
+  return true;
+}
+
+function setRechargeTab(tab) {
+  activeRechargeTab = tab === "plan" ? "plan" : "amount";
+  const amountTab = $("#billingTabAmount");
+  const planTab = $("#billingTabPlan");
+  const amountPanel = $("#amountOptions") && $("#amountOptions").closest(".field");
+  const planTitle = $("#rechargeStatus") && $("#rechargeStatus").closest(".section-title");
+  const plansPanel = $("#plans");
+  if (amountTab) {
+    amountTab.classList.toggle("active", activeRechargeTab === "amount");
+    amountTab.setAttribute("aria-selected", String(activeRechargeTab === "amount"));
+  }
+  if (planTab) {
+    planTab.classList.toggle("active", activeRechargeTab === "plan");
+    planTab.setAttribute("aria-selected", String(activeRechargeTab === "plan"));
+  }
+  if (amountPanel) {
+    amountPanel.hidden = activeRechargeTab !== "amount";
+  }
+  if (planTitle) {
+    planTitle.hidden = activeRechargeTab !== "plan";
+  }
+  if (plansPanel) {
+    plansPanel.hidden = activeRechargeTab !== "plan";
+  }
 }
 
 function imagePreviewURL(file) {
@@ -289,6 +340,7 @@ function handleOperationError(error, statusElement) {
   statusElement.className = "status error";
   if (looksLikeInsufficientBalance(error.message)) {
     setBillingOpen(true);
+    setRechargeTab("plan");
     loadRechargeInfo();
   }
 }
@@ -306,6 +358,7 @@ function toggleBilling() {
 function selectAmount(amount) {
   selectedPayment = { amount: Number(amount) };
   $("#amount").value = amount;
+  setRechargeTab("amount");
   document.querySelectorAll("[data-amount],[data-plan-id]").forEach((item) => item.classList.remove("selected"));
   const chip = document.querySelector('[data-amount="' + CSS.escape(String(amount)) + '"]');
   if (chip) {
@@ -367,6 +420,7 @@ async function loadRechargeInfo() {
     const info = await api("/api/recharge/info");
     renderAmountOptions(info);
     renderPlans(info);
+    setRechargeTab(activeRechargeTab);
     status.textContent = "";
   } catch (error) {
     status.textContent = error.message;
@@ -934,6 +988,10 @@ $("#amountPay").onclick = async () => {
   }
 };
 
+document.querySelectorAll("[data-billing-tab]").forEach((button) => {
+  button.onclick = () => setRechargeTab(button.dataset.billingTab);
+});
+
 document.addEventListener("dragstart", (event) => {
   const item = event.target.closest(".image-preview-item");
   if (!item) {
@@ -966,6 +1024,15 @@ document.addEventListener("drop", (event) => {
   }
   event.preventDefault();
   moveImage(draggedImageIndex, Number(item.dataset.imageIndex));
+});
+
+document.addEventListener("paste", async (event) => {
+  const files = clipboardImageFiles(event);
+  if (files.length === 0) {
+    return;
+  }
+  event.preventDefault();
+  await addReferenceFiles(files, "粘贴");
 });
 
 document.addEventListener("load", (event) => {
@@ -1042,6 +1109,7 @@ document.addEventListener("click", async (event) => {
     selectAmount(amountButton.dataset.amount);
   } else {
     try {
+      setRechargeTab("plan");
       await pay({ plan_id: Number(planButton.dataset.planId) });
     } catch (error) {
       openPaymentModal('<span class="status error">' + esc(error.message) + '</span>');
@@ -1101,6 +1169,7 @@ document.addEventListener("keydown", (event) => {
   }
 });
 
+setRechargeTab("amount");
 initConfig().catch((error) => {
   $("#genStatus").textContent = error.message;
   $("#genStatus").className = "status error";
