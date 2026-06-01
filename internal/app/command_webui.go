@@ -161,6 +161,7 @@ func (s *webUIServer) routes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/recharge/info", s.handleRechargeInfo)
 	mux.HandleFunc("/api/recharge/pay", s.handleRechargePay)
 	mux.HandleFunc("/api/qr", s.handleQR)
+	mux.HandleFunc("/api/history/upload", s.handleHistoryReferenceUpload)
 	mux.HandleFunc("/api/output/set", s.handleSetOutputDir)
 	mux.HandleFunc("/api/output/open", s.handleOpenOutputDir)
 	mux.HandleFunc("/outputs/", s.handleOutputFile)
@@ -594,6 +595,83 @@ func (s *webUIServer) handleQR(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "image/png")
 	_, _ = w.Write(png)
+}
+
+func (s *webUIServer) handleHistoryReferenceUpload(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	if err := r.ParseMultipartForm(80 << 20); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if r.MultipartForm == nil || r.MultipartForm.File == nil {
+		writeJSON(w, http.StatusOK, map[string]any{"urls": []string{}})
+		return
+	}
+	files := r.MultipartForm.File["images"]
+	if len(files) > 16 {
+		writeError(w, http.StatusBadRequest, fmt.Sprintf("too many image inputs: got %d, expected at most 16", len(files)))
+		return
+	}
+	if len(files) == 0 {
+		writeJSON(w, http.StatusOK, map[string]any{"urls": []string{}})
+		return
+	}
+	saveDir := s.saveDirectory()
+	historyDir := filepath.Join(saveDir, "history_refs")
+	if err := os.MkdirAll(historyDir, 0755); err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	urls := make([]string, 0, len(files))
+	stamp := time.Now().UnixNano()
+	for index, header := range files {
+		file, err := header.Open()
+		if err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		data, readErr := io.ReadAll(file)
+		closeErr := file.Close()
+		if readErr != nil {
+			writeError(w, http.StatusBadRequest, readErr.Error())
+			return
+		}
+		if closeErr != nil {
+			writeError(w, http.StatusBadRequest, closeErr.Error())
+			return
+		}
+		mediaType := header.Header.Get("Content-Type")
+		if mediaType == "" {
+			mediaType = mime.TypeByExtension(filepath.Ext(header.Filename))
+		}
+		if mediaType == "" {
+			mediaType = http.DetectContentType(data)
+		}
+		if !strings.HasPrefix(mediaType, "image/") {
+			writeError(w, http.StatusBadRequest, fmt.Sprintf("%s is not an image", header.Filename))
+			return
+		}
+
+		name := fmt.Sprintf("history-reference-%d-%02d%s", stamp, index+1, extensionForMediaType(mediaType, header.Filename))
+		path := filepath.Join(historyDir, name)
+		path, err = writeFileUnique(path, data, 0644)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		url := s.publicImageURLs([]string{path}, saveDir)
+		if len(url) == 0 {
+			writeError(w, http.StatusInternalServerError, "failed to build history reference URL")
+			return
+		}
+		urls = append(urls, url[0])
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{"urls": urls})
 }
 
 func (s *webUIServer) modelFromForm(r *http.Request) string {

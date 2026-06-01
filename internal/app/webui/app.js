@@ -586,19 +586,61 @@ function historyKey(item) {
 }
 
 function historyReferences() {
-  return selectedImages.map((file) => {
-    const url = historySourceURLs.get(file) || "";
-    return {
+  return selectedImages.map((file) => ({
       name: file.name || "reference-image.png",
       type: file.type || "image/png",
       size: file.size || 0,
-      url,
-    };
+      url: historySourceURLs.get(file) || "",
+    }));
+}
+
+async function uploadHistoryReferences(files) {
+  const pending = Array.from(files || []).filter((file) => file && !historySourceURLs.get(file));
+  if (pending.length === 0) {
+    return [];
+  }
+  const form = new FormData();
+  pending.forEach((file) => {
+    form.append("images", file, file.name || "reference-image.png");
   });
+  const result = await api("/api/history/upload", {
+    method: "POST",
+    body: form,
+  });
+  return Array.isArray(result.urls) ? result.urls : [];
+}
+
+async function ensureHistoryReferenceURLs() {
+  const refs = historyReferences();
+  const missing = [];
+  const missingIndexes = [];
+  selectedImages.forEach((file, index) => {
+    if (!historySourceURLs.get(file)) {
+      missing.push(file);
+      missingIndexes.push(index);
+    }
+  });
+  if (missing.length === 0) {
+    return refs;
+  }
+  try {
+    const urls = await uploadHistoryReferences(missing);
+    missingIndexes.forEach((index, i) => {
+      const url = urls[i] || "";
+      if (url) {
+        refs[index].url = url;
+        historySourceURLs.set(selectedImages[index], url);
+      }
+    });
+  } catch (error) {
+    console.warn("History reference upload failed", error);
+  }
+  return refs;
 }
 
 async function saveHistory(result, extra = {}) {
   const form = $("#genForm");
+  const references = await ensureHistoryReferenceURLs();
   const item = {
     id: String(Date.now()),
     created_at: new Date().toISOString(),
@@ -612,7 +654,7 @@ async function saveHistory(result, extra = {}) {
     resolution: $("#resolutionSelect").value,
     image_size: $('[name="image_size"]').value,
     reference_count: selectedImages.length,
-    references: historyReferences(),
+    references,
     images: result.images || [],
     error: extra.error || "",
   };
