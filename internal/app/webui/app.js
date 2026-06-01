@@ -54,6 +54,13 @@ function esc(value) {
     "'": "&#39;",
   }[char]));
 }
+function unit(value) {
+  if (value == 'month') return '月';
+  else if (value == 'year') return '年';
+  else if (value == 'day') return '天';
+  else if (value == 'week') return '周';
+  return value;
+}
 
 async function api(url, options) {
   const response = await fetch(url, options);
@@ -463,7 +470,7 @@ function renderPlans(info) {
     '<div><b>' + esc(plan.title) + '</b><p>' + esc(plan.subtitle || "订阅套餐") + '</p></div>' +
     '<div class="plan-quota"><span>额度</span><strong>' + esc(formatQuota(plan.total_amount)) + '</strong></div>' +
     '<div class="plan-price"><strong>￥' + esc(formatAmount(plan.price_amount)) + '</strong><span>' +
-    esc(plan.duration_value) + esc(plan.duration_unit) + '</span></div>' +
+    esc(plan.duration_value) + unit(plan.duration_unit) + '</span></div>' +
     '<button class="btn small" type="button" data-plan-id="' + Number(plan.id) +
     '" data-plan-title="' + esc(plan.title) + '">订阅</button>' +
     '</div>'
@@ -609,8 +616,15 @@ async function putHistoryItem(item) {
   }
   const existing = await readHistory();
   const duplicate = existing.find((entry) => historyKey(entry) === historyKey(item));
+  const previous = existing[0];
+  const replacePreviousFailure = previous &&
+    previous.status === "failed" &&
+    item.status === "failed" &&
+    historyFailureKey(previous) === historyFailureKey(item);
   await withHistoryStore("readwrite", (store) => {
-    if (duplicate) {
+    if (replacePreviousFailure) {
+      store.delete(previous.id);
+    } else if (duplicate) {
       store.delete(duplicate.id);
     }
     store.put(item);
@@ -640,6 +654,27 @@ function historyKey(item) {
     item.reference_count || 0,
     (item.images || []).join(","),
     item.error || "",
+  ].join("\n");
+}
+
+function historyFailureKey(item) {
+  const references = (item.references || []).map((ref) => ({
+    name: ref && ref.name || "",
+    type: ref && ref.type || "",
+    size: ref && ref.size || 0,
+    url: ref && ref.url || "",
+  }));
+  return [
+    item.prompt || "",
+    item.image_model || "",
+    item.image_endpoint || "",
+    item.image_size || "",
+    item.image_quality || "",
+    item.image_count || "",
+    item.ratio || "",
+    item.resolution || "",
+    item.reference_count || 0,
+    JSON.stringify(references),
   ].join("\n");
 }
 
@@ -1285,5 +1320,3 @@ cleanupHistoryImageData().then(renderHistory).catch((error) => {
 });
 loadBalance();
 loadRechargeInfo();
-
-
