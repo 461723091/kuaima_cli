@@ -53,6 +53,9 @@ func runWebUIAuto(args []string) error {
 }
 
 func runWebUIWithOptions(args []string, runtimeOpts webUIRuntimeOptions) error {
+	restoreConfigPath := setPreferHomeConfigPath(true)
+	defer restoreConfigPath()
+
 	cfg, err := loadAppConfig()
 	if err != nil {
 		return err

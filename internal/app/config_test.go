@@ -237,6 +237,38 @@ func TestLoadAppConfigCreatesInExecutableDirBeforeHome(t *testing.T) {
 	}
 }
 
+func TestLoadAppConfigPrefersHomeBeforeExecutableInWebUI(t *testing.T) {
+	exeDir := t.TempDir()
+	homeDir := t.TempDir()
+	resetConfigPathFuncs(t, filepath.Join(exeDir, "kuaima_cli.exe"), homeDir)
+	t.Setenv("KUAIMA_CONFIG_DIR", "")
+	restore := setPreferHomeConfigPath(true)
+	t.Cleanup(restore)
+
+	exeConfigDir := filepath.Join(exeDir, configDirName)
+	homeConfigDir := filepath.Join(homeDir, configDirName)
+	if err := os.MkdirAll(exeConfigDir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(homeConfigDir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(exeConfigDir, configFileName), []byte(`{"model":"exe-model"}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(homeConfigDir, configFileName), []byte(`{"model":"home-model"}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := loadAppConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if configString(cfg.Model, "") != "home-model" {
+		t.Fatalf("expected home-dir config in webui mode, got %#v", cfg.Model)
+	}
+}
+
 func TestLoadAppConfigMissingFile(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("KUAIMA_CONFIG_DIR", dir)
@@ -253,6 +285,35 @@ func TestLoadAppConfigMissingFile(t *testing.T) {
 	}
 	if string(data) != "{}\n" {
 		t.Fatalf("expected empty config file, got %q", string(data))
+	}
+}
+
+func TestLoadAppConfigCreatesInHomeBeforeExecutableInWebUI(t *testing.T) {
+	exeDir := t.TempDir()
+	homeDir := t.TempDir()
+	resetConfigPathFuncs(t, filepath.Join(exeDir, "kuaima_cli.exe"), homeDir)
+	t.Setenv("KUAIMA_CONFIG_DIR", "")
+	restore := setPreferHomeConfigPath(true)
+	t.Cleanup(restore)
+
+	cfg, err := loadAppConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Model != nil {
+		t.Fatalf("expected empty config, got %#v", cfg)
+	}
+
+	homeConfig := filepath.Join(homeDir, configDirName, configFileName)
+	data, err := os.ReadFile(homeConfig)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(data) != "{}\n" {
+		t.Fatalf("expected empty home-dir config file, got %q", string(data))
+	}
+	if fileExists(filepath.Join(exeDir, configDirName, configFileName)) {
+		t.Fatal("did not expect executable-dir config to be created")
 	}
 }
 

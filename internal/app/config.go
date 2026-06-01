@@ -17,8 +17,9 @@ const (
 )
 
 var (
-	executablePath = os.Executable
-	userHomeDir    = os.UserHomeDir
+	executablePath       = os.Executable
+	userHomeDir          = os.UserHomeDir
+	preferHomeConfigPath bool
 )
 
 type appConfig struct {
@@ -93,23 +94,45 @@ func appConfigPath() (string, error) {
 	}
 
 	executableConfigPath, executableConfigDir := executableAppConfigPath()
+	homeConfigPath, homeErr := homeAppConfigPath()
+	if preferHomeConfigPath {
+		if homeErr == nil && fileExists(homeConfigPath) {
+			_ = hideAppConfigDir(filepath.Dir(homeConfigPath))
+			return homeConfigPath, nil
+		}
+		if executableConfigPath != "" && fileExists(executableConfigPath) {
+			_ = hideAppConfigDir(executableConfigDir)
+			return executableConfigPath, nil
+		}
+		if homeErr == nil {
+			if err := ensureAppConfigDir(filepath.Dir(homeConfigPath)); err == nil {
+				return homeConfigPath, nil
+			}
+		}
+		if executableConfigPath != "" {
+			if err := ensureAppConfigDir(executableConfigDir); err == nil {
+				return executableConfigPath, nil
+			}
+		}
+		if homeErr != nil {
+			return "", homeErr
+		}
+		return homeConfigPath, nil
+	}
+
 	if executableConfigPath != "" && fileExists(executableConfigPath) {
 		_ = hideAppConfigDir(executableConfigDir)
 		return executableConfigPath, nil
 	}
-
-	homeConfigPath, homeErr := homeAppConfigPath()
 	if homeErr == nil && fileExists(homeConfigPath) {
 		_ = hideAppConfigDir(filepath.Dir(homeConfigPath))
 		return homeConfigPath, nil
 	}
-
 	if executableConfigPath != "" {
 		if err := ensureAppConfigDir(executableConfigDir); err == nil {
 			return executableConfigPath, nil
 		}
 	}
-
 	if homeErr != nil {
 		return "", homeErr
 	}
@@ -258,4 +281,12 @@ func boolPtr(value bool) *bool {
 
 func intPtr(value int) *int {
 	return &value
+}
+
+func setPreferHomeConfigPath(prefer bool) func() {
+	old := preferHomeConfigPath
+	preferHomeConfigPath = prefer
+	return func() {
+		preferHomeConfigPath = old
+	}
 }
