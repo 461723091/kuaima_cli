@@ -168,17 +168,16 @@
               <option value="image">Image 接口</option>
             </select>
           </div>
-        </details>
-
-        <div class="output-dir-box">
-          <label>图片生成结果目录</label>
-          <div class="output-dir-row">
-            <input name="save_dir" type="text" autocomplete="off" spellcheck="false" placeholder="输入本机保存目录路径">
-            <button id="chooseOutputDir" class="btn small" type="button">应用目录</button>
-            <button id="openDefaultOutputDir" class="btn small" type="button">打开文件夹</button>
+          <div class="output-dir-box">
+            <label>图片生成结果目录</label>
+            <div class="output-dir-row">
+              <input name="save_dir" type="text" autocomplete="off" spellcheck="false" placeholder="输入本机保存目录路径">
+              <button id="chooseOutputDir" class="btn small" type="button">应用目录</button>
+              <button id="openDefaultOutputDir" class="btn small" type="button">打开文件夹</button>
+            </div>
+            <div id="saveDirStatus" class="status"></div>
           </div>
-          <div id="saveDirStatus" class="status"></div>
-        </div>
+        </details>
       </form>
 
       <section id="resultsPanel" class="panel results" hidden>

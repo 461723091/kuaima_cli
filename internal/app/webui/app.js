@@ -27,15 +27,17 @@ const SIZE_LOOKUP = Object.entries(SIZE_MATRIX).reduce((lookup, [resolution, rat
 
 const HISTORY_DB_NAME = "kuaima.webui.history.v1";
 const HISTORY_STORE = "items";
-const HISTORY_LIMIT = 50;
+const HISTORY_LIMIT = 100;
 const SETTINGS_KEY = "kuaima.webui.settings.v1";
 
 let selectedPayment = null;
 let selectedImages = [];
 let draggedImageIndex = -1;
 let historyDBPromise = null;
+let historyStoragePersistRequested = false;
 let activeGenerationController = null;
 const imagePreviewURLs = new WeakMap();
+const historySourceURLs = new WeakMap();
 
 function setResultsVisible(visible) {
   $("#resultsPanel").hidden = !visible;
@@ -415,6 +417,18 @@ function openHistoryDB() {
   return historyDBPromise;
 }
 
+async function requestPersistentHistoryStorage() {
+  if (historyStoragePersistRequested || !navigator.storage || !navigator.storage.persist) {
+    return false;
+  }
+  historyStoragePersistRequested = true;
+  try {
+    return await navigator.storage.persist();
+  } catch {
+    return false;
+  }
+}
+
 async function withHistoryStore(mode, callback) {
   const db = await openHistoryDB();
   if (!db) {
@@ -444,6 +458,25 @@ async function readHistory() {
   }
   const items = await requestResult(db.transaction(HISTORY_STORE, "readonly").objectStore(HISTORY_STORE).getAll());
   return (Array.isArray(items) ? items : []).sort((a, b) => String(b.created_at || "").localeCompare(String(a.created_at || "")));
+}
+
+async function cleanupHistoryImageData() {
+  const items = await readHistory();
+  const dirty = items.filter((item) => (item.references || []).some((ref) => ref && "blob" in ref));
+  if (dirty.length === 0) {
+    return;
+  }
+  await withHistoryStore("readwrite", (store) => {
+    dirty.forEach((item) => {
+      item.references = (item.references || []).map((ref) => ({
+        name: ref && ref.name || "reference-image.png",
+        type: ref && ref.type || "image/png",
+        size: ref && ref.size || 0,
+        url: ref && ref.url || "",
+      }));
+      store.put(item);
+    });
+  });
 }
 
 async function trimHistory() {
@@ -499,12 +532,15 @@ function historyKey(item) {
 }
 
 function historyReferences() {
-  return selectedImages.map((file) => ({
-    name: file.name || "reference-image.png",
-    type: file.type || "image/png",
-    size: file.size || 0,
-    blob: file,
-  }));
+  return selectedImages.map((file) => {
+    const url = historySourceURLs.get(file) || "";
+    return {
+      name: file.name || "reference-image.png",
+      type: file.type || "image/png",
+      size: file.size || 0,
+      url,
+    };
+  });
 }
 
 async function saveHistory(result, extra = {}) {
@@ -530,6 +566,16 @@ async function saveHistory(result, extra = {}) {
   await renderHistory();
 }
 
+async function saveHistorySafely(result, extra = {}) {
+  try {
+    await saveHistory(result, extra);
+    return "";
+  } catch (error) {
+    console.warn("History save failed", error);
+    return error && error.message ? error.message : "unknown history error";
+  }
+}
+
 function formatHistoryTime(value) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) {
@@ -544,10 +590,7 @@ function formatHistoryTime(value) {
 }
 
 function historyReferencePreview(ref) {
-  if (!ref || !ref.blob) {
-    return "";
-  }
-  return URL.createObjectURL(ref.blob);
+  return ref && ref.url ? ref.url : "";
 }
 
 async function renderHistory() {
@@ -571,7 +614,9 @@ async function renderHistory() {
     esc(item.image_size || "-") + ' · ' + esc(qualityLabel(item.image_quality)) +
     ' · 参考图 ' + esc(item.reference_count || 0) + ' 张</div>' +
     (item.error ? '<div class="history-error">' + esc(item.error) + '</div>' : '') +
-    '<div class="history-images">' + (item.references || []).map((ref, index) => {
+    '<div class="history-images">' + (item.references || []).map((ref, index) => ({ ref, index })).filter((entry) => entry.ref && entry.ref.url).map((entry) => {
+      const ref = entry.ref;
+      const index = entry.index;
       const preview = historyReferencePreview(ref);
       return '<button type="button" data-history-action="use-reference" data-history-id="' + esc(item.id) +
         '" data-reference-index="' + index + '" title="使用历史参考图"><img src="' + esc(preview) +
@@ -601,7 +646,7 @@ async function restoreHistory(id) {
   if (item.resolution) {
     $("#resolutionSelect").value = item.resolution;
   }
-  selectedImages = historyReferenceFiles(item);
+  selectedImages = await historyReferenceFiles(item);
   syncImageInput();
   renderImagePreviews();
   updateSize();
@@ -609,23 +654,39 @@ async function restoreHistory(id) {
   $("#genStatus").className = "status gen-status";
 }
 
-function historyReferenceFiles(item) {
-  return (item.references || []).filter((ref) => ref && ref.blob).map((ref) => (
-    new File([ref.blob], ref.name || "history-reference.png", { type: ref.type || ref.blob.type || "image/png" })
-  ));
+async function historyReferenceFiles(item) {
+  const refs = (item.references || []).filter((ref) => ref && ref.url);
+  const files = [];
+  for (const ref of refs) {
+    files.push(await fileFromHistoryURL(ref.url, ref.name, ref.type));
+  }
+  return files;
 }
 
 async function addHistoryReferenceAsImage(id, index) {
   const item = (await readHistory()).find((entry) => entry.id === id);
   const ref = item && item.references && item.references[Number(index)];
-  if (!ref || !ref.blob) {
+  if (!ref || !ref.url) {
     throw new Error("历史参考图不存在");
   }
-  selectedImages.push(new File([ref.blob], ref.name || "history-reference.png", { type: ref.type || ref.blob.type || "image/png" }));
+  selectedImages.push(await fileFromHistoryURL(ref.url, ref.name, ref.type));
   syncImageInput();
   renderImagePreviews();
   $("#genStatus").textContent = "已添加历史参考图";
   $("#genStatus").className = "status gen-status";
+}
+
+async function fileFromHistoryURL(url, name, type) {
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error("历史图片读取失败");
+  }
+  const blob = await response.blob();
+  const file = new File([blob], name || decodeURIComponent(String(url).split("/").pop() || "history-image.png"), {
+    type: type || blob.type || "image/png",
+  });
+  historySourceURLs.set(file, url);
+  return file;
 }
 
 function renderGalleryImages(images) {
@@ -765,13 +826,7 @@ async function generateStream(form, signal) {
 async function addImageURLAsReference(url) {
   $("#genStatus").textContent = "正在添加历史图片...";
   $("#genStatus").className = "status gen-status";
-  const response = await fetch(url);
-  if (!response.ok) {
-    throw new Error("历史图片读取失败");
-  }
-  const blob = await response.blob();
-  const name = decodeURIComponent(String(url).split("/").pop() || "history-image.png");
-  selectedImages.push(new File([blob], name, { type: blob.type || "image/png" }));
+  selectedImages.push(await fileFromHistoryURL(url));
   syncImageInput();
   renderImagePreviews();
   $("#genStatus").textContent = "已添加历史图片";
@@ -828,9 +883,10 @@ $("#genForm").onsubmit = async (event) => {
   $("#genStatus").className = "status gen-status loading";
   try {
     const result = await generateStream(event.target, activeGenerationController.signal);
-    $("#genStatus").textContent = "已保存 " + result.saved.length + " 张";
+    const historyError = await saveHistorySafely(result);
+    $("#genStatus").textContent = "已保存 " + result.saved.length + " 张" +
+      (historyError ? "，历史保存失败：" + historyError : "");
     $("#genStatus").className = "status gen-status";
-    await saveHistory(result);
     loadBalance();
   } catch (error) {
     const canceled = error && error.name === "AbortError";
@@ -842,7 +898,7 @@ $("#genForm").onsubmit = async (event) => {
       $("#genStatus").className = "status gen-status";
       return;
     }
-    await saveHistory({ images: [] }, { status: "failed", error: error.message });
+    await saveHistorySafely({ images: [] }, { status: "failed", error: error.message });
     handleOperationError(error, $("#genStatus"));
   } finally {
     activeGenerationController = null;
@@ -1049,7 +1105,8 @@ initConfig().catch((error) => {
   $("#genStatus").textContent = error.message;
   $("#genStatus").className = "status error";
 });
-renderHistory().catch((error) => {
+requestPersistentHistoryStorage();
+cleanupHistoryImageData().then(renderHistory).catch((error) => {
   $("#historyPanel").innerHTML = '<div class="history-empty">历史读取失败：' + esc(error.message) + '</div>';
 });
 loadBalance();
