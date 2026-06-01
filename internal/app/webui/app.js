@@ -1,4 +1,4 @@
-const $ = (selector) => document.querySelector(selector);
+﻿const $ = (selector) => document.querySelector(selector);
 
 const SIZE_MATRIX = {
   "1k": {
@@ -39,6 +39,7 @@ let historyStoragePersistRequested = false;
 let activeGenerationController = null;
 const imagePreviewURLs = new WeakMap();
 const historySourceURLs = new WeakMap();
+const imageFingerprintCache = new WeakMap();
 
 function setResultsVisible(visible) {
   $("#resultsPanel").hidden = !visible;
@@ -146,8 +147,10 @@ function clipboardImageFiles(event) {
 }
 
 async function addReferenceFiles(files, sourceText) {
-  const images = Array.from(files || []).filter((file) => file && String(file.type || "").startsWith("image/"));
+  const images = await dedupeReferenceFiles(files);
   if (images.length === 0) {
+    $("#genStatus").textContent = "参考图已存在";
+    $("#genStatus").className = "status gen-status";
     return false;
   }
   selectedImages = selectedImages.concat(images);
@@ -191,6 +194,61 @@ function imagePreviewURL(file) {
   return imagePreviewURLs.get(file);
 }
 
+function bytesToHex(bytes) {
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+async function imageFingerprint(file) {
+  if (!file) {
+    return "";
+  }
+  const sourceURL = historySourceURLs.get(file);
+  if (sourceURL) {
+    return "url:" + sourceURL;
+  }
+  if (!imageFingerprintCache.has(file)) {
+    imageFingerprintCache.set(file, (async () => {
+      try {
+        if (file.arrayBuffer && crypto && crypto.subtle && crypto.subtle.digest) {
+          const buffer = await file.arrayBuffer();
+          const digest = await crypto.subtle.digest("SHA-256", buffer);
+          return "sha256:" + bytesToHex(new Uint8Array(digest));
+        }
+      } catch {
+        // Fallback below.
+      }
+      return [
+        "meta",
+        file.name || "",
+        file.size || 0,
+        file.type || "",
+        file.lastModified || 0,
+      ].join(":");
+    })());
+  }
+  return imageFingerprintCache.get(file);
+}
+
+async function dedupeReferenceFiles(files, existingFiles = selectedImages) {
+  const unique = [];
+  const seen = new Set();
+  for (const file of existingFiles || []) {
+    seen.add(await imageFingerprint(file));
+  }
+  for (const file of files || []) {
+    if (!file || !String(file.type || "").startsWith("image/")) {
+      continue;
+    }
+    const fingerprint = await imageFingerprint(file);
+    if (seen.has(fingerprint)) {
+      continue;
+    }
+    seen.add(fingerprint);
+    unique.push(file);
+  }
+  return unique;
+}
+
 function formatFileSize(bytes) {
   const size = Number(bytes);
   if (!Number.isFinite(size)) {
@@ -206,7 +264,7 @@ function renderImagePreviews() {
   const list = $("#imagePreviewList");
   if (selectedImages.length === 0) {
     list.className = "image-preview-list empty";
-    list.textContent = "上传参考图后可预览，拖动调整顺序";
+    list.textContent = "上传参考图后可预览、拖动调整顺序";
     return;
   }
 
@@ -262,7 +320,7 @@ function qualityLabel(value) {
     auto: "自动",
     low: "快速",
     medium: "中等",
-    high: "高",
+    high: "高清",
   })[value] || value || "-";
 }
 
@@ -587,11 +645,11 @@ function historyKey(item) {
 
 function historyReferences() {
   return selectedImages.map((file) => ({
-      name: file.name || "reference-image.png",
-      type: file.type || "image/png",
-      size: file.size || 0,
-      url: historySourceURLs.get(file) || "",
-    }));
+    name: file.name || "reference-image.png",
+    type: file.type || "image/png",
+    size: file.size || 0,
+    url: historySourceURLs.get(file) || "",
+  }));
 }
 
 async function uploadHistoryReferences(files) {
@@ -714,12 +772,22 @@ async function renderHistory() {
       const ref = entry.ref;
       const index = entry.index;
       const preview = historyReferencePreview(ref);
-      return '<button type="button" data-history-action="use-reference" data-history-id="' + esc(item.id) +
-        '" data-reference-index="' + index + '" title="使用历史参考图"><img src="' + esc(preview) +
-        '" alt="历史参考图"><span>历史参考图</span></button>';
+      return '<div class="history-image-card">' +
+        '<button type="button" class="history-image-preview" data-preview-image="' + esc(preview) + '" title="点击放大预览">' +
+        '<img src="' + esc(preview) + '" alt="历史参考图预览">' +
+        '<span>点击放大预览</span>' +
+        '</button>' +
+        '<button type="button" class="history-image-use" data-history-action="use-reference" data-history-id="' + esc(item.id) +
+        '" data-reference-index="' + index + '">引用</button>' +
+        '</div>';
     }).join("") + (item.images || []).map((url) => (
-      '<button type="button" data-history-action="use-image" data-image-url="' + esc(url) +
-      '" title="作为参考图"><img src="' + esc(url) + '" alt="历史图片"><span>作为参考图</span></button>'
+      '<div class="history-image-card">' +
+      '<button type="button" class="history-image-preview" data-preview-image="' + esc(url) + '" title="点击放大预览">' +
+      '<img src="' + esc(url) + '" alt="历史图片预览">' +
+      '<span>点击放大预览</span>' +
+      '</button>' +
+      '<button type="button" class="history-image-use" data-history-action="use-image" data-image-url="' + esc(url) + '">引用</button>' +
+      '</div>'
     )).join("") + '</div>' +
     '</article>'
   )).join("");
@@ -765,11 +833,7 @@ async function addHistoryReferenceAsImage(id, index) {
   if (!ref || !ref.url) {
     throw new Error("历史参考图不存在");
   }
-  selectedImages.push(await fileFromHistoryURL(ref.url, ref.name, ref.type));
-  syncImageInput();
-  renderImagePreviews();
-  $("#genStatus").textContent = "已添加历史参考图";
-  $("#genStatus").className = "status gen-status";
+  await addReferenceFiles([await fileFromHistoryURL(ref.url, ref.name, ref.type)], "添加历史参考图");
 }
 
 async function fileFromHistoryURL(url, name, type) {
@@ -922,11 +986,12 @@ async function generateStream(form, signal) {
 async function addImageURLAsReference(url) {
   $("#genStatus").textContent = "正在添加历史图片...";
   $("#genStatus").className = "status gen-status";
-  selectedImages.push(await fileFromHistoryURL(url));
-  syncImageInput();
-  renderImagePreviews();
-  $("#genStatus").textContent = "已添加历史图片";
-  $("#genStatus").className = "status gen-status";
+  if (selectedImages.some((file) => historySourceURLs.get(file) === url)) {
+    $("#genStatus").textContent = "历史图片已存在";
+    $("#genStatus").className = "status gen-status";
+    return;
+  }
+  await addReferenceFiles([await fileFromHistoryURL(url)], "添加历史图片");
 }
 
 async function initConfig() {
@@ -956,10 +1021,8 @@ $('[name="images"]').onclick = (event) => {
   setTimeout(syncImageInput, 1000);
 };
 
-$('[name="images"]').onchange = (event) => {
-  selectedImages = selectedImages.concat(Array.from(event.target.files || []));
-  syncImageInput();
-  renderImagePreviews();
+$('[name="images"]').onchange = async (event) => {
+  await addReferenceFiles(Array.from(event.target.files || []), "添加");
 };
 
 $("#genForm").onsubmit = async (event) => {
@@ -1222,3 +1285,5 @@ cleanupHistoryImageData().then(renderHistory).catch((error) => {
 });
 loadBalance();
 loadRechargeInfo();
+
+
