@@ -42,6 +42,7 @@ type imageEditRequest struct {
 	Stream            bool       `json:"stream,omitempty"`
 	Images            []imageRef `json:"images"`
 	Mask              *imageRef  `json:"mask,omitempty"`
+	FileFormat        string     `json:"-"`
 	N                 int        `json:"n,omitempty"`
 	Size              string     `json:"size,omitempty"`
 	Quality           string     `json:"quality,omitempty"`

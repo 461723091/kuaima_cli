@@ -75,6 +75,7 @@ func runImage(args []string) error {
 			mask = &maskRef
 		}
 		req := imageOpts.editRequest(opts.imageGenerationModel(), editPrompt, refs, mask)
+		req.FileFormat = *inputOpts.fileFormat
 		if *stream {
 			resp, err = c.createImageEditStream(context.Background(), req, func(candidate imageCandidate) error {
 				return saveStreamImage(imageSaver, candidate)

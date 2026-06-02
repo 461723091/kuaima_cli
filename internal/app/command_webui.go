@@ -29,6 +29,7 @@ var webUIAssets embed.FS
 type webUIServer struct {
 	clientOpts clientOptions
 	defaults   webUIDefaults
+	fileFormat string
 	mu         sync.RWMutex
 	saveDir    string
 }
@@ -62,6 +63,7 @@ func runWebUIWithOptions(args []string, runtimeOpts webUIRuntimeOptions) error {
 	}
 	fs := newFlagSet("webui")
 	opts := addClientFlagsWithConfig(fs, cfg)
+	inputOpts := addInputFlagsWithConfig(fs, cfg)
 	imageOpts := addImageFlags(fs, cfg)
 	saveDir := addSaveImagesFlagWithConfig(fs, cfg, "kuaima_webui_outputs")
 	addr := fs.String("addr", "127.0.0.1:8790", "local listen address")
@@ -111,6 +113,7 @@ func runWebUIWithOptions(args []string, runtimeOpts webUIRuntimeOptions) error {
 	}
 	ui := &webUIServer{
 		clientOpts: opts,
+		fileFormat: strings.TrimSpace(*inputOpts.fileFormat),
 		defaults: webUIDefaults{
 			ImageModel:        opts.imageGenerationModel(),
 			ImageSize:         stringValue(imageOpts.size),
@@ -247,6 +250,7 @@ func (s *webUIServer) handleGenerate(w http.ResponseWriter, r *http.Request) {
 		resp, err = c.createImageGeneration(ctx, req)
 	} else {
 		req := opts.editRequest(s.modelFromForm(r), prompt, refs, nil)
+		req.FileFormat = s.fileFormat
 		resp, err = c.createImageEdit(ctx, req)
 	}
 	if err != nil {
@@ -331,6 +335,7 @@ func (s *webUIServer) handleGenerateStream(w http.ResponseWriter, r *http.Reques
 		resp, err = c.createImageGenerationStream(ctx, req, saveAndSend)
 	} else {
 		req := opts.editRequest(s.modelFromForm(r), prompt, refs, nil)
+		req.FileFormat = s.fileFormat
 		resp, err = c.createImageEditStream(ctx, req, saveAndSend)
 	}
 	if err != nil {

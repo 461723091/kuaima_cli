@@ -352,6 +352,49 @@ func TestCreateImageEditStreamUsesEditEndpoint(t *testing.T) {
 		if r.URL.Path != "/v1/images/edits" {
 			t.Fatalf("unexpected path: %s", r.URL.Path)
 		}
+		if !strings.HasPrefix(r.Header.Get("Content-Type"), "multipart/form-data;") {
+			t.Fatalf("unexpected content type: %q", r.Header.Get("Content-Type"))
+		}
+		if r.Header.Get("Accept") != "text/event-stream" {
+			t.Fatalf("unexpected accept header: %q", r.Header.Get("Accept"))
+		}
+		mr, err := r.MultipartReader()
+		if err != nil {
+			t.Fatal(err)
+		}
+		fields := map[string]string{}
+		var imageBytes []byte
+		for {
+			part, err := mr.NextPart()
+			if err == io.EOF {
+				break
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			data, err := io.ReadAll(part)
+			if err != nil {
+				t.Fatal(err)
+			}
+			switch part.FormName() {
+			case "model", "prompt", "stream":
+				fields[part.FormName()] = string(data)
+			case "image":
+				imageBytes = data
+			}
+		}
+		if fields["model"] != "test-model" {
+			t.Fatalf("unexpected model field: %q", fields["model"])
+		}
+		if fields["prompt"] != "edit" {
+			t.Fatalf("unexpected prompt field: %q", fields["prompt"])
+		}
+		if fields["stream"] != "true" {
+			t.Fatalf("unexpected stream field: %q", fields["stream"])
+		}
+		if string(imageBytes) != "fake" {
+			t.Fatalf("unexpected image bytes: %q", string(imageBytes))
+		}
 		w.Header().Set("Content-Type", "text/event-stream")
 		_, _ = w.Write([]byte("data: {\"type\":\"image_edit.completed\",\"data\":[{\"b64_json\":\"edited-image\"}]}\n\n"))
 		_, _ = w.Write([]byte("data: [DONE]\n\n"))
@@ -364,7 +407,12 @@ func TestCreateImageEditStreamUsesEditEndpoint(t *testing.T) {
 	}
 	defer c.Close()
 
-	resp, err := c.createImageEditStream(t.Context(), imageEditRequest{Model: "test-model", Prompt: "edit", Images: []imageRef{{ImageURL: "https://example.com/a.png"}}}, nil)
+	resp, err := c.createImageEditStream(t.Context(), imageEditRequest{
+		Model:      "test-model",
+		Prompt:     "edit",
+		FileFormat: fileFormatBase64,
+		Images:     []imageRef{{ImageURL: "data:image/png;base64,ZmFrZQ=="}},
+	}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
