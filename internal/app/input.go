@@ -28,10 +28,6 @@ type inputContent struct {
 	ImageURL string `json:"image_url,omitempty"`
 }
 
-func buildInput(prompt, system string, images []string, files []textFileContent) ([]inputMessage, error) {
-	return buildInputWithFileFormat(context.Background(), nil, prompt, system, images, files, fileFormatBase64)
-}
-
 func buildInputWithFileFormat(ctx context.Context, c *client, prompt, system string, images []string, files []textFileContent, fileFormat string) ([]inputMessage, error) {
 	fileFormat, err := normalizeFileFormat(fileFormat)
 	if err != nil {

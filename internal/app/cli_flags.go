@@ -75,10 +75,6 @@ func addClientFlagsWithConfig(fs *flag.FlagSet, cfg appConfig) clientOptions {
 	}
 }
 
-func addResponseFlags(fs *flag.FlagSet) responseOptions {
-	return addResponseFlagsWithConfig(fs, appConfig{})
-}
-
 func addResponseFlagsWithConfig(fs *flag.FlagSet, cfg appConfig) responseOptions {
 	return responseOptions{
 		clientOptions: addClientFlagsWithConfig(fs, cfg),

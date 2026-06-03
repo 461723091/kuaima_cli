@@ -1,14 +1,9 @@
 package app
 
 import (
-	"context"
 	"fmt"
 	"os"
 )
-
-func saveResponseImages(ctx context.Context, c *client, resp *responsePayload, dir string) ([]string, error) {
-	return saveResponseImagesWithSaver(newResponseImageSaver(ctx, c.httpClient, dir), resp)
-}
 
 func saveResponseImagesWithSaver(saver *responseImageSaver, resp *responsePayload) ([]string, error) {
 	if saver == nil {
