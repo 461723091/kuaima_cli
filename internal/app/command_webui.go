@@ -27,11 +27,12 @@ import (
 var webUIAssets embed.FS
 
 type webUIServer struct {
-	clientOpts clientOptions
-	defaults   webUIDefaults
-	fileFormat string
-	mu         sync.RWMutex
-	saveDir    string
+	clientOpts     clientOptions
+	responseSystem string
+	defaults       webUIDefaults
+	fileFormat     string
+	mu             sync.RWMutex
+	saveDir        string
 }
 
 type webUIDefaults struct {
@@ -62,7 +63,11 @@ func runWebUIWithOptions(args []string, runtimeOpts webUIRuntimeOptions) error {
 		return err
 	}
 	fs := newFlagSet("webui")
-	opts := addClientFlagsWithConfig(fs, cfg)
+	if cfg.System == nil || *cfg.System == "" {
+		defaultSystem := "Just generate the image; do not return a prompt or SVG"
+		cfg.System = &defaultSystem
+	}
+	opts := addResponseFlagsWithConfig(fs, cfg)
 	inputOpts := addInputFlagsWithConfig(fs, cfg)
 	imageOpts := addImageFlags(fs, cfg)
 	saveDir := addSaveImagesFlagWithConfig(fs, cfg, "kuaima_webui_outputs")
@@ -112,8 +117,9 @@ func runWebUIWithOptions(args []string, runtimeOpts webUIRuntimeOptions) error {
 		return err
 	}
 	ui := &webUIServer{
-		clientOpts: opts,
-		fileFormat: strings.TrimSpace(*inputOpts.fileFormat),
+		clientOpts:     opts.clientOptions,
+		responseSystem: strings.TrimSpace(*opts.system),
+		fileFormat:     strings.TrimSpace(*inputOpts.fileFormat),
 		defaults: webUIDefaults{
 			ImageModel:        opts.imageGenerationModel(),
 			ImageSize:         stringValue(imageOpts.size),
@@ -368,25 +374,12 @@ func (s *webUIServer) handleGenerateStream(w http.ResponseWriter, r *http.Reques
 }
 
 func (s *webUIServer) handleGenerateWithResponsesStream(ctx context.Context, c *client, opts imageOptions, imageModel, prompt string, refs []imageRef, stream *webUIEventStream, onImage func(imageCandidate) error) (*responsePayload, error) {
-	content := []inputContent{{
-		Type: "input_text",
-		Text: prompt,
-	}}
-	for _, ref := range refs {
-		content = append(content, inputContent{
-			Type:     "input_image",
-			ImageURL: ref.ImageURL,
-		})
-	}
 	tool := opts.responseTool()
 	imageModel = strings.TrimSpace(imageModel)
 	addAutoString(tool, "model", &imageModel)
 	req := responseRequest{
 		Model: strings.TrimSpace(*s.clientOpts.model),
-		Input: []inputMessage{{
-			Role:    "user",
-			Content: content,
-		}},
+		Input: s.responseInput(prompt, refs),
 		Tools: []map[string]any{tool},
 	}
 	runCount := opts.responseRunCount()
@@ -413,25 +406,12 @@ func (s *webUIServer) handleGenerateWithResponsesStream(ctx context.Context, c *
 }
 
 func (s *webUIServer) handleGenerateWithResponses(ctx context.Context, c *client, opts imageOptions, imageModel, prompt string, refs []imageRef, saveDir string) ([]string, string, error) {
-	content := []inputContent{{
-		Type: "input_text",
-		Text: prompt,
-	}}
-	for _, ref := range refs {
-		content = append(content, inputContent{
-			Type:     "input_image",
-			ImageURL: ref.ImageURL,
-		})
-	}
 	tool := opts.responseTool()
 	imageModel = strings.TrimSpace(imageModel)
 	addAutoString(tool, "model", &imageModel)
 	req := responseRequest{
 		Model: strings.TrimSpace(*s.clientOpts.model),
-		Input: []inputMessage{{
-			Role:    "user",
-			Content: content,
-		}},
+		Input: s.responseInput(prompt, refs),
 		Tools: []map[string]any{tool},
 	}
 	runCount := opts.responseRunCount()
@@ -452,6 +432,34 @@ func (s *webUIServer) handleGenerateWithResponses(ctx context.Context, c *client
 		}
 	}
 	return saved, strings.Join(texts, "\n\n"), nil
+}
+
+func (s *webUIServer) responseInput(prompt string, refs []imageRef) []inputMessage {
+	messages := []inputMessage{}
+	if strings.TrimSpace(s.responseSystem) != "" {
+		messages = append(messages, inputMessage{
+			Role: "system",
+			Content: []inputContent{{
+				Type: "input_text",
+				Text: strings.TrimSpace(s.responseSystem),
+			}},
+		})
+	}
+	content := []inputContent{{
+		Type: "input_text",
+		Text: prompt,
+	}}
+	for _, ref := range refs {
+		content = append(content, inputContent{
+			Type:     "input_image",
+			ImageURL: ref.ImageURL,
+		})
+	}
+	messages = append(messages, inputMessage{
+		Role:    "user",
+		Content: content,
+	})
+	return messages
 }
 
 func (s *webUIServer) handleBalance(w http.ResponseWriter, r *http.Request) {
