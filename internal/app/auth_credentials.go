@@ -14,10 +14,16 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 )
 
+var credentialInitMu sync.Mutex
+
 func ensureAPIKey(ctx context.Context, baseURL, username, password string, verbose bool, logWriter io.Writer) (string, error) {
+	credentialInitMu.Lock()
+	defer credentialInitMu.Unlock()
+
 	cfg, err := loadAppConfig()
 	if err != nil {
 		return "", err
@@ -47,6 +53,9 @@ func ensureAPIKey(ctx context.Context, baseURL, username, password string, verbo
 }
 
 func resolveRechargeCredentials(ctx context.Context, baseURL, username, password string, verbose bool, logWriter io.Writer) (string, string, error) {
+	credentialInitMu.Lock()
+	defer credentialInitMu.Unlock()
+
 	cfg, err := loadAppConfig()
 	if err != nil {
 		return "", "", err

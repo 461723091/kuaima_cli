@@ -1,11 +1,13 @@
 package app
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 )
@@ -47,6 +49,69 @@ func TestEnsureAPIKeyLogsInAndSavesCredentials(t *testing.T) {
 	}
 	if configString(cfg.Username, "") != "user1" || configString(cfg.Password, "") != "pass1" || configString(cfg.APIKey, "") != "token1" {
 		t.Fatalf("unexpected saved config: %#v", cfg)
+	}
+}
+
+func TestEnsureAPIKeySerializesConcurrentBootstrap(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("KUAIMA_CONFIG_DIR", dir)
+
+	var (
+		mu        sync.Mutex
+		usernames []string
+		seenOne   = make(chan struct{})
+		release   = make(chan struct{})
+		once      sync.Once
+	)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/user/ulogin" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		var req map[string]string
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Fatal(err)
+		}
+		mu.Lock()
+		usernames = append(usernames, req["username"])
+		count := len(usernames)
+		mu.Unlock()
+		if count == 1 {
+			once.Do(func() { close(seenOne) })
+			<-release
+		}
+		_, _ = w.Write([]byte(`{"message":"","success":true,"data":{"token":"token1"}}`))
+	}))
+	defer server.Close()
+
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+
+	errCh := make(chan error, 2)
+	go func() {
+		_, err := ensureAPIKey(ctx, server.URL, "", "", false, nil)
+		errCh <- err
+	}()
+
+	<-seenOne
+	go func() {
+		_, err := ensureAPIKey(ctx, server.URL, "", "", false, nil)
+		errCh <- err
+	}()
+
+	close(release)
+	for i := 0; i < 2; i++ {
+		if err := <-errCh; err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+	if len(usernames) != 2 {
+		t.Fatalf("expected 2 login calls, got %d", len(usernames))
+	}
+	if usernames[0] != usernames[1] {
+		t.Fatalf("expected serialized bootstrap to reuse the same username, got %q and %q", usernames[0], usernames[1])
 	}
 }
 
