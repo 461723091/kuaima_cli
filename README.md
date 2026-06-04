@@ -38,12 +38,6 @@ Get-Content prompt.txt | .\dist\kuaima_cli.exe
 .\dist\kuaima_cli.exe -file-format url -file .\photo.png "描述这张图片"
 ```
 
-开启流式输出：
-
-```powershell
-.\dist\kuaima_cli.exe -stream "写一段产品介绍"
-```
-
 如果返回结果里包含图片 URL、data URL 或 base64 图片，默认会保存到当前目录。可以指定保存目录，或传空字符串关闭：
 
 ```powershell
@@ -72,14 +66,4 @@ Get-Content prompt.txt | .\dist\kuaima_cli.exe
 .\dist\kuaima_cli.exe ask -stream "你好"
 .\dist\kuaima_cli.exe chat
 .\dist\kuaima_cli.exe image -save-images .\outputs "a clean product render of a white coffee mug"
-```
-
-## 常用环境变量
-
-```text
-KUAIMA_API_KEY   API key，未设置时使用 OPENAI_API_KEY
-KUAIMA_BASE_URL  默认 https://ai.szkmjb.com
-KUAIMA_OSS_URL   默认 https://oss.szkmjb.com
-KUAIMA_MODEL     默认 gpt-5.4-mini
-KUAIMA_IMAGE_MODEL 图片生成模型；默认 gpt-image-2
 ```
