@@ -1088,6 +1088,11 @@ async function addImageURLAsReference(url) {
 
 async function initConfig() {
   const config = await api("/api/config");
+  const versionLabel = $("#appVersion");
+  if (versionLabel) {
+    versionLabel.textContent = config.version ? "v" + config.version : "";
+    versionLabel.hidden = !config.version;
+  }
   for (const [key, value] of Object.entries(config)) {
     const input = document.querySelector('[name="' + key + '"]');
     if (input && value !== "" && value != null) {

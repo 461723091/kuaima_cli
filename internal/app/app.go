@@ -1,6 +1,9 @@
 package app
 
-import "os"
+import (
+	"fmt"
+	"os"
+)
 
 const (
 	defaultBaseURL    = "https://ai.szkmjb.com"
@@ -33,6 +36,9 @@ func Run(args []string) error {
 			return runRecharge(args[1:])
 		case "help", "-h", "--help":
 			usage(os.Stdout)
+			return nil
+		case "-version", "--version", "version":
+			fmt.Fprintln(os.Stdout, AppVersion)
 			return nil
 		}
 	}

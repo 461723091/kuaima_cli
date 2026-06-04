@@ -36,6 +36,7 @@ type webUIServer struct {
 }
 
 type webUIDefaults struct {
+	Version           string `json:"version"`
 	ImageModel        string `json:"image_model"`
 	ImageSize         string `json:"image_size"`
 	ImageQuality      string `json:"image_quality"`
@@ -121,6 +122,7 @@ func runWebUIWithOptions(args []string, runtimeOpts webUIRuntimeOptions) error {
 		responseSystem: strings.TrimSpace(*opts.system),
 		fileFormat:     strings.TrimSpace(*inputOpts.fileFormat),
 		defaults: webUIDefaults{
+			Version:           AppVersion,
 			ImageModel:        opts.imageGenerationModel(),
 			ImageSize:         stringValue(imageOpts.size),
 			ImageQuality:      stringValue(imageOpts.quality),

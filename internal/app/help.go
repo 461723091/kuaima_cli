@@ -18,6 +18,7 @@ func newFlagSet(name string) *flag.FlagSet {
 
 func usage(w io.Writer) {
 	fmt.Fprintln(w, "Usage:")
+	fmt.Fprintln(w, "  kuaima_cli -version")
 	fmt.Fprintln(w, "  kuaima_cli [ask] [options] prompt")
 	fmt.Fprintln(w, "  kuaima_cli [ask] [options] < prompt.txt")
 	fmt.Fprintln(w, "  kuaima_cli chat [options]")
@@ -27,6 +28,7 @@ func usage(w io.Writer) {
 	fmt.Fprintln(w, "  kuaima_cli recharge [options]")
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Commands:")
+	fmt.Fprintln(w, "  version  print the program version")
 	fmt.Fprintln(w, "  ask      send one prompt and print the response; default command when omitted")
 	fmt.Fprintln(w, "  chat     enter interactive chat mode")
 	fmt.Fprintln(w, "  image    generate/edit images and save returned images")
@@ -70,6 +72,9 @@ func usage(w io.Writer) {
 
 func commandUsage(w io.Writer, name string, fs *flag.FlagSet) {
 	switch name {
+	case "version":
+		fmt.Fprintln(w, "Usage:")
+		fmt.Fprintln(w, "  kuaima_cli -version")
 	case "ask":
 		fmt.Fprintln(w, "Usage:")
 		fmt.Fprintln(w, "  kuaima_cli [ask] [options] prompt")
