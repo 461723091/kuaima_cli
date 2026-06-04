@@ -40,6 +40,7 @@ let activeGenerationController = null;
 const imagePreviewURLs = new WeakMap();
 const historySourceURLs = new WeakMap();
 const imageFingerprintCache = new WeakMap();
+let draggedHistoryImageURL = "";
 
 function setResultsVisible(visible) {
   $("#resultsPanel").hidden = !visible;
@@ -271,7 +272,7 @@ function renderImagePreviews() {
   const list = $("#imagePreviewList");
   if (selectedImages.length === 0) {
     list.className = "image-preview-list empty";
-    list.textContent = "上传参考图后可预览、拖动调整顺序";
+    list.textContent = "拖动历史图片到这里添加参考图";
     return;
   }
 
@@ -433,6 +434,7 @@ function selectAmount(amount) {
 
 function renderBalance(usage) {
   $("#balanceTop").textContent = usage.total_available_text || "-";
+  $("#balanceTop2").textContent = usage.total_available_text || "-";
   $("#usedTop").textContent = usage.total_used_text || "-";
   $("#accountName").textContent = usage.name || "-";
 }
@@ -734,6 +736,7 @@ async function ensureHistoryReferenceURLs() {
 async function saveHistory(result, extra = {}) {
   const form = $("#genForm");
   const references = await ensureHistoryReferenceURLs();
+  const timing = result && result.timing ? result.timing : null;
   const item = {
     id: String(Date.now()),
     created_at: new Date().toISOString(),
@@ -749,6 +752,8 @@ async function saveHistory(result, extra = {}) {
     reference_count: selectedImages.length,
     references,
     images: result.images || [],
+    response_ms: timing && Number.isFinite(Number(timing.response_ms)) ? Math.round(Number(timing.response_ms)) : null,
+    total_ms: timing && Number.isFinite(Number(timing.total_ms)) ? Math.round(Number(timing.total_ms)) : null,
     error: extra.error || "",
   };
   await putHistoryItem(item);
@@ -778,6 +783,38 @@ function formatHistoryTime(value) {
   });
 }
 
+function formatDuration(value) {
+  const duration = Number(value);
+  if (!Number.isFinite(duration) || duration < 0) {
+    return "-";
+  }
+  if (duration < 1000) {
+    return Math.max(1, Math.round(duration)) + "ms";
+  }
+  return (duration / 1000).toFixed(duration >= 10000 ? 0 : 1).replace(/\.0$/, "") + "s";
+}
+
+function formatTimingSummary(item) {
+  const parts = [];
+  if (Number.isFinite(Number(item && item.response_ms))) {
+    parts.push("响应 " + formatDuration(item.response_ms));
+  }
+  if (Number.isFinite(Number(item && item.total_ms))) {
+    parts.push("总计 " + formatDuration(item.total_ms));
+  }
+  return parts.join(" · ");
+}
+
+function renderResultTiming(timing) {
+  const label = $("#resultTiming");
+  if (!label) {
+    return;
+  }
+  const summary = timing ? formatTimingSummary(timing) : "";
+  label.textContent = summary;
+  label.hidden = !summary;
+}
+
 function historyReferencePreview(ref) {
   return ref && ref.url ? ref.url : "";
 }
@@ -801,27 +838,24 @@ async function renderHistory() {
     '">删除</button></div></div>' +
     '<div class="history-meta">' + esc(item.image_model || "-") + ' · ' +
     esc(item.image_size || "-") + ' · ' + esc(qualityLabel(item.image_quality)) +
-    ' · 参考图 ' + esc(item.reference_count || 0) + ' 张</div>' +
+    ' · 参考图 ' + esc(item.reference_count || 0) + ' 张' +
+    (formatTimingSummary(item) ? ' · ' + esc(formatTimingSummary(item)) : '') + '</div>' +
     (item.error ? '<div class="history-error">' + esc(item.error) + '</div>' : '') +
     '<div class="history-images">' + (item.references || []).map((ref, index) => ({ ref, index })).filter((entry) => entry.ref && entry.ref.url).map((entry) => {
       const ref = entry.ref;
-      const index = entry.index;
       const preview = historyReferencePreview(ref);
       return '<div class="history-image-card">' +
-        '<button type="button" class="history-image-preview" data-preview-image="' + esc(preview) + '" title="点击放大预览">' +
+        '<button type="button" class="history-image-preview" draggable="true" data-preview-image="' + esc(preview) + '" data-history-drag-url="' + esc(preview) + '" title="点击放大预览，拖到参考区添加">' +
         '<img src="' + esc(preview) + '" alt="历史参考图预览">' +
         '<span>点击放大预览</span>' +
         '</button>' +
-        '<button type="button" class="history-image-use" data-history-action="use-reference" data-history-id="' + esc(item.id) +
-        '" data-reference-index="' + index + '">引用</button>' +
         '</div>';
     }).join("") + (item.images || []).map((url) => (
       '<div class="history-image-card">' +
-      '<button type="button" class="history-image-preview" data-preview-image="' + esc(url) + '" title="点击放大预览">' +
+      '<button type="button" class="history-image-preview" draggable="true" data-preview-image="' + esc(url) + '" data-history-drag-url="' + esc(url) + '" title="点击放大预览，拖到参考区添加">' +
       '<img src="' + esc(url) + '" alt="历史图片预览">' +
       '<span>点击放大预览</span>' +
       '</button>' +
-      '<button type="button" class="history-image-use" data-history-action="use-image" data-image-url="' + esc(url) + '">引用</button>' +
       '</div>'
     )).join("") + '</div>' +
     '</article>'
@@ -860,15 +894,6 @@ async function historyReferenceFiles(item) {
     files.push(await fileFromHistoryURL(ref.url, ref.name, ref.type));
   }
   return files;
-}
-
-async function addHistoryReferenceAsImage(id, index) {
-  const item = (await readHistory()).find((entry) => entry.id === id);
-  const ref = item && item.references && item.references[Number(index)];
-  if (!ref || !ref.url) {
-    throw new Error("历史参考图不存在");
-  }
-  await addReferenceFiles([await fileFromHistoryURL(ref.url, ref.name, ref.type)], "添加历史参考图");
 }
 
 async function fileFromHistoryURL(url, name, type) {
@@ -977,10 +1002,18 @@ async function openDefaultOutputDir() {
 
 async function generateStream(form, signal) {
   const images = [];
-  const result = { images, saved: [], text: "" };
+  const result = { images, saved: [], text: "", timing: null };
+  const startedAt = performance.now();
+  let firstResponseAt = 0;
+  const markFirstResponse = () => {
+    if (!firstResponseAt) {
+      firstResponseAt = performance.now();
+    }
+  };
   setResultsVisible(true);
   $("#gallery").classList.remove("empty");
   $("#gallery").innerHTML = '<div class="generation-placeholder"><span class="spinner"></span><span>正在等待首张图片...</span></div>';
+  renderResultTiming(null);
   await apiStream("/api/generate/stream", {
     method: "POST",
     body: new FormData(form),
@@ -991,17 +1024,20 @@ async function generateStream(form, signal) {
     },
     text(payload) {
       if (payload.text) {
+        markFirstResponse();
         result.text += payload.text;
         $("#genStatus").textContent = result.text;
       }
     },
     image(payload) {
       if (payload.url && !images.includes(payload.url)) {
+        markFirstResponse();
         images.push(payload.url);
         renderGalleryImages(images);
       }
     },
     done(payload) {
+      markFirstResponse();
       result.saved = payload.saved || [];
       result.text = payload.text || result.text;
       (payload.images || []).forEach((url) => {
@@ -1015,6 +1051,12 @@ async function generateStream(form, signal) {
       throw new Error(payload.error || "生成失败");
     },
   });
+  const finishedAt = performance.now();
+  result.timing = {
+    response_ms: Math.round((firstResponseAt || finishedAt) - startedAt),
+    total_ms: Math.round(finishedAt - startedAt),
+  };
+  renderResultTiming(result.timing);
   return result;
 }
 
@@ -1135,6 +1177,16 @@ document.querySelectorAll("[data-billing-tab]").forEach((button) => {
 document.addEventListener("dragstart", (event) => {
   const item = event.target.closest(".image-preview-item");
   if (!item) {
+    const historyPreview = event.target.closest(".history-image-preview");
+    if (!historyPreview) {
+      return;
+    }
+    draggedHistoryImageURL = historyPreview.dataset.historyDragUrl || historyPreview.dataset.previewImage || "";
+    if (event.dataTransfer && draggedHistoryImageURL) {
+      event.dataTransfer.effectAllowed = "copy";
+      event.dataTransfer.setData("text/plain", draggedHistoryImageURL);
+    }
+    historyPreview.classList.add("dragging");
     return;
   }
   draggedImageIndex = Number(item.dataset.imageIndex);
@@ -1146,24 +1198,53 @@ document.addEventListener("dragend", (event) => {
   const item = event.target.closest(".image-preview-item");
   if (item) {
     item.classList.remove("dragging");
+  } else {
+    const historyPreview = event.target.closest(".history-image-preview");
+    if (historyPreview) {
+      historyPreview.classList.remove("dragging");
+    }
   }
   draggedImageIndex = -1;
+  draggedHistoryImageURL = "";
+  $("#imagePreviewList").classList.remove("drag-over");
 });
 
 document.addEventListener("dragover", (event) => {
+  const previewList = event.target.closest("#imagePreviewList");
+  if (previewList && draggedHistoryImageURL) {
+    event.preventDefault();
+    previewList.classList.add("drag-over");
+    if (event.dataTransfer) {
+      event.dataTransfer.dropEffect = "copy";
+    }
+    return;
+  }
   if (event.target.closest(".image-preview-item")) {
     event.preventDefault();
     event.dataTransfer.dropEffect = "move";
+    $("#imagePreviewList").classList.remove("drag-over");
   }
 });
 
 document.addEventListener("drop", (event) => {
+  const previewList = event.target.closest("#imagePreviewList");
+  if (previewList && draggedHistoryImageURL) {
+    event.preventDefault();
+    previewList.classList.remove("drag-over");
+    addImageURLAsReference(draggedHistoryImageURL).catch((error) => {
+      $("#genStatus").textContent = error.message;
+      $("#genStatus").className = "status error";
+    });
+    return;
+  }
   const item = event.target.closest(".image-preview-item");
   if (!item || draggedImageIndex < 0) {
+    $("#imagePreviewList").classList.remove("drag-over");
     return;
   }
   event.preventDefault();
   moveImage(draggedImageIndex, Number(item.dataset.imageIndex));
+  $("#imagePreviewList").classList.remove("drag-over");
 });
 
 document.addEventListener("paste", async (event) => {
@@ -1230,8 +1311,6 @@ document.addEventListener("click", async (event) => {
         await renderHistory();
       } else if (action === "use-image") {
         await addImageURLAsReference(historyButton.dataset.imageUrl);
-      } else if (action === "use-reference") {
-        await addHistoryReferenceAsImage(historyButton.dataset.historyId, historyButton.dataset.referenceIndex);
       }
     } catch (error) {
       $("#genStatus").textContent = error.message;

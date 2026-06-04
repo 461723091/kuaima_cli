@@ -17,7 +17,7 @@ func (c *client) getTokenUsage(ctx context.Context) (*tokenUsage, error) {
 	}
 	req.Header.Set("Authorization", "Bearer "+c.apiKey)
 	req.Header.Set("Accept", "application/json")
-	c.logRequest(req, nil)
+	//c.logRequest(req, nil)
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
 		return nil, err
@@ -27,7 +27,7 @@ func (c *client) getTokenUsage(ctx context.Context) (*tokenUsage, error) {
 	if err != nil {
 		return nil, err
 	}
-	c.logResponse(resp, data)
+	//c.logResponse(resp, data)
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return nil, fmt.Errorf("usage request failed: %s: %s", resp.Status, strings.TrimSpace(string(data)))
 	}

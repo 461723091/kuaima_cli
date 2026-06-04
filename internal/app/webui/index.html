@@ -27,6 +27,10 @@
           <strong id="accountName">-</strong>
         </div>
         <div class="menu-row">
+          <span>可用额度</span>
+          <strong id="balanceTop2">-</strong>
+        </div>
+        <div class="menu-row">
           <span>已消耗</span>
           <strong id="usedTop">-</strong>
         </div>
@@ -35,8 +39,10 @@
         <div class="menu-divider"></div>
 
         <div class="billing-tabs" role="tablist" aria-label="充值方式">
-          <button id="billingTabAmount" class="billing-tab active" type="button" role="tab" aria-selected="true" data-billing-tab="amount">金额充值</button>
-          <button id="billingTabPlan" class="billing-tab" type="button" role="tab" aria-selected="false" data-billing-tab="plan">套餐订阅</button>
+          <button id="billingTabAmount" class="billing-tab active" type="button" role="tab" aria-selected="true"
+            data-billing-tab="amount">金额充值</button>
+          <button id="billingTabPlan" class="billing-tab" type="button" role="tab" aria-selected="false"
+            data-billing-tab="plan">套餐订阅</button>
         </div>
 
         <div class="field">
@@ -192,6 +198,7 @@
             <h2>结果预览</h2>
           </div>
         </div>
+        <div id="resultTiming" class="result-timing" aria-live="polite"></div>
         <div id="gallery" class="gallery"></div>
       </section>
     </section>

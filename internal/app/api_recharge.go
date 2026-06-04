@@ -30,7 +30,7 @@ func (c *client) getRechargeInfo(ctx context.Context) (*rechargeInfo, error) {
 	}
 	req.Header.Set("Authorization", "Bearer "+c.apiKey)
 	req.Header.Set("Accept", "application/json")
-	c.logRequest(req, nil)
+	//c.logRequest(req, nil)
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
@@ -42,7 +42,7 @@ func (c *client) getRechargeInfo(ctx context.Context) (*rechargeInfo, error) {
 	if err != nil {
 		return nil, err
 	}
-	c.logResponse(resp, data)
+	//c.logResponse(resp, data)
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return nil, fmt.Errorf("recharge info request failed: %s: %s", resp.Status, strings.TrimSpace(string(data)))
 	}
