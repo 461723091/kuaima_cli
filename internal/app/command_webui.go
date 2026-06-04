@@ -852,11 +852,15 @@ func formatWebUsage(usage *tokenUsage) map[string]any {
 	for _, item := range usage.Subscriptions {
 		sub := item.Subscription
 		subs = append(subs, map[string]any{
-			"status":    sub.Status,
-			"available": formatQuotaAmount(sub.AmountTotal - sub.AmountUsed),
-			"used":      formatQuotaAmount(sub.AmountUsed),
-			"start":     formatTime(sub.StartTime),
-			"end":       formatTime(sub.EndTime),
+			"status":         sub.Status,
+			"total":          sub.AmountTotal,
+			"total_text":     formatQuotaAmount(sub.AmountTotal),
+			"available":      sub.AmountTotal - sub.AmountUsed,
+			"available_text": formatQuotaAmount(sub.AmountTotal - sub.AmountUsed),
+			"used":           sub.AmountUsed,
+			"used_text":      formatQuotaAmount(sub.AmountUsed),
+			"start":          formatTime(sub.StartTime),
+			"end":            formatTime(sub.EndTime),
 		})
 	}
 	return map[string]any{

@@ -19,7 +19,7 @@
     </div>
     <div class="billing-menu">
       <button id="toggleBillingTop" class="wallet-pill" type="button" aria-expanded="false">
-        <span>可用余额</span>
+        <span id="balanceTopLabel">可用余额</span>
         <strong id="balanceTop">读取中...</strong>
       </button>
       <div id="billingDropdown" class="billing-dropdown" hidden>
@@ -27,15 +27,34 @@
           <span>账号</span>
           <strong id="accountName">-</strong>
         </div>
-        <div class="menu-row">
-          <span>可用额度</span>
-          <strong id="balanceTop2">-</strong>
-        </div>
-        <div class="menu-row">
-          <span>已消耗</span>
-          <strong id="usedTop">-</strong>
+        <div id="accountBalanceSummary" class="balance-summary">
+          <div class="balance-summary-head">
+            <div class="balance-kpi">
+              <span>可用额度</span>
+              <strong id="balanceTop2">-</strong>
+            </div>
+            <div class="balance-kpi balance-kpi-used">
+              <span>已消耗</span>
+              <strong id="usedTop">-</strong>
+            </div>
+          </div>
+          <div class="balance-progress" aria-hidden="true">
+            <div id="usageProgressUsed" class="balance-progress-used"></div>
+          </div>
+          <div class="balance-progress-labels">
+            <span id="usageProgressAvailableLabel">可用 0%</span>
+            <span id="usageProgressUsedLabel">已用 0%</span>
+          </div>
         </div>
         <a id="usageDetailLink" class="detail-link" href="#" target="_blank" rel="noreferrer">查看使用详情</a>
+
+        <div class="subscription">
+          <div class="section-title">
+            <span>已订阅套餐</span>
+            <span id="subscriptionCount" class="status"></span>
+          </div>
+          <div id="subscriptionList" class="subscription-list"></div>
+        </div>
 
         <div class="menu-divider"></div>
 

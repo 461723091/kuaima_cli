@@ -1132,6 +1132,53 @@ select {
   overflow-wrap: anywhere;
 }
 
+.balance-summary {
+  display: grid;
+  gap: 10px;
+  margin-top: 8px;
+  padding: 10px 0 2px;
+}
+
+.balance-summary-head {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.balance-kpi {
+  display: grid;
+  gap: 4px;
+}
+
+.balance-kpi span,
+.balance-progress-labels span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.balance-kpi strong {
+  overflow-wrap: anywhere;
+}
+
+.balance-progress {
+  display: flex;
+  height: 10px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(82, 103, 132, 0.12);
+}
+
+.balance-progress-used {
+  height: 100%;
+  background: linear-gradient(90deg, rgba(37, 99, 235, 0.9), rgba(15, 159, 143, 0.9));
+}
+
+.balance-progress-labels {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
 .subscription {
   display: grid;
   gap: 8px;
@@ -1140,10 +1187,55 @@ select {
   border-top: 1px solid rgba(82, 103, 132, 0.18);
 }
 
-.subscription div {
+.subscription-list {
+  display: grid;
+  gap: 10px;
+}
+
+.subscription-item {
+  display: grid;
+  gap: 6px;
+  padding: 10px 12px;
+  border: 1px solid rgba(82, 103, 132, 0.14);
+  border-radius: 8px;
+  background: rgba(248, 250, 252, 0.82);
+}
+
+.subscription-head {
   display: flex;
   justify-content: space-between;
   gap: 10px;
+}
+
+.subscription-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.subscription-head span,
+.subscription-row span {
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.subscription-head strong,
+.subscription-row b {
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+.subscription-bar {
+  display: flex;
+  height: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(82, 103, 132, 0.12);
+}
+
+.subscription-bar-used {
+  height: 100%;
+  background: linear-gradient(90deg, rgba(15, 159, 143, 0.9), rgba(37, 99, 235, 0.9));
 }
 
 .chip-grid {

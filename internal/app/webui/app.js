@@ -447,11 +447,58 @@ function selectAmount(amount) {
   }
 }
 
+function activeSubscription(subscriptions) {
+  return (Array.isArray(subscriptions) ? subscriptions : []).find((item) => {
+    const status = String((item && item.status) || "").toLowerCase();
+    return status === "active";
+  }) || null;
+}
+
+function renderSubscriptions(subscriptions) {
+  const list = Array.isArray(subscriptions) ? subscriptions : [];
+  $("#subscriptionCount").textContent = list.length ? String(list.length) : "";
+  $("#subscriptionList").innerHTML = list.length ? list.map((item) => {
+    const available = Number(item.available) || 0;
+    const used = Number(item.used) || 0;
+    const total = Number(item.total) || (available + used);
+    const usedPercent = total > 0 ? Math.max(0, Math.min(100, used / total * 100)) : 0;
+    return (
+      '<div class="subscription-item">' +
+      '<div class="subscription-head">' +
+      '<strong>' + esc(item.status || "subscription") + '</strong>' +
+      '<span>' + esc(item.start || "-") + ' - ' + esc(item.end || "-") + '</span>' +
+      '</div>' +
+      '<div class="subscription-bar" aria-hidden="true">' +
+      '<div class="subscription-bar-used" style="width:' + usedPercent.toFixed(2) + '%"></div>' +
+      '</div>' +
+      '<div class="subscription-row"><span>可用</span><b>' + esc(item.available_text || item.available || "-") + '</b></div>' +
+      '<div class="subscription-row"><span>已用</span><b>' + esc(item.used_text || item.used || "-") + '</b></div>' +
+      '</div>'
+    );
+  }).join("") : '<span class="status">暂无订阅套餐</span>';
+}
+
 function renderBalance(usage) {
-  $("#balanceTop").textContent = usage.total_available_text || "-";
+  const subscriptions = usage.subscriptions || [];
+  const active = activeSubscription(subscriptions);
+  $("#balanceTopLabel").textContent = active ? "当前套餐" : "可用余额";
+  $("#balanceTop").textContent = active
+    ? ("有效至 " + (active.end || "-"))
+    : (usage.total_available_text || "-");
   $("#balanceTop2").textContent = usage.total_available_text || "-";
   $("#usedTop").textContent = usage.total_used_text || "-";
   $("#accountName").textContent = usage.name || "-";
+  $("#accountBalanceSummary").hidden = !!active;
+  renderSubscriptions(subscriptions);
+
+  const available = Number(usage.total_available) || 0;
+  const used = Number(usage.total_used) || 0;
+  const total = available + used;
+  const usedPercent = total > 0 ? Math.max(0, Math.min(100, used / total * 100)) : 0;
+  const availablePercent = total > 0 ? Math.max(0, Math.min(100, available / total * 100)) : 0;
+  $("#usageProgressUsed").style.width = usedPercent.toFixed(2) + "%";
+  $("#usageProgressAvailableLabel").textContent = "可用 " + availablePercent.toFixed(0) + "%";
+  $("#usageProgressUsedLabel").textContent = "已用 " + usedPercent.toFixed(0) + "%";
 }
 
 async function loadBalance() {
