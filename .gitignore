@@ -5,6 +5,10 @@
 *.jpeg
 *.jpg
 *.gif
+*.jfif
 
 *.log
 dist/
+
+kuaima_webui_outputs
+

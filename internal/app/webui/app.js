@@ -42,6 +42,20 @@ const historySourceURLs = new WeakMap();
 const imageFingerprintCache = new WeakMap();
 let draggedHistoryImageURL = "";
 
+function isGenerationRunning() {
+  return activeGenerationController !== null;
+}
+
+window.addEventListener("beforeunload", (event) => {
+  if (!isGenerationRunning()) {
+    return;
+  }
+  const message = "图片正在生成中，关闭页面会中断当前任务。确定要离开吗？";
+  event.preventDefault();
+  event.returnValue = message;
+  return message;
+});
+
 function setResultsVisible(visible) {
   $("#resultsPanel").hidden = !visible;
 }
