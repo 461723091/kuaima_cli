@@ -1,70 +1,15 @@
 # kuaima_cli
 
-轻量级 Responses API 命令行客户端。默认 API 地址：
+gpt-image-2 的cli生图工具，支持文生图、参考图改图、多参考图融合、蒙版局部编辑，并把生成图片保存到本地。
 
-```text
-https://ai.szkmjb.com
-```
+支持webui直接双击启动使用
+
+也可接入各大Agent智能体工作流
 
 ## 构建
 
 ```powershell
-go build -buildvcs=false -o dist/kuaima_cli.exe .
-```
-
-## 配置
-
-```powershell
-$env:KUAIMA_API_KEY="your_api_key"
-```
-
-也可以使用 `OPENAI_API_KEY`。
-
-也可以使用家目录下的配置文件，路径为 `~/.kuaima/conf.json`。配置文件优先级最低：命令行参数 > 环境变量 > 配置文件 > 内置默认值。
-
-命令运行时会把本次显式传入的可持久化参数自动写回配置文件，包括：
-
-```text
-model
-image_model
-image_size
-image_quality
-image_count
-image_output_format
-image_output_compression
-image_background
-image_moderation
-image_action
-base_url
-oss_url
-api_key
-system
-stream
-file_format
-save_images
-```
-
-例如：
-
-```json
-{
-  "model": "gpt-5.4-mini",
-  "image_model": "gpt-image-2",
-  "image_size": "1536x1024",
-  "image_quality": "high",
-  "image_count": 2,
-  "image_output_format": "webp",
-  "image_output_compression": 80,
-  "image_background": "transparent",
-  "image_moderation": "low",
-  "image_action": "auto",
-  "base_url": "https://ai.szkmjb.com",
-  "oss_url": "https://oss.szkmjb.com",
-  "api_key": "your_api_key",
-  "stream": true,
-  "file_format": "base64",
-  "save_images": "."
-}
+make build
 ```
 
 ## 使用
