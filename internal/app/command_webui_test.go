@@ -12,6 +12,160 @@ import (
 	"testing"
 )
 
+func TestWebUIHandleGenerateRepeatsImageRequestsForCount(t *testing.T) {
+	var callCount int
+	apiServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		callCount++
+		if r.URL.Path != "/v1/images/generations" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		var got imageGenerationRequest
+		if err := json.NewDecoder(r.Body).Decode(&got); err != nil {
+			t.Fatal(err)
+		}
+		if got.N != 1 {
+			t.Fatalf("expected n=1, got %d", got.N)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		switch callCount {
+		case 1:
+			_, _ = w.Write([]byte(`{"id":"resp_1","output":[{"type":"image_generation_call","status":"completed","result":"ZmFrZTE="}],"output_text":""}`))
+		case 2:
+			_, _ = w.Write([]byte(`{"id":"resp_2","output":[{"type":"image_generation_call","status":"completed","result":"ZmFrZTI="}],"output_text":""}`))
+		default:
+			t.Fatalf("unexpected call count: %d", callCount)
+		}
+	}))
+	defer apiServer.Close()
+
+	saveDir := t.TempDir()
+	ui := &webUIServer{
+		clientOpts: clientOptions{
+			model:      stringPtr("gpt-5.4-mini"),
+			imageModel: stringPtr("test-model"),
+			baseURL:    stringPtr(apiServer.URL),
+			ossURL:     stringPtr(""),
+			apiKey:     stringPtr("secret-token"),
+			username:   stringPtr(""),
+			password:   stringPtr(""),
+			verbose:    boolPtr(false),
+			logFile:    stringPtr(""),
+		},
+		fileFormat: fileFormatBase64,
+		defaults: webUIDefaults{
+			ImageModel:   "test-model",
+			ImageSize:    "1024x1024",
+			ImageQuality: "auto",
+			ImageCount:   2,
+		},
+		saveDir: saveDir,
+	}
+
+	body := &strings.Builder{}
+	writer := multipart.NewWriter(body)
+	_ = writer.WriteField("prompt", "generate me")
+	_ = writer.WriteField("image_model", "test-model")
+	_ = writer.WriteField("image_count", "2")
+	_ = writer.WriteField("image_endpoint", "image")
+	if err := writer.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/api/generate", strings.NewReader(body.String()))
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	rr := httptest.NewRecorder()
+
+	ui.handleGenerate(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("unexpected status: %d body=%s", rr.Code, rr.Body.String())
+	}
+	if callCount != 2 {
+		t.Fatalf("expected 2 requests, got %d", callCount)
+	}
+	if entries, err := os.ReadDir(saveDir); err != nil || len(entries) != 2 {
+		t.Fatalf("expected 2 saved images in %s, entries=%v err=%v", saveDir, entries, err)
+	}
+}
+
+func TestWebUIHandleGenerateStreamRepeatsImageRequestsForCount(t *testing.T) {
+	var callCount int
+	apiServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		callCount++
+		if r.URL.Path != "/v1/images/generations" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		var got imageGenerationRequest
+		if err := json.NewDecoder(r.Body).Decode(&got); err != nil {
+			t.Fatal(err)
+		}
+		if got.N != 1 {
+			t.Fatalf("expected n=1, got %d", got.N)
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		switch callCount {
+		case 1:
+			_, _ = w.Write([]byte("data: {\"type\":\"image_generation.partial_image\",\"partial_image_b64\":\"ZmFrZTE=\"}\n\n"))
+			_, _ = w.Write([]byte("data: {\"type\":\"image_generation.completed\",\"b64_json\":\"ZmFrZTE=\"}\n\n"))
+		case 2:
+			_, _ = w.Write([]byte("data: {\"type\":\"image_generation.completed\",\"b64_json\":\"ZmFrZTI=\"}\n\n"))
+		default:
+			t.Fatalf("unexpected call count: %d", callCount)
+		}
+		_, _ = w.Write([]byte("data: [DONE]\n\n"))
+	}))
+	defer apiServer.Close()
+
+	saveDir := t.TempDir()
+	ui := &webUIServer{
+		clientOpts: clientOptions{
+			model:      stringPtr("gpt-5.4-mini"),
+			imageModel: stringPtr("test-model"),
+			baseURL:    stringPtr(apiServer.URL),
+			ossURL:     stringPtr(""),
+			apiKey:     stringPtr("secret-token"),
+			username:   stringPtr(""),
+			password:   stringPtr(""),
+			verbose:    boolPtr(false),
+			logFile:    stringPtr(""),
+		},
+		fileFormat: fileFormatBase64,
+		defaults: webUIDefaults{
+			ImageModel:   "test-model",
+			ImageSize:    "1024x1024",
+			ImageQuality: "auto",
+			ImageCount:   2,
+		},
+		saveDir: saveDir,
+	}
+
+	body := &strings.Builder{}
+	writer := multipart.NewWriter(body)
+	_ = writer.WriteField("prompt", "generate me")
+	_ = writer.WriteField("image_model", "test-model")
+	_ = writer.WriteField("image_count", "2")
+	_ = writer.WriteField("image_endpoint", "image")
+	if err := writer.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/api/generate/stream", strings.NewReader(body.String()))
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	rr := httptest.NewRecorder()
+
+	ui.handleGenerateStream(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("unexpected status: %d body=%s", rr.Code, rr.Body.String())
+	}
+	if callCount != 2 {
+		t.Fatalf("expected 2 requests, got %d", callCount)
+	}
+	if entries, err := os.ReadDir(saveDir); err != nil || len(entries) != 2 {
+		t.Fatalf("expected 2 saved images in %s, entries=%v err=%v", saveDir, entries, err)
+	}
+}
+
 func TestWebUIHandleGenerateUsesMultipartForImageEdits(t *testing.T) {
 	apiServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/v1/images/edits" {
@@ -116,6 +270,117 @@ func TestWebUIHandleGenerateUsesMultipartForImageEdits(t *testing.T) {
 	}
 	if entries, err := os.ReadDir(saveDir); err != nil || len(entries) == 0 {
 		t.Fatalf("expected saved image in %s, entries=%v err=%v", saveDir, entries, err)
+	}
+}
+
+func TestWebUIHandleGenerateRepeatsImageEditRequestsForCount(t *testing.T) {
+	var callCount int
+	apiServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		callCount++
+		if r.URL.Path != "/v1/images/edits" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		if !strings.HasPrefix(r.Header.Get("Content-Type"), "multipart/form-data;") {
+			t.Fatalf("unexpected content type: %q", r.Header.Get("Content-Type"))
+		}
+		mr, err := r.MultipartReader()
+		if err != nil {
+			t.Fatal(err)
+		}
+		fields := map[string]string{}
+		var imageData []byte
+		for {
+			part, err := mr.NextPart()
+			if err == io.EOF {
+				break
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			data, err := io.ReadAll(part)
+			if err != nil {
+				t.Fatal(err)
+			}
+			switch part.FormName() {
+			case "model", "prompt", "stream", "n":
+				fields[part.FormName()] = string(data)
+			case "image":
+				imageData = data
+			}
+		}
+		if fields["n"] != "1" {
+			t.Fatalf("expected n=1, got %q", fields["n"])
+		}
+		if string(imageData) != "fake" {
+			t.Fatalf("unexpected image data: %q", string(imageData))
+		}
+		w.Header().Set("Content-Type", "application/json")
+		switch callCount {
+		case 1:
+			_, _ = w.Write([]byte(`{"id":"resp_1","output":[{"type":"image_generation_call","status":"completed","result":"ZmFrZTE="}],"output_text":""}`))
+		case 2:
+			_, _ = w.Write([]byte(`{"id":"resp_2","output":[{"type":"image_generation_call","status":"completed","result":"ZmFrZTI="}],"output_text":""}`))
+		default:
+			t.Fatalf("unexpected call count: %d", callCount)
+		}
+	}))
+	defer apiServer.Close()
+
+	saveDir := t.TempDir()
+	ui := &webUIServer{
+		clientOpts: clientOptions{
+			model:      stringPtr("gpt-5.4-mini"),
+			imageModel: stringPtr("test-model"),
+			baseURL:    stringPtr(apiServer.URL),
+			ossURL:     stringPtr(""),
+			apiKey:     stringPtr("secret-token"),
+			username:   stringPtr(""),
+			password:   stringPtr(""),
+			verbose:    boolPtr(false),
+			logFile:    stringPtr(""),
+		},
+		fileFormat: fileFormatBase64,
+		defaults: webUIDefaults{
+			ImageModel:   "test-model",
+			ImageSize:    "1024x1024",
+			ImageQuality: "auto",
+			ImageCount:   2,
+		},
+		saveDir: saveDir,
+	}
+
+	body := &strings.Builder{}
+	writer := multipart.NewWriter(body)
+	_ = writer.WriteField("prompt", "edit me")
+	_ = writer.WriteField("image_model", "test-model")
+	_ = writer.WriteField("image_count", "2")
+	_ = writer.WriteField("image_endpoint", "image")
+	part, err := writer.CreatePart(textproto.MIMEHeader{
+		"Content-Disposition": {`form-data; name="images"; filename="ref.png"`},
+		"Content-Type":        {"image/png"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _ = part.Write([]byte("fake"))
+	if err := writer.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/api/generate", strings.NewReader(body.String()))
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	rr := httptest.NewRecorder()
+
+	ui.handleGenerate(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("unexpected status: %d body=%s", rr.Code, rr.Body.String())
+	}
+	if callCount != 2 {
+		t.Fatalf("expected 2 requests, got %d", callCount)
+	}
+	if entries, err := os.ReadDir(saveDir); err != nil || len(entries) != 2 {
+		t.Fatalf("expected 2 saved images in %s, entries=%v err=%v", saveDir, entries, err)
 	}
 }
 

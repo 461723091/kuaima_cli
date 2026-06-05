@@ -253,14 +253,7 @@ func (s *webUIServer) handleGenerate(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	if len(refs) == 0 {
-		req := opts.generationRequest(s.modelFromForm(r), prompt)
-		resp, err = c.createImageGeneration(ctx, req)
-	} else {
-		req := opts.editRequest(s.modelFromForm(r), prompt, refs, nil)
-		req.FileFormat = s.fileFormat
-		resp, err = c.createImageEdit(ctx, req)
-	}
+	resp, err = s.handleGenerateWithImageEndpoint(ctx, c, opts, s.modelFromForm(r), prompt, refs)
 	if err != nil {
 		writeError(w, http.StatusBadGateway, err.Error())
 		return
@@ -338,13 +331,8 @@ func (s *webUIServer) handleGenerateStream(w http.ResponseWriter, r *http.Reques
 	var resp *responsePayload
 	if webUIImageEndpoint(r) == "response" {
 		resp, err = s.handleGenerateWithResponsesStream(ctx, c, opts, s.modelFromForm(r), prompt, refs, stream, saveAndSend)
-	} else if len(refs) == 0 {
-		req := opts.generationRequest(s.modelFromForm(r), prompt)
-		resp, err = c.createImageGenerationStream(ctx, req, saveAndSend)
 	} else {
-		req := opts.editRequest(s.modelFromForm(r), prompt, refs, nil)
-		req.FileFormat = s.fileFormat
-		resp, err = c.createImageEditStream(ctx, req, saveAndSend)
+		resp, err = s.handleGenerateWithImageEndpointStream(ctx, c, opts, s.modelFromForm(r), prompt, refs, stream, saveAndSend)
 	}
 	if err != nil {
 		stream.send("error", map[string]string{"error": err.Error()})
@@ -373,6 +361,73 @@ func (s *webUIServer) handleGenerateStream(w http.ResponseWriter, r *http.Reques
 		"saved":  saved,
 		"text":   text,
 	})
+}
+
+func (s *webUIServer) handleGenerateWithImageEndpoint(ctx context.Context, c *client, opts imageOptions, imageModel, prompt string, refs []imageRef) (*responsePayload, error) {
+	runCount := opts.responseRunCount()
+	var combined responsePayload
+	var texts []string
+	for i := 0; i < runCount; i++ {
+		var resp *responsePayload
+		var err error
+		if len(refs) == 0 {
+			req := opts.generationRequest(imageModel, prompt)
+			req.N = 1
+			resp, err = c.createImageGeneration(ctx, req)
+		} else {
+			req := opts.editRequest(imageModel, prompt, refs, nil)
+			req.N = 1
+			req.FileFormat = s.fileFormat
+			resp, err = c.createImageEdit(ctx, req)
+		}
+		if err != nil {
+			return &combined, err
+		}
+		if resp == nil {
+			continue
+		}
+		combined.Output = append(combined.Output, resp.Output...)
+		if text := strings.TrimSpace(resp.OutputText); text != "" {
+			texts = append(texts, text)
+		}
+	}
+	combined.OutputText = strings.Join(texts, "\n\n")
+	return &combined, nil
+}
+
+func (s *webUIServer) handleGenerateWithImageEndpointStream(ctx context.Context, c *client, opts imageOptions, imageModel, prompt string, refs []imageRef, stream *webUIEventStream, onImage func(imageCandidate) error) (*responsePayload, error) {
+	runCount := opts.responseRunCount()
+	var combined responsePayload
+	var texts []string
+	for i := 0; i < runCount; i++ {
+		if runCount > 1 {
+			stream.send("status", map[string]string{"message": fmt.Sprintf("正在生成第 %d/%d 张...", i+1, runCount)})
+		}
+		var resp *responsePayload
+		var err error
+		if len(refs) == 0 {
+			req := opts.generationRequest(imageModel, prompt)
+			req.N = 1
+			resp, err = c.createImageGenerationStream(ctx, req, onImage)
+		} else {
+			req := opts.editRequest(imageModel, prompt, refs, nil)
+			req.N = 1
+			req.FileFormat = s.fileFormat
+			resp, err = c.createImageEditStream(ctx, req, onImage)
+		}
+		if err != nil {
+			return &combined, err
+		}
+		if resp == nil {
+			continue
+		}
+		combined.Output = append(combined.Output, resp.Output...)
+		if text := strings.TrimSpace(resp.OutputText); text != "" {
+			texts = append(texts, text)
+		}
+	}
+	combined.OutputText = strings.Join(texts, "\n\n")
+	return &combined, nil
 }
 
 func (s *webUIServer) handleGenerateWithResponsesStream(ctx context.Context, c *client, opts imageOptions, imageModel, prompt string, refs []imageRef, stream *webUIEventStream, onImage func(imageCandidate) error) (*responsePayload, error) {
