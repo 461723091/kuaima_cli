@@ -273,6 +273,109 @@ func TestWebUIHandleGenerateUsesMultipartForImageEdits(t *testing.T) {
 	}
 }
 
+func TestWebUIHandleGeneratePassesMaskForImageEdits(t *testing.T) {
+	apiServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/images/edits" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		if !strings.HasPrefix(r.Header.Get("Content-Type"), "multipart/form-data;") {
+			t.Fatalf("unexpected content type: %q", r.Header.Get("Content-Type"))
+		}
+		mr, err := r.MultipartReader()
+		if err != nil {
+			t.Fatal(err)
+		}
+		var imageData []byte
+		var maskData []byte
+		for {
+			part, err := mr.NextPart()
+			if err == io.EOF {
+				break
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			data, err := io.ReadAll(part)
+			if err != nil {
+				t.Fatal(err)
+			}
+			switch part.FormName() {
+			case "image":
+				imageData = data
+			case "mask":
+				maskData = data
+			}
+		}
+		if string(imageData) != "fake" {
+			t.Fatalf("unexpected image data: %q", string(imageData))
+		}
+		if string(maskData) != "mask" {
+			t.Fatalf("unexpected mask data: %q", string(maskData))
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"resp_1","output":[{"type":"image_generation_call","status":"completed","result":"ZmFrZQ=="}],"output_text":""}`))
+	}))
+	defer apiServer.Close()
+
+	saveDir := t.TempDir()
+	ui := &webUIServer{
+		clientOpts: clientOptions{
+			model:      stringPtr("gpt-5.4-mini"),
+			imageModel: stringPtr("test-model"),
+			baseURL:    stringPtr(apiServer.URL),
+			ossURL:     stringPtr(""),
+			apiKey:     stringPtr("secret-token"),
+			username:   stringPtr(""),
+			password:   stringPtr(""),
+			verbose:    boolPtr(false),
+			logFile:    stringPtr(""),
+		},
+		fileFormat: fileFormatBase64,
+		defaults: webUIDefaults{
+			ImageModel:   "test-model",
+			ImageSize:    "1024x1024",
+			ImageQuality: "auto",
+			ImageCount:   1,
+		},
+		saveDir: saveDir,
+	}
+
+	body := &strings.Builder{}
+	writer := multipart.NewWriter(body)
+	_ = writer.WriteField("prompt", "edit me")
+	_ = writer.WriteField("image_model", "test-model")
+	_ = writer.WriteField("image_endpoint", "response")
+	imagePart, err := writer.CreatePart(textproto.MIMEHeader{
+		"Content-Disposition": {`form-data; name="images"; filename="ref.png"`},
+		"Content-Type":        {"image/png"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _ = imagePart.Write([]byte("fake"))
+	maskPart, err := writer.CreatePart(textproto.MIMEHeader{
+		"Content-Disposition": {`form-data; name="mask"; filename="mask.png"`},
+		"Content-Type":        {"image/png"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _ = maskPart.Write([]byte("mask"))
+	if err := writer.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/api/generate", strings.NewReader(body.String()))
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	rr := httptest.NewRecorder()
+
+	ui.handleGenerate(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("unexpected status: %d body=%s", rr.Code, rr.Body.String())
+	}
+}
+
 func TestWebUIHandleGenerateRepeatsImageEditRequestsForCount(t *testing.T) {
 	var callCount int
 	apiServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

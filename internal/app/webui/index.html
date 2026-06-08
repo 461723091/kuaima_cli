@@ -249,6 +249,42 @@
     </div>
   </div>
 
+  <div id="maskEditor" class="modal-backdrop mask-editor-backdrop" hidden>
+    <div class="mask-editor" role="dialog" aria-modal="true" aria-labelledby="maskEditorTitle">
+      <button id="closeMaskEditor" class="modal-close" type="button" aria-label="关闭">×</button>
+      <div class="mask-editor-head">
+        <div>
+          <p class="eyebrow">Mask</p>
+          <h2 id="maskEditorTitle">局部修改</h2>
+          <span id="maskEditorHint">仅修改涂抹的区域</span>
+        </div>
+        <div class="mask-actions">
+          <div class="mask-mode-toggle" role="group" aria-label="涂抹模式">
+            <button id="maskModePaint" class="active" type="button" data-mask-mode="paint">涂抹</button>
+            <button id="maskModeErase" type="button" data-mask-mode="erase">还原</button>
+          </div>
+          <label class="brush-size">
+            <span>笔刷大小</span>
+            <input id="maskBrushSize" type="range" min="8" max="128" value="36">
+          </label>
+          <label class="brush-size">
+            <span>画面缩放</span>
+            <input id="maskZoom" type="range" min="50" max="300" value="100">
+          </label>
+          <button id="clearMask" class="btn small" type="button">清空</button>
+          <button id="disableMask" class="btn small danger" type="button">关闭蒙版</button>
+        </div>
+      </div>
+      <div class="mask-canvas-scroll">
+        <div class="mask-canvas-wrap">
+          <canvas id="maskImageCanvas"></canvas>
+          <canvas id="maskPaintCanvas"></canvas>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="/app-mask.js"></script>
   <script src="/app.js"></script>
 </body>
 

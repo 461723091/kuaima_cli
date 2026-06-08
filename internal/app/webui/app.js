@@ -293,15 +293,39 @@ function renderImagePreviews() {
 
   list.className = "image-preview-list";
   list.innerHTML = selectedImages.map((file, index) => (
-    '<div class="image-preview-item" draggable="true" data-image-index="' + index + '">' +
-    '<img src="' + esc(imagePreviewURL(file)) + '" alt="' + esc(file.name) + '">' +
-    '<div class="image-preview-meta"><strong>' + esc(file.name) + '</strong><span>' +
-    esc(formatFileSize(file.size)) + ' · 拖动调整顺序</span></div>' +
-    '<div class="image-preview-actions">' +
-    '<button type="button" title="删除" data-image-action="remove" data-image-index="' + index + '">×</button>' +
-    '</div>' +
-    '</div>'
+    (() => {
+      const hasMask = index === 0 && window.KuaimaMaskEditor &&
+        window.KuaimaMaskEditor.usesFile(file) && window.KuaimaMaskEditor.hasMask();
+      return (
+        '<div class="image-preview-item" draggable="true" data-image-index="' + index + '">' +
+        '<img src="' + esc(imagePreviewURL(file)) + '" alt="' + esc(file.name) + '">' +
+        '<div class="image-preview-meta"><strong>' + esc(file.name) + '</strong><span>' +
+        esc(formatFileSize(file.size)) + (index === 0 ? ' · 可局部修改' : ' · 拖动可调整顺序') + '</span></div>' +
+        '<div class="image-preview-actions">' +
+        (index === 0 ? '<button type="button" class="image-preview-mask-btn' + (hasMask ? ' active' : '') +
+          '" title="局部编辑" data-image-action="edit-mask" data-image-index="' + index + '">' +
+          (hasMask ? '已涂抹' : '局部修改') + '</button>' : '') +
+        '<button type="button" title="删除" data-image-action="remove" data-image-index="' + index + '">×</button>' +
+        '</div>' +
+        '</div>'
+      );
+    })()
   )).join("");
+}
+
+function syncMaskAfterImageChange() {
+  if (!window.KuaimaMaskEditor) {
+    return;
+  }
+  const first = selectedImages[0] || null;
+  if (first && window.KuaimaMaskEditor.usesFile(first)) {
+    return;
+  }
+  if (window.KuaimaMaskEditor.hasMask()) {
+    window.KuaimaMaskEditor.disable();
+  } else {
+    window.KuaimaMaskEditor.loadReference(null);
+  }
 }
 
 function moveImage(from, to) {
@@ -311,6 +335,7 @@ function moveImage(from, to) {
   const [file] = selectedImages.splice(from, 1);
   selectedImages.splice(to, 0, file);
   syncImageInput();
+  syncMaskAfterImageChange();
   renderImagePreviews();
 }
 
@@ -943,6 +968,7 @@ async function restoreHistory(id) {
   }
   selectedImages = await historyReferenceFiles(item);
   syncImageInput();
+  syncMaskAfterImageChange();
   renderImagePreviews();
   updateSize();
   $("#genStatus").textContent = selectedImages.length > 0 ? "已恢复参数和参考图" : "已恢复参数";
@@ -1076,9 +1102,13 @@ async function generateStream(form, signal) {
   $("#gallery").classList.remove("empty");
   $("#gallery").innerHTML = '<div class="generation-placeholder"><span class="spinner"></span><span>正在等待首张图片...</span></div>';
   renderResultTiming(null);
+  const formData = new FormData(form);
+  if (window.KuaimaMaskEditor) {
+    await window.KuaimaMaskEditor.appendMask(formData);
+  }
   await apiStream("/api/generate/stream", {
     method: "POST",
-    body: new FormData(form),
+    body: formData,
     signal,
   }, {
     status(payload) {
@@ -1148,6 +1178,9 @@ async function initConfig() {
   }
   applySize(config.image_size);
   applySettings(readSettings());
+  if (window.KuaimaMaskEditor) {
+    window.KuaimaMaskEditor.init();
+  }
 }
 
 $("#ratioSelect").onchange = updateSize;
@@ -1329,6 +1362,10 @@ document.addEventListener("load", (event) => {
   }
 }, true);
 
+document.addEventListener("kuaima-mask-change", () => {
+  renderImagePreviews();
+});
+
 document.addEventListener("click", async (event) => {
   const previewButton = event.target.closest("[data-preview-image]");
   if (previewButton) {
@@ -1342,7 +1379,15 @@ document.addEventListener("click", async (event) => {
     if (imageButton.dataset.imageAction === "remove") {
       selectedImages.splice(index, 1);
       syncImageInput();
+      syncMaskAfterImageChange();
       renderImagePreviews();
+    } else if (imageButton.dataset.imageAction === "edit-mask") {
+      if (index !== 0) {
+        $("#genStatus").textContent = "只能对第一张参考图使用局部编辑";
+        $("#genStatus").className = "status gen-status";
+      } else if (window.KuaimaMaskEditor) {
+        window.KuaimaMaskEditor.open(selectedImages[0]);
+      }
     }
     return;
   }
@@ -1450,6 +1495,8 @@ document.addEventListener("keydown", (event) => {
   }
   if (!$("#imageModal").hidden) {
     $("#closeImageModal").click();
+  } else if (window.KuaimaMaskEditor && !$("#maskEditor").hidden) {
+    window.KuaimaMaskEditor.close();
   } else if (!$("#paymentModal").hidden) {
     closePaymentModal();
   }

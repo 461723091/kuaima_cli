@@ -9,6 +9,7 @@ import (
 	"io"
 	"io/fs"
 	"mime"
+	"mime/multipart"
 	"net"
 	"net/http"
 	"net/url"
@@ -223,7 +224,7 @@ func (s *webUIServer) handleGenerate(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	needUploadClient := len(r.MultipartForm.File["images"]) > 0 && strings.EqualFold(strings.TrimSpace(s.fileFormat), fileFormatURL)
+	needUploadClient := (len(r.MultipartForm.File["images"]) > 0 || len(r.MultipartForm.File["mask"]) > 0) && strings.EqualFold(strings.TrimSpace(s.fileFormat), fileFormatURL)
 	var c *client
 	if needUploadClient {
 		c, err = s.clientOpts.newClient()
@@ -236,6 +237,15 @@ func (s *webUIServer) handleGenerate(w http.ResponseWriter, r *http.Request) {
 	refs, err := uploadedImageRefs(r, c, s.fileFormat)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	mask, err := uploadedMaskRef(r, c, s.fileFormat)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if mask != nil && len(refs) == 0 {
+		writeError(w, http.StatusBadRequest, "mask requires at least one reference image")
 		return
 	}
 	if c == nil {
@@ -254,7 +264,11 @@ func (s *webUIServer) handleGenerate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var resp *responsePayload
-	if webUIImageEndpoint(r) == "response" {
+	endpoint := webUIImageEndpoint(r)
+	if mask != nil {
+		endpoint = "image"
+	}
+	if endpoint == "response" {
 		saved, text, err := s.handleGenerateWithResponses(ctx, c, opts, s.modelFromForm(r), prompt, refs, saveDir)
 		if err != nil {
 			writeError(w, http.StatusBadGateway, err.Error())
@@ -267,7 +281,7 @@ func (s *webUIServer) handleGenerate(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	resp, err = s.handleGenerateWithImageEndpoint(ctx, c, opts, s.modelFromForm(r), prompt, refs)
+	resp, err = s.handleGenerateWithImageEndpoint(ctx, c, opts, s.modelFromForm(r), prompt, refs, mask)
 	if err != nil {
 		writeError(w, http.StatusBadGateway, err.Error())
 		return
@@ -303,7 +317,7 @@ func (s *webUIServer) handleGenerateStream(w http.ResponseWriter, r *http.Reques
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	needUploadClient := len(r.MultipartForm.File["images"]) > 0 && strings.EqualFold(strings.TrimSpace(s.fileFormat), fileFormatURL)
+	needUploadClient := (len(r.MultipartForm.File["images"]) > 0 || len(r.MultipartForm.File["mask"]) > 0) && strings.EqualFold(strings.TrimSpace(s.fileFormat), fileFormatURL)
 	var c *client
 	if needUploadClient {
 		c, err = s.clientOpts.newClient()
@@ -316,6 +330,15 @@ func (s *webUIServer) handleGenerateStream(w http.ResponseWriter, r *http.Reques
 	refs, err := uploadedImageRefs(r, c, s.fileFormat)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	mask, err := uploadedMaskRef(r, c, s.fileFormat)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if mask != nil && len(refs) == 0 {
+		writeError(w, http.StatusBadRequest, "mask requires at least one reference image")
 		return
 	}
 	if c == nil {
@@ -353,10 +376,14 @@ func (s *webUIServer) handleGenerateStream(w http.ResponseWriter, r *http.Reques
 	}
 
 	var resp *responsePayload
-	if webUIImageEndpoint(r) == "response" {
+	endpoint := webUIImageEndpoint(r)
+	if mask != nil {
+		endpoint = "image"
+	}
+	if endpoint == "response" {
 		resp, err = s.handleGenerateWithResponsesStream(ctx, c, opts, s.modelFromForm(r), prompt, refs, stream, saveAndSend)
 	} else {
-		resp, err = s.handleGenerateWithImageEndpointStream(ctx, c, opts, s.modelFromForm(r), prompt, refs, stream, saveAndSend)
+		resp, err = s.handleGenerateWithImageEndpointStream(ctx, c, opts, s.modelFromForm(r), prompt, refs, mask, stream, saveAndSend)
 	}
 	if err != nil {
 		stream.send("error", map[string]string{"error": err.Error()})
@@ -387,7 +414,7 @@ func (s *webUIServer) handleGenerateStream(w http.ResponseWriter, r *http.Reques
 	})
 }
 
-func (s *webUIServer) handleGenerateWithImageEndpoint(ctx context.Context, c *client, opts imageOptions, imageModel, prompt string, refs []imageRef) (*responsePayload, error) {
+func (s *webUIServer) handleGenerateWithImageEndpoint(ctx context.Context, c *client, opts imageOptions, imageModel, prompt string, refs []imageRef, mask *imageRef) (*responsePayload, error) {
 	runCount := opts.responseRunCount()
 	var combined responsePayload
 	var texts []string
@@ -399,7 +426,7 @@ func (s *webUIServer) handleGenerateWithImageEndpoint(ctx context.Context, c *cl
 			req.N = 1
 			resp, err = c.createImageGeneration(ctx, req)
 		} else {
-			req := opts.editRequest(imageModel, prompt, refs, nil)
+			req := opts.editRequest(imageModel, prompt, refs, mask)
 			req.N = 1
 			req.FileFormat = s.fileFormat
 			resp, err = c.createImageEdit(ctx, req)
@@ -419,7 +446,7 @@ func (s *webUIServer) handleGenerateWithImageEndpoint(ctx context.Context, c *cl
 	return &combined, nil
 }
 
-func (s *webUIServer) handleGenerateWithImageEndpointStream(ctx context.Context, c *client, opts imageOptions, imageModel, prompt string, refs []imageRef, stream *webUIEventStream, onImage func(imageCandidate) error) (*responsePayload, error) {
+func (s *webUIServer) handleGenerateWithImageEndpointStream(ctx context.Context, c *client, opts imageOptions, imageModel, prompt string, refs []imageRef, mask *imageRef, stream *webUIEventStream, onImage func(imageCandidate) error) (*responsePayload, error) {
 	runCount := opts.responseRunCount()
 	var combined responsePayload
 	var texts []string
@@ -434,7 +461,7 @@ func (s *webUIServer) handleGenerateWithImageEndpointStream(ctx context.Context,
 			req.N = 1
 			resp, err = c.createImageGenerationStream(ctx, req, onImage)
 		} else {
-			req := opts.editRequest(imageModel, prompt, refs, nil)
+			req := opts.editRequest(imageModel, prompt, refs, mask)
 			req.N = 1
 			req.FileFormat = s.fileFormat
 			resp, err = c.createImageEditStream(ctx, req, onImage)
@@ -825,39 +852,65 @@ func uploadedImageRefs(r *http.Request, c *client, fileFormat string) ([]imageRe
 	}
 	refs := make([]imageRef, 0, len(files))
 	for _, header := range files {
-		file, err := header.Open()
+		ref, err := uploadedImageRef(r, c, fileFormat, header)
 		if err != nil {
 			return nil, err
 		}
-		data, readErr := io.ReadAll(file)
-		closeErr := file.Close()
-		if readErr != nil {
-			return nil, readErr
-		}
-		if closeErr != nil {
-			return nil, closeErr
-		}
-		mediaType := header.Header.Get("Content-Type")
-		if mediaType == "" {
-			mediaType = mime.TypeByExtension(filepath.Ext(header.Filename))
-		}
-		if mediaType == "" {
-			mediaType = http.DetectContentType(data)
-		}
-		if !strings.HasPrefix(mediaType, "image/") {
-			return nil, fmt.Errorf("%s is not an image", header.Filename)
-		}
-		imageURL := imageDataURL(mediaType, data)
-		if strings.EqualFold(strings.TrimSpace(fileFormat), fileFormatURL) {
-			if c != nil {
-				if uploadedURL, uploadErr := c.uploadLocalData(r.Context(), data, header.Filename); uploadErr == nil && strings.TrimSpace(uploadedURL) != "" {
-					imageURL = uploadedURL
-				}
-			}
-		}
-		refs = append(refs, imageRef{ImageURL: imageURL})
+		refs = append(refs, ref)
 	}
 	return refs, nil
+}
+
+func uploadedMaskRef(r *http.Request, c *client, fileFormat string) (*imageRef, error) {
+	if r.MultipartForm == nil || r.MultipartForm.File == nil {
+		return nil, nil
+	}
+	files := r.MultipartForm.File["mask"]
+	if len(files) == 0 {
+		return nil, nil
+	}
+	if len(files) > 1 {
+		return nil, fmt.Errorf("too many mask inputs: got %d, expected 1", len(files))
+	}
+	ref, err := uploadedImageRef(r, c, fileFormat, files[0])
+	if err != nil {
+		return nil, err
+	}
+	return &ref, nil
+}
+
+func uploadedImageRef(r *http.Request, c *client, fileFormat string, header *multipart.FileHeader) (imageRef, error) {
+	file, err := header.Open()
+	if err != nil {
+		return imageRef{}, err
+	}
+	data, readErr := io.ReadAll(file)
+	closeErr := file.Close()
+	if readErr != nil {
+		return imageRef{}, readErr
+	}
+	if closeErr != nil {
+		return imageRef{}, closeErr
+	}
+	mediaType := header.Header.Get("Content-Type")
+	if mediaType == "" {
+		mediaType = mime.TypeByExtension(filepath.Ext(header.Filename))
+	}
+	if mediaType == "" {
+		mediaType = http.DetectContentType(data)
+	}
+	if !strings.HasPrefix(mediaType, "image/") {
+		return imageRef{}, fmt.Errorf("%s is not an image", header.Filename)
+	}
+	imageURL := imageDataURL(mediaType, data)
+	if strings.EqualFold(strings.TrimSpace(fileFormat), fileFormatURL) {
+		if c != nil {
+			if uploadedURL, uploadErr := c.uploadLocalData(r.Context(), data, header.Filename); uploadErr == nil && strings.TrimSpace(uploadedURL) != "" {
+				imageURL = uploadedURL
+			}
+		}
+	}
+	return imageRef{ImageURL: imageURL}, nil
 }
 
 func (s *webUIServer) saveDirectory() string {

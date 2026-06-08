@@ -608,13 +608,146 @@ select {
 }
 
 .image-preview-actions button {
-  width: 28px;
+  min-width: 28px;
   height: 28px;
   border: 1px solid rgba(82, 103, 132, 0.2);
   border-radius: 8px;
+  padding: 0 8px;
   background: rgba(255, 255, 255, 0.82);
   color: var(--text);
   cursor: pointer;
+  font-size: 12px;
+  font-weight: 760;
+  white-space: nowrap;
+}
+
+.image-preview-mask-btn.active {
+  border-color: rgba(15, 159, 143, 0.42);
+  color: #08786e;
+  background: rgba(15, 159, 143, 0.1);
+}
+
+.mask-editor-backdrop {
+  z-index: 24;
+}
+
+.mask-editor {
+  position: relative;
+  width: min(1180px, calc(100vw - 32px));
+  max-height: calc(100vh - 32px);
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  border: 1px solid rgba(82, 103, 132, 0.18);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.97);
+  box-shadow: 0 28px 80px rgba(15, 23, 42, 0.28);
+  overflow: hidden;
+}
+
+.mask-editor-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 16px 54px 14px 18px;
+  border-bottom: 1px solid rgba(82, 103, 132, 0.14);
+}
+
+.mask-editor-head label,
+.brush-size span {
+  display: block;
+  color: var(--text);
+  font-weight: 700;
+  font-size: 13px;
+}
+
+.mask-editor-head span {
+  display: block;
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.mask-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.mask-mode-toggle {
+  display: inline-flex;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid rgba(82, 103, 132, 0.16);
+  border-radius: 8px;
+  background: rgba(248, 250, 252, 0.78);
+}
+
+.mask-mode-toggle button {
+  min-height: 30px;
+  border: 0;
+  border-radius: 6px;
+  padding: 5px 10px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 760;
+}
+
+.mask-mode-toggle button.active {
+  color: var(--text);
+  background: rgba(37, 99, 235, 0.12);
+}
+
+.brush-size {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+}
+
+.brush-size input {
+  width: 112px;
+}
+
+.mask-canvas-scroll {
+  min-height: 0;
+  overflow: auto;
+  padding: 12px;
+  background:
+    linear-gradient(45deg, rgba(82, 103, 132, 0.12) 25%, transparent 25%),
+    linear-gradient(-45deg, rgba(82, 103, 132, 0.12) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, rgba(82, 103, 132, 0.12) 75%),
+    linear-gradient(-45deg, transparent 75%, rgba(82, 103, 132, 0.12) 75%);
+  background-size: 18px 18px;
+  background-position: 0 0, 0 9px, 9px -9px, -9px 0;
+}
+
+.mask-canvas-wrap {
+  position: relative;
+  display: grid;
+  place-items: center;
+  min-width: max-content;
+  min-height: 520px;
+}
+
+.mask-canvas-wrap canvas {
+  grid-area: 1 / 1;
+  max-width: none;
+  max-height: none;
+  border-radius: 8px;
+}
+
+#maskImageCanvas {
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.14);
+}
+
+#maskPaintCanvas {
+  cursor: crosshair;
+  touch-action: none;
 }
 
 .ratio-options {
