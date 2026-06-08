@@ -174,7 +174,7 @@
     const paintCtx = paintCanvas.getContext("2d");
     const image = paintCtx.getImageData(0, 0, paintCanvas.width, paintCanvas.height);
     for (let i = 0; i < image.data.length; i += 4) {
-      const alpha = image.data[i + 3] > 0 ? 255 : 0;
+      const alpha = image.data[i + 3] > 0 ? 0 : 255;
       image.data[i] = 255;
       image.data[i + 1] = 255;
       image.data[i + 2] = 255;

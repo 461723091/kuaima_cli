@@ -273,47 +273,20 @@ func TestWebUIHandleGenerateUsesMultipartForImageEdits(t *testing.T) {
 	}
 }
 
-func TestWebUIHandleGeneratePassesMaskForImageEdits(t *testing.T) {
+func TestWebUIHandleGeneratePassesMaskForResponses(t *testing.T) {
+	var gotRequest struct {
+		Tools []map[string]any `json:"tools"`
+		Input []inputMessage   `json:"input"`
+	}
 	apiServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/v1/images/edits" {
+		if r.URL.Path != "/v1/responses" {
 			t.Fatalf("unexpected path: %s", r.URL.Path)
 		}
-		if !strings.HasPrefix(r.Header.Get("Content-Type"), "multipart/form-data;") {
-			t.Fatalf("unexpected content type: %q", r.Header.Get("Content-Type"))
-		}
-		mr, err := r.MultipartReader()
-		if err != nil {
+		if err := json.NewDecoder(r.Body).Decode(&gotRequest); err != nil {
 			t.Fatal(err)
 		}
-		var imageData []byte
-		var maskData []byte
-		for {
-			part, err := mr.NextPart()
-			if err == io.EOF {
-				break
-			}
-			if err != nil {
-				t.Fatal(err)
-			}
-			data, err := io.ReadAll(part)
-			if err != nil {
-				t.Fatal(err)
-			}
-			switch part.FormName() {
-			case "image":
-				imageData = data
-			case "mask":
-				maskData = data
-			}
-		}
-		if string(imageData) != "fake" {
-			t.Fatalf("unexpected image data: %q", string(imageData))
-		}
-		if string(maskData) != "mask" {
-			t.Fatalf("unexpected mask data: %q", string(maskData))
-		}
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"id":"resp_1","output":[{"type":"image_generation_call","status":"completed","result":"ZmFrZQ=="}],"output_text":""}`))
+		_, _ = w.Write([]byte(`{"id":"resp_1","output_text":"ok","output":[]}`))
 	}))
 	defer apiServer.Close()
 
@@ -373,6 +346,19 @@ func TestWebUIHandleGeneratePassesMaskForImageEdits(t *testing.T) {
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("unexpected status: %d body=%s", rr.Code, rr.Body.String())
+	}
+	if len(gotRequest.Tools) != 1 {
+		t.Fatalf("unexpected tools: %#v", gotRequest.Tools)
+	}
+	maskValue, ok := gotRequest.Tools[0]["input_image_mask"].(map[string]any)
+	if !ok {
+		t.Fatalf("missing input_image_mask: %#v", gotRequest.Tools[0])
+	}
+	if got := maskValue["image_url"].(string); !strings.Contains(got, "bWFzaw==") {
+		t.Fatalf("unexpected mask image URL: %q", got)
+	}
+	if len(gotRequest.Input) == 0 || len(gotRequest.Input[len(gotRequest.Input)-1].Content) < 2 {
+		t.Fatalf("expected prompt and reference image input, got %#v", gotRequest.Input)
 	}
 }
 

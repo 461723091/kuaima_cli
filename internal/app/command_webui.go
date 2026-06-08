@@ -265,11 +265,8 @@ func (s *webUIServer) handleGenerate(w http.ResponseWriter, r *http.Request) {
 	}
 	var resp *responsePayload
 	endpoint := webUIImageEndpoint(r)
-	if mask != nil {
-		endpoint = "image"
-	}
 	if endpoint == "response" {
-		saved, text, err := s.handleGenerateWithResponses(ctx, c, opts, s.modelFromForm(r), prompt, refs, saveDir)
+		saved, text, err := s.handleGenerateWithResponses(ctx, c, opts, s.modelFromForm(r), prompt, refs, mask, saveDir)
 		if err != nil {
 			writeError(w, http.StatusBadGateway, err.Error())
 			return
@@ -377,11 +374,8 @@ func (s *webUIServer) handleGenerateStream(w http.ResponseWriter, r *http.Reques
 
 	var resp *responsePayload
 	endpoint := webUIImageEndpoint(r)
-	if mask != nil {
-		endpoint = "image"
-	}
 	if endpoint == "response" {
-		resp, err = s.handleGenerateWithResponsesStream(ctx, c, opts, s.modelFromForm(r), prompt, refs, stream, saveAndSend)
+		resp, err = s.handleGenerateWithResponsesStream(ctx, c, opts, s.modelFromForm(r), prompt, refs, mask, stream, saveAndSend)
 	} else {
 		resp, err = s.handleGenerateWithImageEndpointStream(ctx, c, opts, s.modelFromForm(r), prompt, refs, mask, stream, saveAndSend)
 	}
@@ -481,10 +475,11 @@ func (s *webUIServer) handleGenerateWithImageEndpointStream(ctx context.Context,
 	return &combined, nil
 }
 
-func (s *webUIServer) handleGenerateWithResponsesStream(ctx context.Context, c *client, opts imageOptions, imageModel, prompt string, refs []imageRef, stream *webUIEventStream, onImage func(imageCandidate) error) (*responsePayload, error) {
+func (s *webUIServer) handleGenerateWithResponsesStream(ctx context.Context, c *client, opts imageOptions, imageModel, prompt string, refs []imageRef, mask *imageRef, stream *webUIEventStream, onImage func(imageCandidate) error) (*responsePayload, error) {
 	tool := opts.responseTool()
 	imageModel = strings.TrimSpace(imageModel)
 	addAutoString(tool, "model", &imageModel)
+	addResponseImageMask(tool, mask)
 	req := responseRequest{
 		Model: strings.TrimSpace(*s.clientOpts.model),
 		Input: s.responseInput(prompt, refs),
@@ -513,10 +508,11 @@ func (s *webUIServer) handleGenerateWithResponsesStream(ctx context.Context, c *
 	return &combined, nil
 }
 
-func (s *webUIServer) handleGenerateWithResponses(ctx context.Context, c *client, opts imageOptions, imageModel, prompt string, refs []imageRef, saveDir string) ([]string, string, error) {
+func (s *webUIServer) handleGenerateWithResponses(ctx context.Context, c *client, opts imageOptions, imageModel, prompt string, refs []imageRef, mask *imageRef, saveDir string) ([]string, string, error) {
 	tool := opts.responseTool()
 	imageModel = strings.TrimSpace(imageModel)
 	addAutoString(tool, "model", &imageModel)
+	addResponseImageMask(tool, mask)
 	req := responseRequest{
 		Model: strings.TrimSpace(*s.clientOpts.model),
 		Input: s.responseInput(prompt, refs),
@@ -540,6 +536,15 @@ func (s *webUIServer) handleGenerateWithResponses(ctx context.Context, c *client
 		}
 	}
 	return saved, strings.Join(texts, "\n\n"), nil
+}
+
+func addResponseImageMask(tool map[string]any, mask *imageRef) {
+	if tool == nil || mask == nil || strings.TrimSpace(mask.ImageURL) == "" {
+		return
+	}
+	tool["input_image_mask"] = map[string]any{
+		"image_url": strings.TrimSpace(mask.ImageURL),
+	}
 }
 
 func (s *webUIServer) responseInput(prompt string, refs []imageRef) []inputMessage {
