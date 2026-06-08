@@ -32,7 +32,7 @@ Get-Content prompt.txt | .\dist\kuaima_cli.exe
 .\dist\kuaima_cli.exe -file .\notes.md -file .\photo.png -file "https://example.com/cat.jpg" "结合 @.\extra.txt 描述这些内容"
 ```
 
-本地图片默认以 base64 data URL 形式放入输入；也可以先上传到 OSS，再用返回的 URL 构造输入：
+本地图片默认先上传到 OSS，再用返回的 URL 构造输入, 也可以以 base64 data URL 形式放入输入；
 
 ```powershell
 .\dist\kuaima_cli.exe -file-format url -file .\photo.png "描述这张图片"

@@ -71,7 +71,11 @@ func (c *client) uploadLocalFile(ctx context.Context, path string) (string, erro
 		return "", errorsFromOSS("prepare upload local", prepared.Errno, prepared.Errstr, "missing upload_id")
 	}
 
-	uploaded, err := c.uploadLocal(ctx, path, prepared.UploadID, sum)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "", fmt.Errorf("read image %q: %w", path, err)
+	}
+	uploaded, err := c.uploadLocalWithID(ctx, data, filepath.Base(path), prepared.UploadID, sum)
 	if err != nil {
 		return "", err
 	}
@@ -79,6 +83,86 @@ func (c *client) uploadLocalFile(ctx context.Context, path string) (string, erro
 		return "", errorsFromOSS("upload local", uploaded.Errno, uploaded.Errstr, "missing file_url")
 	}
 	return uploaded.File.FileURL, nil
+}
+
+func (c *client) uploadLocalData(ctx context.Context, data []byte, fileName string) (string, error) {
+	sum := md5.Sum(data)
+	prepared, err := c.prepareUploadLocal(ctx, prepareUploadLocalReq{
+		MD5:      hex.EncodeToString(sum[:]),
+		FileSize: strconv.Itoa(len(data)),
+		FileName: fileName,
+	})
+	if err != nil {
+		return "", err
+	}
+	if prepared.File.FileURL != "" {
+		return prepared.File.FileURL, nil
+	}
+	if strings.TrimSpace(prepared.UploadID) == "" {
+		return "", errorsFromOSS("prepare upload local", prepared.Errno, prepared.Errstr, "missing upload_id")
+	}
+
+	uploaded, err := c.uploadLocalWithID(ctx, data, fileName, prepared.UploadID, hex.EncodeToString(sum[:]))
+	if err != nil {
+		return "", err
+	}
+	if uploaded.File.FileURL == "" {
+		return "", errorsFromOSS("upload local", uploaded.Errno, uploaded.Errstr, "missing file_url")
+	}
+	return uploaded.File.FileURL, nil
+}
+
+func (c *client) uploadLocalWithID(ctx context.Context, data []byte, fileName, uploadID, sum string) (*uploadLocalRsp, error) {
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+	if uploadID != "" {
+		if err := writer.WriteField("upload_id", uploadID); err != nil {
+			return nil, err
+		}
+	}
+	if err := writer.WriteField("md5", sum); err != nil {
+		return nil, err
+	}
+	part, err := writer.CreateFormFile("file", fileName)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := io.Copy(part, bytes.NewReader(data)); err != nil {
+		return nil, err
+	}
+	if err := writer.Close(); err != nil {
+		return nil, err
+	}
+
+	httpReq, err := c.newOSSRequest(ctx, "/go/oss/upload_local/", &body)
+	if err != nil {
+		return nil, err
+	}
+	httpReq.Header.Set("Content-Type", writer.FormDataContentType())
+	c.logRequest(httpReq, nil)
+	httpResp, err := c.httpClient.Do(httpReq)
+	if err != nil {
+		return nil, err
+	}
+	defer httpResp.Body.Close()
+
+	respData, err := io.ReadAll(httpResp.Body)
+	if err != nil {
+		return nil, err
+	}
+	c.logResponse(httpResp, respData)
+	if httpResp.StatusCode < 200 || httpResp.StatusCode >= 300 {
+		return nil, fmt.Errorf("OSS upload local failed: %s: %s", httpResp.Status, strings.TrimSpace(string(respData)))
+	}
+
+	var rsp uploadLocalRsp
+	if err := json.Unmarshal(respData, &rsp); err != nil {
+		return nil, fmt.Errorf("decode OSS upload local response: %w", err)
+	}
+	if rsp.Errno != 0 {
+		return nil, errorsFromOSS("upload local", rsp.Errno, rsp.Errstr, "")
+	}
+	return &rsp, nil
 }
 
 func fileMD5(path string) (string, error) {
@@ -102,65 +186,6 @@ func (c *client) prepareUploadLocal(ctx context.Context, req prepareUploadLocalR
 	}
 	if rsp.Errno != 0 {
 		return nil, errorsFromOSS("prepare upload local", rsp.Errno, rsp.Errstr, "")
-	}
-	return &rsp, nil
-}
-
-func (c *client) uploadLocal(ctx context.Context, path, uploadID, sum string) (*uploadLocalRsp, error) {
-	file, err := os.Open(path)
-	if err != nil {
-		return nil, fmt.Errorf("read image %q: %w", path, err)
-	}
-	defer file.Close()
-
-	var body bytes.Buffer
-	writer := multipart.NewWriter(&body)
-	if uploadID != "" {
-		if err := writer.WriteField("upload_id", uploadID); err != nil {
-			return nil, err
-		}
-	}
-	if err := writer.WriteField("md5", sum); err != nil {
-		return nil, err
-	}
-	part, err := writer.CreateFormFile("file", filepath.Base(path))
-	if err != nil {
-		return nil, err
-	}
-	if _, err := io.Copy(part, file); err != nil {
-		return nil, fmt.Errorf("read image %q: %w", path, err)
-	}
-	if err := writer.Close(); err != nil {
-		return nil, err
-	}
-
-	httpReq, err := c.newOSSRequest(ctx, "/go/oss/upload_local/", &body)
-	if err != nil {
-		return nil, err
-	}
-	httpReq.Header.Set("Content-Type", writer.FormDataContentType())
-	c.logRequest(httpReq, nil)
-	httpResp, err := c.httpClient.Do(httpReq)
-	if err != nil {
-		return nil, err
-	}
-	defer httpResp.Body.Close()
-
-	data, err := io.ReadAll(httpResp.Body)
-	if err != nil {
-		return nil, err
-	}
-	c.logResponse(httpResp, data)
-	if httpResp.StatusCode < 200 || httpResp.StatusCode >= 300 {
-		return nil, fmt.Errorf("OSS upload local failed: %s: %s", httpResp.Status, strings.TrimSpace(string(data)))
-	}
-
-	var rsp uploadLocalRsp
-	if err := json.Unmarshal(data, &rsp); err != nil {
-		return nil, fmt.Errorf("decode OSS upload local response: %w", err)
-	}
-	if rsp.Errno != 0 {
-		return nil, errorsFromOSS("upload local", rsp.Errno, rsp.Errstr, "")
 	}
 	return &rsp, nil
 }

@@ -384,6 +384,165 @@ func TestWebUIHandleGenerateRepeatsImageEditRequestsForCount(t *testing.T) {
 	}
 }
 
+func TestWebUIHandleGenerateUsesOSSURLForUploadedImagesWhenFileFormatURL(t *testing.T) {
+	ossServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/go/oss/prepare_upload_local/" {
+			t.Fatalf("unexpected OSS path: %s", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"errno":0,"file":{"file_url":"http://oss.example/uploaded.png"}}`))
+	}))
+	defer ossServer.Close()
+
+	var got imageEditRequest
+	apiServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/images/edits" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		if err := json.NewDecoder(r.Body).Decode(&got); err != nil {
+			t.Fatal(err)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"resp_1","output":[{"type":"image_generation_call","status":"completed","result":"ZmFrZQ=="}],"output_text":""}`))
+	}))
+	defer apiServer.Close()
+
+	saveDir := t.TempDir()
+	ui := &webUIServer{
+		clientOpts: clientOptions{
+			model:      stringPtr("gpt-5.4-mini"),
+			imageModel: stringPtr("test-model"),
+			baseURL:    stringPtr(apiServer.URL),
+			ossURL:     stringPtr(ossServer.URL),
+			apiKey:     stringPtr("secret-token"),
+			username:   stringPtr(""),
+			password:   stringPtr(""),
+			verbose:    boolPtr(false),
+			logFile:    stringPtr(""),
+		},
+		fileFormat: fileFormatURL,
+		defaults: webUIDefaults{
+			ImageModel:   "test-model",
+			ImageSize:    "1024x1024",
+			ImageQuality: "auto",
+			ImageCount:   1,
+		},
+		saveDir: saveDir,
+	}
+
+	body := &strings.Builder{}
+	writer := multipart.NewWriter(body)
+	_ = writer.WriteField("prompt", "edit me")
+	_ = writer.WriteField("image_model", "test-model")
+	_ = writer.WriteField("image_endpoint", "image")
+	part, err := writer.CreatePart(textproto.MIMEHeader{
+		"Content-Disposition": {`form-data; name="images"; filename="ref.png"`},
+		"Content-Type":        {"image/png"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _ = part.Write([]byte("fake"))
+	if err := writer.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/api/generate", strings.NewReader(body.String()))
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	rr := httptest.NewRecorder()
+
+	ui.handleGenerate(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("unexpected status: %d body=%s", rr.Code, rr.Body.String())
+	}
+	if len(got.Images) != 1 {
+		t.Fatalf("unexpected images: %#v", got.Images)
+	}
+	if got.Images[0].ImageURL != "http://oss.example/uploaded.png" {
+		t.Fatalf("expected OSS URL, got %q", got.Images[0].ImageURL)
+	}
+}
+
+func TestWebUIHandleGenerateFallsBackToBase64WhenUploadFails(t *testing.T) {
+	ossServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/go/oss/prepare_upload_local/" {
+			t.Fatalf("unexpected OSS path: %s", r.URL.Path)
+		}
+		http.Error(w, "boom", http.StatusInternalServerError)
+	}))
+	defer ossServer.Close()
+
+	var got imageEditRequest
+	apiServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/images/edits" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		if err := json.NewDecoder(r.Body).Decode(&got); err != nil {
+			t.Fatal(err)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"resp_1","output":[{"type":"image_generation_call","status":"completed","result":"ZmFrZQ=="}],"output_text":""}`))
+	}))
+	defer apiServer.Close()
+
+	saveDir := t.TempDir()
+	ui := &webUIServer{
+		clientOpts: clientOptions{
+			model:      stringPtr("gpt-5.4-mini"),
+			imageModel: stringPtr("test-model"),
+			baseURL:    stringPtr(apiServer.URL),
+			ossURL:     stringPtr(ossServer.URL),
+			apiKey:     stringPtr("secret-token"),
+			username:   stringPtr(""),
+			password:   stringPtr(""),
+			verbose:    boolPtr(false),
+			logFile:    stringPtr(""),
+		},
+		fileFormat: fileFormatURL,
+		defaults: webUIDefaults{
+			ImageModel:   "test-model",
+			ImageSize:    "1024x1024",
+			ImageQuality: "auto",
+			ImageCount:   1,
+		},
+		saveDir: saveDir,
+	}
+
+	body := &strings.Builder{}
+	writer := multipart.NewWriter(body)
+	_ = writer.WriteField("prompt", "edit me")
+	_ = writer.WriteField("image_model", "test-model")
+	_ = writer.WriteField("image_endpoint", "image")
+	part, err := writer.CreatePart(textproto.MIMEHeader{
+		"Content-Disposition": {`form-data; name="images"; filename="ref.png"`},
+		"Content-Type":        {"image/png"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _ = part.Write([]byte("fake"))
+	if err := writer.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/api/generate", strings.NewReader(body.String()))
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	rr := httptest.NewRecorder()
+
+	ui.handleGenerate(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("unexpected status: %d body=%s", rr.Code, rr.Body.String())
+	}
+	if len(got.Images) != 1 {
+		t.Fatalf("unexpected images: %#v", got.Images)
+	}
+	if len(got.Images[0].ImageURL) < 11 || got.Images[0].ImageURL[:11] != "data:image/" {
+		t.Fatalf("expected data url fallback, got %q", got.Images[0].ImageURL)
+	}
+}
+
 func TestWebUIHandleGenerateResponseUsesCLISystem(t *testing.T) {
 	var gotRequest struct {
 		Model  string           `json:"model"`

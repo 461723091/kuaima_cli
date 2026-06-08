@@ -89,7 +89,7 @@ func addInputFlags(fs *flag.FlagSet) inputOptions {
 
 func addInputFlagsWithConfig(fs *flag.FlagSet, cfg appConfig) inputOptions {
 	return inputOptions{
-		fileFormat:  fs.String("file-format", configNonEmptyString(cfg.FileFormat, "base64"), "本地图片输入格式：base64 或 url"),
+		fileFormat:  fs.String("file-format", configNonEmptyString(cfg.FileFormat, "url"), "本地图片输入格式：base64 或 url"),
 		attachments: addAttachmentFlags(fs),
 	}
 }

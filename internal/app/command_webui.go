@@ -3,7 +3,6 @@ package app
 import (
 	"context"
 	"embed"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -67,6 +66,10 @@ func runWebUIWithOptions(args []string, runtimeOpts webUIRuntimeOptions) error {
 	if cfg.System == nil || *cfg.System == "" {
 		defaultSystem := "Just generate the image; do not return a prompt or SVG"
 		cfg.System = &defaultSystem
+	}
+	if cfg.FileFormat == nil || *cfg.FileFormat == "" {
+		defaultFileFormat := "url"
+		cfg.FileFormat = &defaultFileFormat
 	}
 	opts := addResponseFlagsWithConfig(fs, cfg)
 	inputOpts := addInputFlagsWithConfig(fs, cfg)
@@ -220,18 +223,29 @@ func (s *webUIServer) handleGenerate(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	refs, err := uploadedImageRefs(r)
+	needUploadClient := len(r.MultipartForm.File["images"]) > 0 && strings.EqualFold(strings.TrimSpace(s.fileFormat), fileFormatURL)
+	var c *client
+	if needUploadClient {
+		c, err = s.clientOpts.newClient()
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		defer c.Close()
+	}
+	refs, err := uploadedImageRefs(r, c, s.fileFormat)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-
-	c, err := s.clientOpts.newClient()
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
-		return
+	if c == nil {
+		c, err = s.clientOpts.newClient()
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		defer c.Close()
 	}
-	defer c.Close()
 
 	ctx := r.Context()
 	saveDir, err := s.saveDirectoryFromForm(r)
@@ -289,20 +303,30 @@ func (s *webUIServer) handleGenerateStream(w http.ResponseWriter, r *http.Reques
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	refs, err := uploadedImageRefs(r)
+	needUploadClient := len(r.MultipartForm.File["images"]) > 0 && strings.EqualFold(strings.TrimSpace(s.fileFormat), fileFormatURL)
+	var c *client
+	if needUploadClient {
+		c, err = s.clientOpts.newClient()
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		defer c.Close()
+	}
+	refs, err := uploadedImageRefs(r, c, s.fileFormat)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	c, err := s.clientOpts.newClient()
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
-		return
+	if c == nil {
+		c, err = s.clientOpts.newClient()
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		defer c.Close()
 	}
-	defer c.Close()
-
 	stream := newWebUIEventStream(w)
-	stream.send("status", map[string]string{"message": "已连接，正在请求生成接口..."})
 
 	ctx := r.Context()
 	saveDir, err := s.saveDirectoryFromForm(r)
@@ -791,7 +815,7 @@ func (s *webUIServer) imageOptionsFromForm(r *http.Request) (imageOptions, error
 	return opts, opts.validate()
 }
 
-func uploadedImageRefs(r *http.Request) ([]imageRef, error) {
+func uploadedImageRefs(r *http.Request, c *client, fileFormat string) ([]imageRef, error) {
 	if r.MultipartForm == nil || r.MultipartForm.File == nil {
 		return nil, nil
 	}
@@ -823,7 +847,15 @@ func uploadedImageRefs(r *http.Request) ([]imageRef, error) {
 		if !strings.HasPrefix(mediaType, "image/") {
 			return nil, fmt.Errorf("%s is not an image", header.Filename)
 		}
-		refs = append(refs, imageRef{ImageURL: "data:" + mediaType + ";base64," + base64.StdEncoding.EncodeToString(data)})
+		imageURL := imageDataURL(mediaType, data)
+		if strings.EqualFold(strings.TrimSpace(fileFormat), fileFormatURL) {
+			if c != nil {
+				if uploadedURL, uploadErr := c.uploadLocalData(r.Context(), data, header.Filename); uploadErr == nil && strings.TrimSpace(uploadedURL) != "" {
+					imageURL = uploadedURL
+				}
+			}
+		}
+		refs = append(refs, imageRef{ImageURL: imageURL})
 	}
 	return refs, nil
 }

@@ -2,9 +2,9 @@ package app
 
 import (
 	"bufio"
-	"encoding/base64"
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -42,6 +42,8 @@ func (c *client) createImageEditStream(ctx context.Context, req imageEditRequest
 }
 
 func imageEditUsesMultipart(req imageEditRequest) bool {
+	//mark 固定
+	return true
 	return strings.EqualFold(strings.TrimSpace(req.FileFormat), fileFormatBase64)
 }
 
@@ -123,9 +125,9 @@ func (c *client) createImageEditMultipartStream(ctx context.Context, req imageEd
 			continue
 		}
 		var event struct {
-			Type    string    `json:"type"`
-			B64JSON string    `json:"b64_json"`
-			URL     string    `json:"url"`
+			Type    string `json:"type"`
+			B64JSON string `json:"b64_json"`
+			URL     string `json:"url"`
 			Data    []struct {
 				B64JSON  string `json:"b64_json"`
 				URL      string `json:"url"`

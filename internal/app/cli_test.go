@@ -30,6 +30,19 @@ func TestInputOptionsBuildInputWithImageAttachment(t *testing.T) {
 	}
 }
 
+func TestImageInputURLFallsBackToBase64WhenUploadFails(t *testing.T) {
+	imagePath := filepath.Join(t.TempDir(), "photo.png")
+	writeTestFile(t, imagePath, tinyPNG())
+
+	got, err := imageInputURL(context.Background(), nil, imagePath, fileFormatURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) < 11 || got[:11] != "data:image/" {
+		t.Fatalf("expected data url fallback, got %q", got)
+	}
+}
+
 func TestImageCommandSharedFlagsParse(t *testing.T) {
 	fs := newFlagSet("image")
 	opts := addClientFlags(fs)

@@ -3,7 +3,6 @@ package app
 import (
 	"context"
 	"encoding/base64"
-	"errors"
 	"fmt"
 	"mime"
 	"net/http"
@@ -88,12 +87,16 @@ func imageInputURL(ctx context.Context, c *client, value, fileFormat string) (st
 		return value, nil
 	}
 	if fileFormat == fileFormatURL {
-		if c == nil {
-			return "", errors.New("OSS client is required when -file-format=url")
+		if c != nil {
+			if uploaded, err := c.uploadLocalFile(ctx, value); err == nil && strings.TrimSpace(uploaded) != "" {
+				return uploaded, nil
+			}
 		}
-		return c.uploadLocalFile(ctx, value)
 	}
+	return imageDataURLFromFile(value)
+}
 
+func imageDataURLFromFile(value string) (string, error) {
 	data, err := os.ReadFile(value)
 	if err != nil {
 		return "", fmt.Errorf("read image %q: %w", value, err)
@@ -102,5 +105,9 @@ func imageInputURL(ctx context.Context, c *client, value, fileFormat string) (st
 	if mediaType == "" {
 		mediaType = http.DetectContentType(data)
 	}
-	return "data:" + mediaType + ";base64," + base64.StdEncoding.EncodeToString(data), nil
+	return imageDataURL(mediaType, data), nil
+}
+
+func imageDataURL(mediaType string, data []byte) string {
+	return "data:" + mediaType + ";base64," + base64.StdEncoding.EncodeToString(data)
 }
