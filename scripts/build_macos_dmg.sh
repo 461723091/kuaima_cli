@@ -1,0 +1,74 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+root="$(cd "$script_dir/.." && pwd)"
+dist="$root/dist"
+app_name="kuaima_cli"
+bundle_name="$app_name.app"
+stage="$dist/macos-dmg"
+bundle="$stage/$bundle_name"
+contents="$bundle/Contents"
+macos_dir="$contents/MacOS"
+version="${VERSION:-}"
+
+if [[ -z "$version" ]]; then
+  version="$(git -C "$root" describe --tags --always --dirty --match 'v*' 2>/dev/null || true)"
+fi
+if [[ -z "$version" ]]; then
+  version="0.1.0"
+fi
+version="${version#v}"
+
+amd64_bin="$dist/$app_name-darwin-amd64"
+arm64_bin="$dist/$app_name-darwin-arm64"
+universal_bin="$macos_dir/$app_name"
+dmg_path="$dist/$app_name-macos-$version.dmg"
+
+rm -rf "$stage" "$amd64_bin" "$arm64_bin" "$dmg_path"
+mkdir -p "$macos_dir"
+
+GOOS=darwin GOARCH=amd64 CGO_ENABLED=0 go build -buildvcs=false -trimpath -ldflags "-X kuaima_cli/internal/app.AppVersion=$version" -o "$amd64_bin" "$root/cmd/kuaima_cli"
+GOOS=darwin GOARCH=arm64 CGO_ENABLED=0 go build -buildvcs=false -trimpath -ldflags "-X kuaima_cli/internal/app.AppVersion=$version" -o "$arm64_bin" "$root/cmd/kuaima_cli"
+
+command -v lipo >/dev/null 2>&1 || {
+  echo "lipo command not found." >&2
+  exit 1
+}
+
+lipo -create "$amd64_bin" "$arm64_bin" -output "$universal_bin"
+chmod +x "$universal_bin"
+
+cat > "$contents/Info.plist" <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CFBundleDevelopmentRegion</key>
+  <string>en</string>
+  <key>CFBundleExecutable</key>
+  <string>$app_name</string>
+  <key>CFBundleIdentifier</key>
+  <string>com.kuaima.cli</string>
+  <key>CFBundleName</key>
+  <string>$app_name</string>
+  <key>CFBundlePackageType</key>
+  <string>APPL</string>
+  <key>CFBundleShortVersionString</key>
+  <string>$version</string>
+  <key>CFBundleVersion</key>
+  <string>$version</string>
+  <key>LSMinimumSystemVersion</key>
+  <string>11.0</string>
+</dict>
+</plist>
+EOF
+
+hdiutil create \
+  -volname "$app_name" \
+  -srcfolder "$stage" \
+  -ov \
+  -format UDZO \
+  "$dmg_path"
+
+echo "$dmg_path"

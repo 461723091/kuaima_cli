@@ -1,3 +1,3 @@
 package app
 
-const AppVersion = "0.1.0"
+var AppVersion = "0.1.0"
