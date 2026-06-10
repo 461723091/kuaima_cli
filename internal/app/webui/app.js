@@ -29,9 +29,12 @@ const HISTORY_DB_NAME = "kuaima.webui.history.v1";
 const HISTORY_STORE = "items";
 const HISTORY_LIMIT = 100;
 const SETTINGS_KEY = "kuaima.webui.settings.v1";
+const REFERENCE_IMAGE_MAX_SIDE = 1536;
+const REFERENCE_IMAGE_JPEG_QUALITY = 0.82;
 
 let selectedPayment = null;
 let selectedImages = [];
+let useOriginalImages = false;
 let draggedImageIndex = -1;
 let activeRechargeTab = "amount";
 let historyDBPromise = null;
@@ -283,6 +286,107 @@ function formatFileSize(bytes) {
   return (size / 1024 / 1024).toFixed(1) + " MB";
 }
 
+function useOriginalReferenceImages(form) {
+  return useOriginalImages;
+}
+
+function referenceCompressionDisabled(form) {
+  const hasMask = window.KuaimaMaskEditor && window.KuaimaMaskEditor.hasMask();
+  return useOriginalReferenceImages(form) || hasMask;
+}
+
+function loadImageForCompression(file) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      resolve(img);
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error("参考图读取失败"));
+    };
+    img.src = url;
+  });
+}
+
+function canvasToBlob(canvas, type, quality) {
+  return new Promise((resolve, reject) => {
+    canvas.toBlob((blob) => {
+      if (!blob) {
+        reject(new Error("参考图压缩失败"));
+        return;
+      }
+      resolve(blob);
+    }, type, quality);
+  });
+}
+
+function compressedReferenceName(file) {
+  const name = String(file && file.name || "reference-image").replace(/\.[^.]*$/, "");
+  return name + ".jpg";
+}
+
+async function compressReferenceImage(file) {
+  if (!file || !String(file.type || "").startsWith("image/")) {
+    return file;
+  }
+  if (String(file.type || "").toLowerCase() === "image/gif") {
+    return file;
+  }
+  const img = await loadImageForCompression(file);
+  const width = img.naturalWidth || img.width;
+  const height = img.naturalHeight || img.height;
+  if (!width || !height) {
+    return file;
+  }
+  const scale = Math.min(1, REFERENCE_IMAGE_MAX_SIDE / Math.max(width, height));
+  const targetWidth = Math.max(1, Math.round(width * scale));
+  const targetHeight = Math.max(1, Math.round(height * scale));
+  const canvas = document.createElement("canvas");
+  canvas.width = targetWidth;
+  canvas.height = targetHeight;
+  const ctx = canvas.getContext("2d");
+  ctx.fillStyle = "#fff";
+  ctx.fillRect(0, 0, targetWidth, targetHeight);
+  ctx.drawImage(img, 0, 0, targetWidth, targetHeight);
+  const blob = await canvasToBlob(canvas, "image/jpeg", REFERENCE_IMAGE_JPEG_QUALITY);
+  if (blob.size >= file.size && scale === 1) {
+    return file;
+  }
+  return new File([blob], compressedReferenceName(file), {
+    type: "image/jpeg",
+    lastModified: file.lastModified || Date.now(),
+  });
+}
+
+async function referenceFilesForSubmit(form) {
+  if (referenceCompressionDisabled(form)) {
+    return selectedImages;
+  }
+  const compressed = [];
+  for (const file of selectedImages) {
+    try {
+      compressed.push(await compressReferenceImage(file));
+    } catch (error) {
+      console.warn("Reference image compression failed", error);
+      compressed.push(file);
+    }
+  }
+  return compressed;
+}
+
+async function buildGenerateFormData(form) {
+  const formData = new FormData(form);
+  formData.delete("images");
+  const files = await referenceFilesForSubmit(form);
+  files.forEach((file) => {
+    formData.append("images", file, file.name || "reference-image.png");
+  });
+  return formData;
+}
+
 function renderImagePreviews() {
   const list = $("#imagePreviewList");
   if (selectedImages.length === 0) {
@@ -292,7 +396,14 @@ function renderImagePreviews() {
   }
 
   list.className = "image-preview-list";
-  list.innerHTML = selectedImages.map((file, index) => (
+  list.innerHTML = (
+    '<div class="reference-options">' +
+    '<label class="original-image-toggle" title="开启后参考图按原始文件提交">' +
+    '<input id="useOriginalImages" type="checkbox" value="1"' + (useOriginalImages ? ' checked' : '') + '>' +
+    '<span>使用原图</span>' +
+    '</label>' +
+    '</div>'
+  ) + selectedImages.map((file, index) => (
     (() => {
       const hasMask = index === 0 && window.KuaimaMaskEditor &&
         window.KuaimaMaskEditor.usesFile(file) && window.KuaimaMaskEditor.hasMask();
@@ -392,6 +503,7 @@ function saveSettings() {
     image_count: form.elements.image_count.value,
     image_quality: form.elements.image_quality.value,
     image_endpoint: form.elements.image_endpoint.value || "response",
+    use_original_images: useOriginalReferenceImages(form),
     ratio: $("#ratioSelect").value,
     resolution: $("#resolutionSelect").value,
   };
@@ -410,6 +522,7 @@ function applySettings(settings) {
     form.elements.image_quality.value = settings.image_quality;
   }
   form.elements.image_endpoint.value = settings.image_endpoint || form.elements.image_endpoint.value || "response";
+  useOriginalImages = !!settings.use_original_images;
   if (settings.ratio) {
     $("#ratioSelect").value = settings.ratio;
   }
@@ -1102,7 +1215,10 @@ async function generateStream(form, signal) {
   $("#gallery").classList.remove("empty");
   $("#gallery").innerHTML = '<div class="generation-placeholder"><span class="spinner"></span><span>正在等待首张图片...</span></div>';
   renderResultTiming(null);
-  const formData = new FormData(form);
+  if (selectedImages.length > 0 && !referenceCompressionDisabled(form)) {
+    $("#genStatus").textContent = "正在压缩参考图...";
+  }
+  const formData = await buildGenerateFormData(form);
   if (window.KuaimaMaskEditor) {
     await window.KuaimaMaskEditor.appendMask(formData);
   }
@@ -1254,6 +1370,11 @@ $("#cancelGenerate").onclick = () => {
 
 ["change", "input"].forEach((eventName) => {
   $("#genForm").addEventListener(eventName, (event) => {
+    if (event.target.matches("#useOriginalImages")) {
+      useOriginalImages = event.target.checked;
+      saveSettings();
+      return;
+    }
     if (event.target.matches("select,input[type='number']")) {
       saveSettings();
     }

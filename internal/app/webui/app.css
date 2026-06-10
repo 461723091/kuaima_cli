@@ -437,6 +437,31 @@ textarea {
   box-shadow: 0 10px 24px rgba(20, 33, 61, 0.11);
 }
 
+.original-image-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 38px;
+  margin: 0;
+  padding: 8px 10px;
+  border: 1px solid rgba(82, 103, 132, 0.16);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.64);
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 760;
+  white-space: nowrap;
+}
+
+.original-image-toggle input {
+  width: 16px;
+  min-height: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--accent);
+}
+
 .upload-icon {
   display: inline-grid;
   place-items: center;
@@ -527,6 +552,11 @@ select {
   display: grid;
   gap: 8px;
   margin-top: 10px;
+}
+
+.reference-options {
+  display: flex;
+  justify-content: flex-end;
 }
 
 .image-preview-list.empty {
