@@ -1,9 +1,15 @@
 
+ifeq ($(OS),Windows_NT)
+BUILD_SKILL_CMD = powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/build_skill.ps1
+else
+BUILD_SKILL_CMD = bash scripts/build_skill.sh
+endif
+
 build:
 	go build -buildvcs=false -o dist/kuaima_cli.exe ./cmd/kuaima_cli
 
 build_skill:
-	powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build_skill.ps1
+	$(BUILD_SKILL_CMD)
 
 run:
 	dist/kuaima_cli.exe
