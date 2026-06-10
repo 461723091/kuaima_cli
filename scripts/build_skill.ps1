@@ -7,6 +7,26 @@ $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
 $dist = Join-Path $root "dist"
 $skillSource = Join-Path (Join-Path $root "skill") $SkillName
+$version = $env:VERSION
+$gitVersion = $null
+
+if ([string]::IsNullOrWhiteSpace($version)) {
+    try {
+        $gitVersion = git -C $root describe --tags --always --dirty --match "v*" 2>$null
+    }
+    catch {
+        $gitVersion = $null
+    }
+    if (-not [string]::IsNullOrWhiteSpace($gitVersion)) {
+        $version = $gitVersion.Trim()
+    }
+}
+if ([string]::IsNullOrWhiteSpace($version)) {
+    $version = "0.1.0"
+}
+if ($version.StartsWith("v")) {
+    $version = $version.Substring(1)
+}
 $cliOutput = Join-Path $dist "kuaima_cli.exe"
 $cliDarwinArm64 = Join-Path $dist "kuaima_cli-darwin-arm64"
 $cliDarwinAmd64 = Join-Path $dist "kuaima_cli-darwin-amd64"
@@ -23,14 +43,17 @@ function Invoke-GoBuild {
 
     $previousGoOS = $env:GOOS
     $previousGoArch = $env:GOARCH
+    $previousCgoEnabled = $env:CGO_ENABLED
     try {
         if ($GoOS -eq "") { Remove-Item Env:GOOS -ErrorAction SilentlyContinue } else { $env:GOOS = $GoOS }
         if ($GoArch -eq "") { Remove-Item Env:GOARCH -ErrorAction SilentlyContinue } else { $env:GOARCH = $GoArch }
-        go build -buildvcs=false -o $Output $PackagePath
+        $env:CGO_ENABLED = "0"
+        go build -buildvcs=false -trimpath -ldflags "-s -w -X kuaima_cli/internal/app.AppVersion=$version" -o $Output $PackagePath
     }
     finally {
         if ($null -eq $previousGoOS) { Remove-Item Env:GOOS -ErrorAction SilentlyContinue } else { $env:GOOS = $previousGoOS }
         if ($null -eq $previousGoArch) { Remove-Item Env:GOARCH -ErrorAction SilentlyContinue } else { $env:GOARCH = $previousGoArch }
+        if ($null -eq $previousCgoEnabled) { Remove-Item Env:CGO_ENABLED -ErrorAction SilentlyContinue } else { $env:CGO_ENABLED = $previousCgoEnabled }
     }
 }
 

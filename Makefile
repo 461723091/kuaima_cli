@@ -5,8 +5,18 @@ else
 BUILD_SKILL_CMD = bash scripts/build_skill.sh
 endif
 
+APP_NAME = kuaima_cli.exe
+APP_PKG = ./cmd/kuaima_cli
+BUILD_OUTPUT = dist/$(APP_NAME)
+VERSION ?= 0.1.0
+COMMON_GOFLAGS = -buildvcs=false
+RELEASE_GOFLAGS = -trimpath -ldflags "-s -w -X kuaima_cli/internal/app.AppVersion=$(VERSION)"
+
 build:
-	go build -buildvcs=false -o dist/kuaima_cli.exe ./cmd/kuaima_cli
+	go build $(COMMON_GOFLAGS) -o $(BUILD_OUTPUT) $(APP_PKG)
+
+release:
+	go build $(COMMON_GOFLAGS) $(RELEASE_GOFLAGS) -o $(BUILD_OUTPUT) $(APP_PKG)
 
 build_skill:
 	$(BUILD_SKILL_CMD)

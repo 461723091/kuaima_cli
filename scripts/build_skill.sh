@@ -14,6 +14,15 @@ script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 root="$(cd "$script_dir/.." && pwd)"
 dist="$root/dist"
 skill_source="$root/skill/$skill_name"
+version="${VERSION:-}"
+
+if [[ -z "$version" ]]; then
+  version="$(git -C "$root" describe --tags --always --dirty --match 'v*' 2>/dev/null || true)"
+fi
+if [[ -z "$version" ]]; then
+  version="0.1.0"
+fi
+version="${version#v}"
 
 cli_output="$dist/kuaima_cli.exe"
 cli_darwin_arm64="$dist/kuaima_cli-darwin-arm64"
@@ -28,11 +37,11 @@ fi
 
 mkdir -p "$dist"
 
-go build -buildvcs=false -o "$cli_output" "$root/cmd/kuaima_cli"
-GOOS=darwin GOARCH=arm64 go build -buildvcs=false -o "$cli_darwin_arm64" "$root/cmd/kuaima_cli"
-GOOS=darwin GOARCH=amd64 go build -buildvcs=false -o "$cli_darwin_amd64" "$root/cmd/kuaima_cli"
-GOOS=linux GOARCH=arm64 go build -buildvcs=false -o "$cli_linux_arm64" "$root/cmd/kuaima_cli"
-GOOS=linux GOARCH=amd64 go build -buildvcs=false -o "$cli_linux_amd64" "$root/cmd/kuaima_cli"
+go build -buildvcs=false -trimpath -ldflags "-s -w -X kuaima_cli/internal/app.AppVersion=$version" -o "$cli_output" "$root/cmd/kuaima_cli"
+GOOS=darwin GOARCH=arm64 CGO_ENABLED=0 go build -buildvcs=false -trimpath -ldflags "-s -w -X kuaima_cli/internal/app.AppVersion=$version" -o "$cli_darwin_arm64" "$root/cmd/kuaima_cli"
+GOOS=darwin GOARCH=amd64 CGO_ENABLED=0 go build -buildvcs=false -trimpath -ldflags "-s -w -X kuaima_cli/internal/app.AppVersion=$version" -o "$cli_darwin_amd64" "$root/cmd/kuaima_cli"
+GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -buildvcs=false -trimpath -ldflags "-s -w -X kuaima_cli/internal/app.AppVersion=$version" -o "$cli_linux_arm64" "$root/cmd/kuaima_cli"
+GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -buildvcs=false -trimpath -ldflags "-s -w -X kuaima_cli/internal/app.AppVersion=$version" -o "$cli_linux_amd64" "$root/cmd/kuaima_cli"
 
 command -v zip >/dev/null 2>&1 || {
   echo "zip command not found. Please install zip and retry." >&2
