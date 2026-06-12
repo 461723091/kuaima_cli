@@ -619,7 +619,7 @@ function renderSubscriptions(subscriptions) {
 function renderBalance(usage) {
   const subscriptions = usage.subscriptions || [];
   const active = activeSubscription(subscriptions);
-  $("#balanceTopLabel").textContent = active ? "当前套餐" : "可用余额";
+  $("#balanceTopLabel").textContent = active ? "当前套餐" : "可用token";
   $("#balanceTop").textContent = active
     ? ("有效至 " + (active.end || "-"))
     : (usage.total_available_text || "-");
@@ -673,7 +673,7 @@ function renderPlans(info) {
     '<div class="plan-quota"><span>额度</span><strong>' + esc(formatQuota(plan.total_amount)) + '</strong></div>' +
     '<div class="plan-price"><strong>￥' + esc(formatAmount(plan.price_amount)) + '</strong><span>' +
     esc(plan.duration_value) + unit(plan.duration_unit) + '</span></div>' +
-    '<button class="btn small" type="button" data-plan-id="' + Number(plan.id) +
+    '<button class="btn small primary" type="button" data-plan-id="' + Number(plan.id) +
     '" data-plan-title="' + esc(plan.title) + '">订阅</button>' +
     '</div>'
   )).join("") || '<span class="status">暂无套餐</span>';
