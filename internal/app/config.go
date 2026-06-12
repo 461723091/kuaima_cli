@@ -88,6 +88,13 @@ func saveAppConfig(cfg appConfig) error {
 	return os.WriteFile(path, data, 0600)
 }
 
+// webui默认生图保存路径
+func defaultOutputPath() string {
+	home, _ := userHomeDir()
+
+	return filepath.Join(home, "Downloads")
+}
+
 func appConfigPath() (string, error) {
 	if dir := strings.TrimSpace(os.Getenv("KUAIMA_CONFIG_DIR")); dir != "" {
 		return filepath.Join(dir, configFileName), nil

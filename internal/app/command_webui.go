@@ -75,7 +75,7 @@ func runWebUIWithOptions(args []string, runtimeOpts webUIRuntimeOptions) error {
 	opts := addResponseFlagsWithConfig(fs, cfg)
 	inputOpts := addInputFlagsWithConfig(fs, cfg)
 	imageOpts := addImageFlags(fs, cfg)
-	saveDir := addSaveImagesFlagWithConfig(fs, cfg, "kuaima_webui_outputs")
+	saveDir := addSaveImagesFlagWithConfig(fs, cfg, defaultOutputPath())
 	addr := fs.String("addr", "127.0.0.1:8790", "local listen address")
 	open := fs.Bool("open", true, "open the Web UI in the default browser")
 	if err := parseFlags(fs, args); err != nil {
