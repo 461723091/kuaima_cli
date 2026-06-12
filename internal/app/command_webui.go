@@ -172,6 +172,7 @@ func runWebUIWithOptions(args []string, runtimeOpts webUIRuntimeOptions) error {
 
 func (s *webUIServer) routes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/config", s.handleConfig)
+	mux.HandleFunc("/api/prompt/auto", s.handleAutoPrompt)
 	mux.HandleFunc("/api/generate", s.handleGenerate)
 	mux.HandleFunc("/api/generate/stream", s.handleGenerateStream)
 	mux.HandleFunc("/api/balance", s.handleBalance)
@@ -203,6 +204,104 @@ func (s *webUIServer) handleConfig(w http.ResponseWriter, r *http.Request) {
 	}
 	value["save_dir"] = s.saveDirectory()
 	writeJSON(w, http.StatusOK, value)
+}
+
+func (s *webUIServer) handleAutoPrompt(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	var (
+		prompt string
+		refs   []imageRef
+		err    error
+		c      *client
+	)
+	contentType := strings.ToLower(r.Header.Get("Content-Type"))
+	switch {
+	case strings.Contains(contentType, "multipart/form-data"):
+		if err := r.ParseMultipartForm(80 << 20); err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		prompt = strings.TrimSpace(r.FormValue("prompt"))
+		needUploadClient := len(r.MultipartForm.File["images"]) > 0 && strings.EqualFold(strings.TrimSpace(s.fileFormat), fileFormatURL)
+		if needUploadClient {
+			c, err = s.clientOpts.newClient()
+			if err != nil {
+				writeError(w, http.StatusInternalServerError, err.Error())
+				return
+			}
+			defer c.Close()
+		}
+		refs, err = uploadedImageRefs(r, c, s.fileFormat)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+	case strings.Contains(contentType, "application/json"):
+		var req struct {
+			Prompt string `json:"prompt"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		prompt = strings.TrimSpace(req.Prompt)
+	default:
+		if err := r.ParseMultipartForm(80 << 20); err == nil && r.MultipartForm != nil {
+			prompt = strings.TrimSpace(r.FormValue("prompt"))
+			needUploadClient := len(r.MultipartForm.File["images"]) > 0 && strings.EqualFold(strings.TrimSpace(s.fileFormat), fileFormatURL)
+			if needUploadClient {
+				c, err = s.clientOpts.newClient()
+				if err != nil {
+					writeError(w, http.StatusInternalServerError, err.Error())
+					return
+				}
+				defer c.Close()
+			}
+			refs, err = uploadedImageRefs(r, c, s.fileFormat)
+			if err != nil {
+				writeError(w, http.StatusBadRequest, err.Error())
+				return
+			}
+		} else {
+			var req struct {
+				Prompt string `json:"prompt"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+				writeError(w, http.StatusBadRequest, err.Error())
+				return
+			}
+			prompt = strings.TrimSpace(req.Prompt)
+		}
+	}
+	if prompt == "" {
+		writeError(w, http.StatusBadRequest, "prompt is required")
+		return
+	}
+	if c == nil {
+		c, err = s.clientOpts.newClient()
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		defer c.Close()
+	}
+	resp, err := c.createResponse(r.Context(), responseRequest{
+		Model: strings.TrimSpace(*s.clientOpts.model),
+		Input: s.autoPromptInput(prompt, refs),
+	})
+	if err != nil {
+		writeError(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	text := normalizeAutoPrompt(resp.text())
+	if text == "" {
+		writeError(w, http.StatusBadGateway, "auto prompt returned empty text")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"prompt": text})
 }
 
 func (s *webUIServer) handleGenerate(w http.ResponseWriter, r *http.Request) {
@@ -573,6 +672,42 @@ func (s *webUIServer) responseInput(prompt string, refs []imageRef) []inputMessa
 		Content: content,
 	})
 	return messages
+}
+
+func (s *webUIServer) autoPromptInput(prompt string, refs []imageRef) []inputMessage {
+	content := []inputContent{{
+		Type: "input_text",
+		Text: prompt,
+	}}
+	for _, ref := range refs {
+		content = append(content, inputContent{
+			Type:     "input_image",
+			ImageURL: ref.ImageURL,
+		})
+	}
+	return []inputMessage{
+		{
+			Role: "system",
+			Content: []inputContent{{
+				Type: "input_text",
+				Text: "You rewrite rough image ideas into a single high-quality image generation prompt. Output only the rewritten prompt. No bullets, no markdown, no quotes, no explanation. Preserve the user's intent, use the reference images if provided, and add concrete visual details where helpful. Keep the result in Chinese unless the user clearly asks for another language.",
+			}},
+		},
+		{
+			Role:    "user",
+			Content: content,
+		},
+	}
+}
+
+func normalizeAutoPrompt(text string) string {
+	text = strings.TrimSpace(text)
+	text = strings.TrimPrefix(text, "提示词：")
+	text = strings.TrimPrefix(text, "提示词:")
+	text = strings.TrimPrefix(text, "Prompt:")
+	text = strings.TrimPrefix(text, "prompt:")
+	text = strings.Trim(strings.TrimSpace(text), "`\"")
+	return strings.Join(strings.Fields(text), " ")
 }
 
 func (s *webUIServer) handleBalance(w http.ResponseWriter, r *http.Request) {

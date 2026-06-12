@@ -1301,7 +1301,6 @@ async function initConfig() {
 
 $("#ratioSelect").onchange = updateSize;
 $("#resolutionSelect").onchange = updateSize;
-
 document.querySelectorAll("[data-ratio]").forEach((button) => {
   button.onclick = () => {
     $("#ratioSelect").value = button.dataset.ratio;

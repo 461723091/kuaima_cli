@@ -706,3 +706,86 @@ func TestWebUIHandleGenerateResponseUsesCLISystem(t *testing.T) {
 		t.Fatalf("unexpected system content: %#v", gotRequest.Input[0].Content)
 	}
 }
+
+func TestWebUIHandleAutoPromptUsesResponses(t *testing.T) {
+	var gotRequest struct {
+		Model  string         `json:"model"`
+		Input  []inputMessage `json:"input"`
+		Stream bool           `json:"stream"`
+	}
+	apiServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/responses" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		if err := json.NewDecoder(r.Body).Decode(&gotRequest); err != nil {
+			t.Fatal(err)
+		}
+		if gotRequest.Model != "gpt-5.4-mini" {
+			t.Fatalf("unexpected model: %q", gotRequest.Model)
+		}
+		if gotRequest.Stream {
+			t.Fatalf("unexpected stream request")
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"resp_1","output_text":"  未来感产品海报，金属质感，柔和棚拍光，干净背景  ","output":[]}`))
+	}))
+	defer apiServer.Close()
+
+	ui := &webUIServer{
+		clientOpts: clientOptions{
+			model:      stringPtr("gpt-5.4-mini"),
+			imageModel: stringPtr("test-model"),
+			baseURL:    stringPtr(apiServer.URL),
+			ossURL:     stringPtr(""),
+			apiKey:     stringPtr("secret-token"),
+			username:   stringPtr(""),
+			password:   stringPtr(""),
+			verbose:    boolPtr(false),
+			logFile:    stringPtr(""),
+		},
+		fileFormat: fileFormatBase64,
+	}
+
+	body := &strings.Builder{}
+	writer := multipart.NewWriter(body)
+	_ = writer.WriteField("prompt", "未来感产品海报")
+	imagePart, err := writer.CreatePart(textproto.MIMEHeader{
+		"Content-Disposition": {`form-data; name="images"; filename="ref.png"`},
+		"Content-Type":        {"image/png"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _ = imagePart.Write([]byte("fake"))
+	if err := writer.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/api/prompt/auto", strings.NewReader(body.String()))
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	rr := httptest.NewRecorder()
+
+	ui.handleAutoPrompt(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("unexpected status: %d body=%s", rr.Code, rr.Body.String())
+	}
+	if got := strings.TrimSpace(rr.Body.String()); !strings.Contains(got, `"prompt":"未来感产品海报，金属质感，柔和棚拍光，干净背景"`) {
+		t.Fatalf("unexpected response body: %s", rr.Body.String())
+	}
+	if len(gotRequest.Input) != 2 {
+		t.Fatalf("unexpected input messages: %#v", gotRequest.Input)
+	}
+	if gotRequest.Input[0].Role != "system" {
+		t.Fatalf("expected system role, got: %q", gotRequest.Input[0].Role)
+	}
+	if gotRequest.Input[1].Role != "user" {
+		t.Fatalf("expected user role, got: %q", gotRequest.Input[1].Role)
+	}
+	if len(gotRequest.Input[1].Content) != 2 || gotRequest.Input[1].Content[0].Text != "未来感产品海报" {
+		t.Fatalf("unexpected user content: %#v", gotRequest.Input[1].Content)
+	}
+	if gotRequest.Input[1].Content[1].Type != "input_image" || !strings.HasPrefix(gotRequest.Input[1].Content[1].ImageURL, "data:image/") {
+		t.Fatalf("unexpected reference image content: %#v", gotRequest.Input[1].Content[1])
+	}
+}
