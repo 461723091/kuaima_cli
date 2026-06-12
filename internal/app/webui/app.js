@@ -1079,6 +1079,9 @@ async function restoreHistory(id) {
   if (item.resolution) {
     $("#resolutionSelect").value = item.resolution;
   }
+  if (window.KuaimaPromptHelper && typeof window.KuaimaPromptHelper.sync === "function") {
+    window.KuaimaPromptHelper.sync();
+  }
   selectedImages = await historyReferenceFiles(item);
   syncImageInput();
   syncMaskAfterImageChange();

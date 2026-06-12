@@ -789,3 +789,71 @@ func TestWebUIHandleAutoPromptUsesResponses(t *testing.T) {
 		t.Fatalf("unexpected reference image content: %#v", gotRequest.Input[1].Content[1])
 	}
 }
+
+func TestWebUIHandleAutoPromptStreamsResponses(t *testing.T) {
+	var gotRequest struct {
+		Model  string         `json:"model"`
+		Input  []inputMessage `json:"input"`
+		Stream bool           `json:"stream"`
+	}
+	apiServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/responses" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		if err := json.NewDecoder(r.Body).Decode(&gotRequest); err != nil {
+			t.Fatal(err)
+		}
+		if gotRequest.Model != "gpt-5.4-mini" {
+			t.Fatalf("unexpected model: %q", gotRequest.Model)
+		}
+		if !gotRequest.Stream {
+			t.Fatalf("expected streaming request")
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = w.Write([]byte(
+			"data: {\"type\":\"response.output_text.delta\",\"delta\":\"未来感产品海报，\"}\n\n" +
+				"data: {\"type\":\"response.output_text.delta\",\"delta\":\"金属质感，柔和棚拍光，干净背景\"}\n\n" +
+				"data: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_1\",\"output_text\":\"未来感产品海报，金属质感，柔和棚拍光，干净背景\",\"output\":[]}}\n\n",
+		))
+	}))
+	defer apiServer.Close()
+
+	ui := &webUIServer{
+		clientOpts: clientOptions{
+			model:      stringPtr("gpt-5.4-mini"),
+			imageModel: stringPtr("test-model"),
+			baseURL:    stringPtr(apiServer.URL),
+			ossURL:     stringPtr(""),
+			apiKey:     stringPtr("secret-token"),
+			username:   stringPtr(""),
+			password:   stringPtr(""),
+			verbose:    boolPtr(false),
+			logFile:    stringPtr(""),
+		},
+		fileFormat: fileFormatBase64,
+	}
+
+	body := &strings.Builder{}
+	writer := multipart.NewWriter(body)
+	_ = writer.WriteField("prompt", "未来感产品海报")
+	if err := writer.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/api/prompt/auto?stream=1", strings.NewReader(body.String()))
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	req.Header.Set("Accept", "text/event-stream")
+	rr := httptest.NewRecorder()
+
+	ui.handleAutoPrompt(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("unexpected status: %d body=%s", rr.Code, rr.Body.String())
+	}
+	if got := rr.Body.String(); !strings.Contains(got, "event: text") || !strings.Contains(got, "event: done") {
+		t.Fatalf("unexpected stream body: %s", got)
+	}
+	if !strings.Contains(rr.Body.String(), `"prompt":"未来感产品海报，金属质感，柔和棚拍光，干净背景"`) {
+		t.Fatalf("unexpected stream body: %s", rr.Body.String())
+	}
+}

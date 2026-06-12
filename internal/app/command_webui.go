@@ -280,6 +280,9 @@ func (s *webUIServer) handleAutoPrompt(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "prompt is required")
 		return
 	}
+	wantStream := strings.EqualFold(strings.TrimSpace(r.URL.Query().Get("stream")), "1") ||
+		strings.EqualFold(strings.TrimSpace(r.URL.Query().Get("stream")), "true") ||
+		strings.Contains(strings.ToLower(r.Header.Get("Accept")), "text/event-stream")
 	if c == nil {
 		c, err = s.clientOpts.newClient()
 		if err != nil {
@@ -287,6 +290,24 @@ func (s *webUIServer) handleAutoPrompt(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		defer c.Close()
+	}
+	if wantStream {
+		stream := newWebUIEventStream(w)
+		resp, err := c.createResponseStream(r.Context(), responseRequest{
+			Model: strings.TrimSpace(*s.clientOpts.model),
+			Input: s.autoPromptInput(prompt, refs),
+		}, stream.textWriter())
+		if err != nil {
+			stream.send("error", map[string]string{"error": err.Error()})
+			return
+		}
+		text := normalizeAutoPrompt(resp.text())
+		if text == "" {
+			stream.send("error", map[string]string{"error": "auto prompt returned empty text"})
+			return
+		}
+		stream.send("done", map[string]string{"prompt": text, "text": text})
+		return
 	}
 	resp, err := c.createResponse(r.Context(), responseRequest{
 		Model: strings.TrimSpace(*s.clientOpts.model),

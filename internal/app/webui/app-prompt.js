@@ -1,6 +1,7 @@
 (function () {
   const q = (selector) => document.querySelector(selector);
   let activePromptRewriteController = null;
+  let lastAutoPromptValue = "";
 
   function setAutoPromptButtonRunning(running) {
     const button = q("#autoPromptButton");
@@ -9,8 +10,15 @@
     }
     button.disabled = running;
     button.innerHTML = running
-      ? '<span class="spinner small"></span><span>改写中...</span>'
-      : "自动写";
+      ? '<span class="spinner small"></span><span>生成中...</span>'
+      : "AI生成提示词";
+  }
+
+  function setAutoPromptButtonVisible(visible) {
+    const button = q("#autoPromptButton");
+    if (button) {
+      button.hidden = !visible;
+    }
   }
 
   function normalizeAutoPromptText(text) {
@@ -27,6 +35,29 @@
     }
     status.textContent = message;
     status.className = className;
+  }
+
+  function syncAutoPromptButtonVisibility() {
+    const form = q("#genForm");
+    const textarea = form && form.elements && form.elements.prompt;
+    if (!textarea) {
+      return;
+    }
+    const value = String(textarea.value || "").trim();
+    setAutoPromptButtonVisible(Boolean(value) && value !== lastAutoPromptValue);
+  }
+
+  function setAutoPromptValue(text) {
+    const form = q("#genForm");
+    const textarea = form && form.elements && form.elements.prompt;
+    if (!textarea) {
+      return "";
+    }
+    const value = normalizeAutoPromptText(text);
+    textarea.value = value;
+    lastAutoPromptValue = value;
+    syncAutoPromptButtonVisibility();
+    return value;
   }
 
   async function autoWritePrompt() {
@@ -54,20 +85,37 @@
       files.forEach((file) => {
         formData.append("images", file, file.name || "reference-image.png");
       });
-      const result = await api("/api/prompt/auto", {
+      await apiStream("/api/prompt/auto?stream=1", {
         method: "POST",
         body: formData,
         signal: activePromptRewriteController.signal,
+      }, {
+        status(payload) {
+          updateStatus(payload.message || "正在自动改写提示词...", "status gen-status loading");
+        },
+        text(payload) {
+          const current = String(payload.text || "");
+          if (current) {
+            textarea.value = normalizeAutoPromptText(textarea.value + current);
+          }
+        },
+        done(payload) {
+          const prompt = setAutoPromptValue(payload.prompt || payload.text || textarea.value);
+          if (!prompt) {
+            throw new Error("未生成提示词");
+          }
+          if (typeof saveSettings === "function") {
+            saveSettings();
+          }
+          updateStatus("已自动改写提示词", "status gen-status");
+        },
+        error(payload) {
+          throw new Error(payload.error || "自动改写失败");
+        },
       });
-      const prompt = normalizeAutoPromptText(result.prompt);
-      if (!prompt) {
+      if (!String(textarea.value || "").trim()) {
         throw new Error("未生成提示词");
       }
-      textarea.value = prompt;
-      if (typeof saveSettings === "function") {
-        saveSettings();
-      }
-      updateStatus("已自动改写提示词", "status gen-status");
     } catch (error) {
       if (error && error.name === "AbortError") {
         updateStatus("已取消改写", "status gen-status");
@@ -84,4 +132,17 @@
   if (button) {
     button.addEventListener("click", autoWritePrompt);
   }
+
+  const form = q("#genForm");
+  const textarea = form && form.elements && form.elements.prompt;
+  if (textarea) {
+    textarea.addEventListener("input", syncAutoPromptButtonVisibility);
+    textarea.addEventListener("change", syncAutoPromptButtonVisibility);
+    syncAutoPromptButtonVisibility();
+  }
+
+  window.KuaimaPromptHelper = {
+    sync: syncAutoPromptButtonVisibility,
+    setValue: setAutoPromptValue,
+  };
 })();
