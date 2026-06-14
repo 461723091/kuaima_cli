@@ -127,6 +127,7 @@ async function deleteHistoryItem(id) {
 function historyKey(item) {
   return [
     item.status || "success",
+    item.workflow_id || "single",
     item.prompt || "",
     item.image_model || "",
     item.image_endpoint || "",
@@ -134,6 +135,7 @@ function historyKey(item) {
     item.image_quality || "",
     item.image_count || "",
     item.reference_count || 0,
+    JSON.stringify(item.workflow_params || {}),
     (item.images || []).join(","),
     item.error || "",
   ].join("\n");
@@ -147,6 +149,7 @@ function historyFailureKey(item) {
     url: ref && ref.url || "",
   }));
   return [
+    item.workflow_id || "single",
     item.prompt || "",
     item.image_model || "",
     item.image_endpoint || "",
@@ -156,6 +159,7 @@ function historyFailureKey(item) {
     item.ratio || "",
     item.resolution || "",
     item.reference_count || 0,
+    JSON.stringify(item.workflow_params || {}),
     JSON.stringify(references),
   ].join("\n");
 }
@@ -217,11 +221,22 @@ async function saveHistory(result, extra = {}) {
   const form = $("#genForm");
   const references = await ensureHistoryReferenceURLs();
   const timing = result && result.timing ? result.timing : null;
+  const workflowId = form.elements.workflow_id ? form.elements.workflow_id.value : "single";
+  const workflowParams = typeof window.KuaimaWorkflow !== "undefined" &&
+    window.KuaimaWorkflow && typeof window.KuaimaWorkflow.currentValues === "function"
+    ? window.KuaimaWorkflow.currentValues()
+    : {};
   const item = {
     id: String(Date.now()),
     created_at: new Date().toISOString(),
     status: extra.status || "success",
     prompt: form.elements.prompt.value,
+    workflow_id: result.workflow_id || workflowId || "single",
+    workflow_name: result.workflow_name || (typeof window.KuaimaWorkflow !== "undefined" && window.KuaimaWorkflow &&
+      typeof window.KuaimaWorkflow.currentWorkflowLabel === "function"
+      ? window.KuaimaWorkflow.currentWorkflowLabel(workflowId)
+      : workflowId),
+    workflow_params: result.params || workflowParams,
     image_model: form.elements.image_model.value,
     image_count: form.elements.image_count.value,
     image_quality: form.elements.image_quality.value,
@@ -316,7 +331,8 @@ async function renderHistory() {
     '">复用</button>' +
     '<button class="btn small danger" type="button" data-history-action="delete" data-history-id="' + esc(item.id) +
     '">删除</button></div></div>' +
-    '<div class="history-meta">' + esc(item.image_model || "-") + ' · ' +
+    '<div class="history-meta">' + esc(item.workflow_name || item.workflow_id || "单次生成") + ' · ' +
+    esc(item.image_model || "-") + ' · ' +
     esc(item.image_size || "-") + ' · ' + esc(qualityLabel(item.image_quality)) +
     ' · 参考图 ' + esc(item.reference_count || 0) + ' 张' +
     (formatTimingSummary(item) ? ' · ' + esc(formatTimingSummary(item)) : '') + '</div>' +
@@ -348,6 +364,12 @@ async function restoreHistory(id) {
     return;
   }
   const form = $("#genForm");
+  if (form.elements.workflow_id) {
+    form.elements.workflow_id.value = item.workflow_id || "single";
+  }
+  if (window.KuaimaWorkflow && typeof window.KuaimaWorkflow.restore === "function") {
+    window.KuaimaWorkflow.restore(item.workflow_id || "single", item.workflow_params || {});
+  }
   form.elements.prompt.value = item.prompt || "";
   form.elements.image_model.value = item.image_model || form.elements.image_model.value;
   form.elements.image_count.value = item.image_count || form.elements.image_count.value;

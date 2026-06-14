@@ -392,7 +392,7 @@ function renderImagePreviews() {
   const list = $("#imagePreviewList");
   if (selectedImages.length === 0) {
     list.className = "image-preview-list empty";
-    list.textContent = "拖动历史图片到这里添加参考图";
+    list.textContent = "可以拖放参考图片到这里";
     return;
   }
 

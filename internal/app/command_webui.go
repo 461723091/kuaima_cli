@@ -172,6 +172,8 @@ func runWebUIWithOptions(args []string, runtimeOpts webUIRuntimeOptions) error {
 
 func (s *webUIServer) routes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/config", s.handleConfig)
+	mux.HandleFunc("/api/workflows", s.handleWorkflows)
+	mux.HandleFunc("/api/workflow/run", s.handleWorkflowRun)
 	mux.HandleFunc("/api/prompt/auto", s.handleAutoPrompt)
 	mux.HandleFunc("/api/generate", s.handleGenerate)
 	mux.HandleFunc("/api/generate/stream", s.handleGenerateStream)

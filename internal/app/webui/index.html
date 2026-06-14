@@ -111,12 +111,24 @@
           </div>
         </div>
 
+        <div class="field workflow-field">
+          <label>工作流</label>
+          <input id="workflowId" name="workflow_id" type="hidden" value="single">
+          <input id="workflowTemplates" name="workflow_templates" type="hidden" value="">
+          <div id="workflowTabs" class="workflow-tabs" role="tablist" aria-label="工作流切换"></div>
+          <div id="workflowDescription" class="workflow-description"></div>
+          <div id="workflowFields" class="workflow-fields" hidden></div>
+          <div id="workflowTemplatePicker" class="workflow-template-picker" hidden></div>
+        </div>
+
         <div class="field prompt-field">
-          <label>提示词</label>
+          <label id="promptFieldLabel">提示词</label>
           <div class="prompt-composer">
-            <textarea name="prompt" required placeholder="描述你想生成或编辑的图片，例如：未来感产品海报，金属材质，柔和棚拍灯光，高级科技风。"></textarea>
-            <div class="composer-actions">
+            <div id="promptTextGroup" class="prompt-text-group">
+              <textarea name="prompt" required placeholder="描述你想生成或编辑的图片，例如：未来感产品海报，金属材质，柔和棚拍灯光，高级科技风。"></textarea>
               <button id="autoPromptButton" class="btn small" type="button" title="自动写提示词" hidden>AI生成提示词</button>
+            </div>
+            <div class="composer-actions">
               <label class="upload-button" for="imageInput" title="上传参考图">
                 <span class="upload-icon">+</span>
                 <span>参考图</span>
@@ -130,6 +142,7 @@
           <div id="imagePreviewList" class="image-preview-list empty">上传参考图后可预览、删除和调整顺序</div>
         </div>
 
+        <div id="singleGenerationControls">
         <div class="row">
           <div class="field">
             <label>模型</label>
@@ -210,6 +223,7 @@
             <div id="saveDirStatus" class="status"></div>
           </div>
         </details>
+        </div>
       </form>
 
       <section id="resultsPanel" class="panel results" hidden>
@@ -220,6 +234,8 @@
           </div>
         </div>
         <div id="resultTiming" class="result-timing" aria-live="polite"></div>
+        <div id="workflowSteps" class="workflow-steps" hidden></div>
+        <div id="workflowReview" class="workflow-review" hidden></div>
         <div id="gallery" class="gallery"></div>
       </section>
     </section>
@@ -288,6 +304,7 @@
   <script src="/app-shared.js"></script>
   <script src="/app-billing.js"></script>
   <script src="/app-history.js"></script>
+  <script src="/app-workflow.js"></script>
   <script src="/app-generation.js"></script>
   <script src="/app-mask.js"></script>
   <script src="/app-prompt.js"></script>
