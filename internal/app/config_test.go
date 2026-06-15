@@ -210,6 +210,42 @@ func TestLoadAppConfigPrefersExecutableDirBeforeHome(t *testing.T) {
 	}
 }
 
+func TestLoadAppConfigMigratesMacBundleConfigToHome(t *testing.T) {
+	exeDir := t.TempDir()
+	homeDir := t.TempDir()
+	resetConfigPathFuncs(t, filepath.Join(exeDir, "kuaima_cli.app", "Contents", "MacOS", "kuaima_cli"), homeDir)
+	t.Setenv("KUAIMA_CONFIG_DIR", "")
+
+	exeConfigDir := filepath.Join(exeDir, "kuaima_cli.app", "Contents", "MacOS", configDirName)
+	if err := os.MkdirAll(exeConfigDir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(exeConfigDir, configFileName), []byte(`{"model":"bundle-model"}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := loadAppConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if configString(cfg.Model, "") != "bundle-model" {
+		t.Fatalf("expected bundle config, got %#v", cfg.Model)
+	}
+
+	homeConfig := filepath.Join(homeDir, configDirName, configFileName)
+	data, err := os.ReadFile(homeConfig)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got map[string]any
+	if err := json.Unmarshal(data, &got); err != nil {
+		t.Fatal(err)
+	}
+	if got["model"] != "bundle-model" {
+		t.Fatalf("expected migrated home config, got %#v", got)
+	}
+}
+
 func TestLoadAppConfigCreatesInExecutableDirBeforeHome(t *testing.T) {
 	exeDir := t.TempDir()
 	homeDir := t.TempDir()

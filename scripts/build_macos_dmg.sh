@@ -10,6 +10,7 @@ stage="$dist/macos-dmg"
 bundle="$stage/$bundle_name"
 contents="$bundle/Contents"
 macos_dir="$contents/MacOS"
+resources_dir="$contents/Resources"
 version="${VERSION:-}"
 
 if [[ -z "$version" ]]; then
@@ -26,18 +27,42 @@ universal_bin="$macos_dir/$app_name"
 dmg_path="$dist/$app_name-macos-$version.dmg"
 
 rm -rf "$stage" "$amd64_bin" "$arm64_bin" "$dmg_path"
-mkdir -p "$macos_dir"
+mkdir -p "$macos_dir" "$resources_dir"
 
-GOOS=darwin GOARCH=amd64 CGO_ENABLED=0 go build -buildvcs=false -trimpath -ldflags "-X kuaima_cli/internal/app.AppVersion=$version" -o "$amd64_bin" "$root/cmd/kuaima_cli"
-GOOS=darwin GOARCH=arm64 CGO_ENABLED=0 go build -buildvcs=false -trimpath -ldflags "-X kuaima_cli/internal/app.AppVersion=$version" -o "$arm64_bin" "$root/cmd/kuaima_cli"
+GOOS=darwin GOARCH=amd64 CGO_ENABLED=1 go build -buildvcs=false -trimpath -ldflags "-X kuaima_cli/internal/app.AppVersion=$version" -o "$amd64_bin" "$root/cmd/kuaima_cli"
+GOOS=darwin GOARCH=arm64 CGO_ENABLED=1 go build -buildvcs=false -trimpath -ldflags "-X kuaima_cli/internal/app.AppVersion=$version" -o "$arm64_bin" "$root/cmd/kuaima_cli"
 
 command -v lipo >/dev/null 2>&1 || {
   echo "lipo command not found." >&2
   exit 1
 }
+command -v sips >/dev/null 2>&1 || {
+  echo "sips command not found." >&2
+  exit 1
+}
+command -v iconutil >/dev/null 2>&1 || {
+  echo "iconutil command not found." >&2
+  exit 1
+}
 
 lipo -create "$amd64_bin" "$arm64_bin" -output "$universal_bin"
 chmod +x "$universal_bin"
+
+icon_source="$root/internal/app/webui/logo.png"
+iconset_dir="$stage/kuaima_cli.iconset"
+app_icon="$resources_dir/AppIcon.icns"
+
+rm -rf "$iconset_dir"
+mkdir -p "$iconset_dir"
+for size in 16 32 128 256 512; do
+  sips -z "$size" "$size" "$icon_source" --out "$iconset_dir/icon_${size}x${size}.png" >/dev/null
+  double_size=$((size * 2))
+  sips -z "$double_size" "$double_size" "$icon_source" --out "$iconset_dir/icon_${size}x${size}@2x.png" >/dev/null
+done
+iconutil -c icns "$iconset_dir" -o "$app_icon"
+rm -rf "$iconset_dir"
+
+ln -s /Applications "$stage/Applications"
 
 cat > "$contents/Info.plist" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
@@ -48,6 +73,10 @@ cat > "$contents/Info.plist" <<EOF
   <string>en</string>
   <key>CFBundleExecutable</key>
   <string>$app_name</string>
+  <key>CFBundleIconFile</key>
+  <string>AppIcon</string>
+  <key>CFBundleIconName</key>
+  <string>AppIcon</string>
   <key>CFBundleIdentifier</key>
   <string>com.kuaima.cli</string>
   <key>CFBundleName</key>

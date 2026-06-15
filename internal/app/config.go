@@ -102,23 +102,23 @@ func appConfigPath() (string, error) {
 
 	executableConfigPath, executableConfigDir := executableAppConfigPath()
 	homeConfigPath, homeErr := homeAppConfigPath()
-	if preferHomeConfigPath {
+	if preferHomeConfigPath || executableLooksLikeMacBundle() {
 		if homeErr == nil && fileExists(homeConfigPath) {
 			_ = hideAppConfigDir(filepath.Dir(homeConfigPath))
 			return homeConfigPath, nil
 		}
 		if executableConfigPath != "" && fileExists(executableConfigPath) {
+			if err := ensureAppConfigDir(filepath.Dir(homeConfigPath)); err == nil {
+				if migrated, err := migrateAppConfig(executableConfigPath, homeConfigPath); err == nil && migrated {
+					return homeConfigPath, nil
+				}
+			}
 			_ = hideAppConfigDir(executableConfigDir)
 			return executableConfigPath, nil
 		}
 		if homeErr == nil {
 			if err := ensureAppConfigDir(filepath.Dir(homeConfigPath)); err == nil {
 				return homeConfigPath, nil
-			}
-		}
-		if executableConfigPath != "" {
-			if err := ensureAppConfigDir(executableConfigDir); err == nil {
-				return executableConfigPath, nil
 			}
 		}
 		if homeErr != nil {
@@ -146,6 +146,14 @@ func appConfigPath() (string, error) {
 	return homeConfigPath, nil
 }
 
+func executableLooksLikeMacBundle() bool {
+	exePath, err := executablePath()
+	if err != nil {
+		return false
+	}
+	return strings.Contains(strings.ToLower(filepath.ToSlash(exePath)), ".app/contents/macos/")
+}
+
 func executableAppConfigPath() (string, string) {
 	exePath, err := executablePath()
 	if err != nil {
@@ -168,6 +176,26 @@ func ensureAppConfigDir(dir string) error {
 		return err
 	}
 	return hideAppConfigDir(dir)
+}
+
+func migrateAppConfig(srcPath, dstPath string) (bool, error) {
+	if !fileExists(srcPath) {
+		return false, nil
+	}
+	if fileExists(dstPath) {
+		return false, nil
+	}
+	data, err := os.ReadFile(srcPath)
+	if err != nil {
+		return false, err
+	}
+	if err := ensureAppConfigDir(filepath.Dir(dstPath)); err != nil {
+		return false, err
+	}
+	if err := os.WriteFile(dstPath, data, 0600); err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 func fileExists(path string) bool {
