@@ -331,7 +331,7 @@ async function renderHistory() {
     '">复用</button>' +
     '<button class="btn small danger" type="button" data-history-action="delete" data-history-id="' + esc(item.id) +
     '">删除</button></div></div>' +
-    '<div class="history-meta">' + esc(item.workflow_name || item.workflow_id || "单次生成") + ' · ' +
+    '<div class="history-meta">' + esc(item.workflow_name || item.workflow_id || "图片生成") + ' · ' +
     esc(item.image_model || "-") + ' · ' +
     esc(item.image_size || "-") + ' · ' + esc(qualityLabel(item.image_quality)) +
     ' · 参考图 ' + esc(item.reference_count || 0) + ' 张' +

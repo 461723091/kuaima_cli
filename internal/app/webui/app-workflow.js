@@ -83,7 +83,7 @@
 
   function workflowLabel(id) {
     if (String(id || "") === "single") {
-      return "单次生成";
+      return "图片生成";
     }
     const def = workflowDef(id);
     return def ? def.name : String(id || "");
@@ -116,7 +116,7 @@
       return;
     }
     const current = currentWorkflowId();
-    const items = [{ id: "single", name: "单次生成" }].concat(state.catalog);
+    const items = [{ id: "single", name: "图片生成" }].concat(state.catalog);
     container.innerHTML = items.map((item) => (
       '<button class="workflow-tab' + (String(item.id) === String(current) ? " active" : "") + '" type="button" role="tab" ' +
       'aria-selected="' + String(String(item.id) === String(current)) + '" data-workflow-id="' + esc(item.id) + '">' +
@@ -143,7 +143,7 @@
     if (!def || String(def.id || "") === "single") {
       container.hidden = true;
       container.innerHTML = "";
-      description.textContent = "单次生成";
+      description.textContent = "图片生成";
       return;
     }
 
@@ -189,7 +189,7 @@
         '<label>' + esc(field.label || field.key) + (field.required ? '<span class="workflow-required">*</span>' : "") + "</label>" +
         control +
         help +
-      "</div>";
+        "</div>";
     }).join("");
   }
 
@@ -271,9 +271,9 @@
     container.hidden = false;
     container.innerHTML = '<div class="workflow-template-grid">' + templates.map((step) => (
       '<label class="workflow-template-card" data-workflow-template-card="' + esc(step.id) + '">' +
-        '<input type="checkbox" data-workflow-template="' + esc(step.id) + '" checked>' +
-        '<div><strong>' + esc(step.title || step.id || "模板") + '</strong>' +
-        '<p>' + esc(workflowStepMeta(step)) + '</p></div>' +
+      '<input type="checkbox" data-workflow-template="' + esc(step.id) + '" checked>' +
+      '<div><strong>' + esc(step.title || step.id || "模板") + '</strong>' +
+      '<p>' + esc(workflowStepMeta(step)) + '</p></div>' +
       '</label>'
     )).join("") + "</div>";
     setWorkflowTemplateIDs(currentWorkflowTemplateIDs());

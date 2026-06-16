@@ -85,13 +85,24 @@
 
   <main class="workspace">
     <section class="hero-panel">
-      <div>
+      <div class="hero-copy">
         <p class="eyebrow">Image Studio</p>
         <h1>图像生成工作台</h1>
+        <div id="workflowDescription" class="workflow-description"></div>
+      </div>
+      <div class="hero-tools">
+        <div class="mode-tabs" role="tablist" aria-label="模式切换">
+          <button class="mode-tab active" type="button" role="tab" aria-selected="true" data-mode-tab="generate">生成</button>
+          <button class="mode-tab" type="button" role="tab" aria-selected="false" data-mode-tab="agent">Agent</button>
+        </div>
+        <input id="workflowId" name="workflow_id" type="hidden" value="single">
+        <input id="workflowTemplates" name="workflow_templates" type="hidden" value="">
+        <div id="workflowTabs" class="workflow-tabs" role="tablist" aria-label="工作流切换"></div>
       </div>
     </section>
 
-    <section class="layout">
+    <section id="generatePane" class="mode-pane" data-mode-pane="generate">
+      <div class="layout">
       <aside id="historySidebar" class="panel history-sidebar">
         <div class="panel-head">
           <div>
@@ -133,11 +144,7 @@
         </div>
 
         <div class="field workflow-field">
-          <label>工作流</label>
-          <input id="workflowId" name="workflow_id" type="hidden" value="single">
-          <input id="workflowTemplates" name="workflow_templates" type="hidden" value="">
-          <div id="workflowTabs" class="workflow-tabs" role="tablist" aria-label="工作流切换"></div>
-          <div id="workflowDescription" class="workflow-description"></div>
+
           <div id="workflowFields" class="workflow-fields" hidden></div>
           <div id="workflowTemplatePicker" class="workflow-template-picker" hidden></div>
         </div>
@@ -236,6 +243,35 @@
         <div id="workflowReview" class="workflow-review" hidden></div>
         <div id="gallery" class="gallery"></div>
       </section>
+      </div>
+    </section>
+
+    <section id="agentPane" class="panel agent-pane mode-pane" data-mode-pane="agent" hidden>
+      <div class="panel-head">
+        <div>
+          <p class="eyebrow">Agent</p>
+          <h2>直接对话</h2>
+        </div>
+        <div class="agent-head-actions">
+          <button id="clearAgentChat" class="btn small" type="button">清空</button>
+        </div>
+      </div>
+      <div id="agentChatLog" class="agent-chat-log" aria-live="polite"></div>
+      <form id="agentForm" class="agent-composer">
+        <input id="agentImageInput" class="sr-only" type="file" accept="image/*" multiple>
+        <div id="agentAttachmentList" class="agent-attachment-list"></div>
+        <label class="upload-button agent-upload" for="agentImageInput" title="上传图片">
+          <span class="upload-icon">+</span>
+          <span>图片</span>
+        </label>
+        <div class="agent-input-row">
+          <textarea id="agentPrompt" placeholder="输入消息，Shift+Enter 换行"></textarea>
+          <div class="agent-actions">
+            <button id="cancelAgentSend" class="btn cancel-generate" type="button" hidden>取消</button>
+            <button class="btn primary" type="submit">发送</button>
+          </div>
+        </div>
+      </form>
     </section>
   </main>
 
@@ -304,6 +340,7 @@
   <script src="/app-history.js"></script>
   <script src="/app-workflow.js"></script>
   <script src="/app-generation.js"></script>
+  <script src="/app-agent.js"></script>
   <script src="/app-mask.js"></script>
   <script src="/app-prompt.js"></script>
   <script src="/app.js"></script>

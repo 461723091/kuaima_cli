@@ -177,6 +177,7 @@ func (s *webUIServer) routes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/prompt/auto", s.handleAutoPrompt)
 	mux.HandleFunc("/api/generate", s.handleGenerate)
 	mux.HandleFunc("/api/generate/stream", s.handleGenerateStream)
+	mux.HandleFunc("/api/agent/stream", s.handleAgentStream)
 	mux.HandleFunc("/api/balance", s.handleBalance)
 	mux.HandleFunc("/api/account/link", s.handleAccountLink)
 	mux.HandleFunc("/api/recharge/info", s.handleRechargeInfo)
@@ -528,6 +529,61 @@ func (s *webUIServer) handleGenerateStream(w http.ResponseWriter, r *http.Reques
 		"saved":  saved,
 		"text":   text,
 	})
+}
+
+type agentChatRequest struct {
+	Model    string         `json:"model"`
+	Messages []inputMessage `json:"messages"`
+}
+
+func (s *webUIServer) handleAgentStream(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	var req agentChatRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if len(req.Messages) == 0 {
+		writeError(w, http.StatusBadRequest, "messages are required")
+		return
+	}
+	model := strings.TrimSpace(req.Model)
+	if model == "" {
+		model = strings.TrimSpace(*s.clientOpts.model)
+	}
+	c, err := s.clientOpts.newClient()
+	if err != nil {
+		writeError(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	defer c.Close()
+
+	messages := append([]inputMessage(nil), req.Messages...)
+	if strings.TrimSpace(s.responseSystem) != "" && (len(messages) == 0 || strings.TrimSpace(messages[0].Role) != "system") {
+		messages = append([]inputMessage{{
+			Role: "system",
+			Content: []inputContent{{
+				Type: "input_text",
+				Text: strings.TrimSpace(s.responseSystem),
+			}},
+		}}, messages...)
+	}
+
+	stream := newWebUIEventStream(w)
+	stream.send("status", map[string]string{"message": "正在回复..."})
+	resp, err := c.createResponseStream(r.Context(), responseRequest{
+		Model:  model,
+		Input:  messages,
+		Stream: true,
+	}, stream.textWriter())
+	if err != nil {
+		stream.send("error", map[string]string{"error": err.Error()})
+		return
+	}
+	stream.send("done", map[string]string{"text": strings.TrimSpace(resp.OutputText)})
 }
 
 func (s *webUIServer) handleGenerateWithImageEndpoint(ctx context.Context, c *client, opts imageOptions, imageModel, prompt string, refs []imageRef, mask *imageRef) (*responsePayload, error) {
