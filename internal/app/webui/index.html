@@ -111,16 +111,6 @@
           </div>
         </div>
 
-        <div class="field workflow-field">
-          <label>工作流</label>
-          <input id="workflowId" name="workflow_id" type="hidden" value="single">
-          <input id="workflowTemplates" name="workflow_templates" type="hidden" value="">
-          <div id="workflowTabs" class="workflow-tabs" role="tablist" aria-label="工作流切换"></div>
-          <div id="workflowDescription" class="workflow-description"></div>
-          <div id="workflowFields" class="workflow-fields" hidden></div>
-          <div id="workflowTemplatePicker" class="workflow-template-picker" hidden></div>
-        </div>
-
         <div class="field prompt-field">
           <label id="promptFieldLabel">提示词</label>
           <div class="prompt-composer">
@@ -131,7 +121,7 @@
             <div class="composer-actions">
               <label class="upload-button" for="imageInput" title="上传参考图">
                 <span class="upload-icon">+</span>
-                <span>参考图</span>
+                <span id="referenceUploadLabel">参考图</span>
               </label>
               <input id="imageInput" class="sr-only" name="images" type="file" accept="image/*" multiple>
               <button id="cancelGenerate" class="btn cancel-generate" type="button" hidden>取消</button>
@@ -142,7 +132,16 @@
           <div id="imagePreviewList" class="image-preview-list empty">上传参考图后可预览、删除和调整顺序</div>
         </div>
 
-        <div id="singleGenerationControls">
+        <div class="field workflow-field">
+          <label>工作流</label>
+          <input id="workflowId" name="workflow_id" type="hidden" value="single">
+          <input id="workflowTemplates" name="workflow_templates" type="hidden" value="">
+          <div id="workflowTabs" class="workflow-tabs" role="tablist" aria-label="工作流切换"></div>
+          <div id="workflowDescription" class="workflow-description"></div>
+          <div id="workflowFields" class="workflow-fields" hidden></div>
+          <div id="workflowTemplatePicker" class="workflow-template-picker" hidden></div>
+        </div>
+
         <div class="row">
           <div class="field">
             <label>模型</label>
@@ -152,7 +151,7 @@
               <option value="gpt-image-1">gpt-image-1</option>
             </select>
           </div>
-          <div class="field">
+          <div id="singleGenerationControls" class="field">
             <label>张数</label>
             <input name="image_count" type="number" min="1" max="10" value="1">
           </div>
@@ -223,7 +222,6 @@
             <div id="saveDirStatus" class="status"></div>
           </div>
         </details>
-        </div>
       </form>
 
       <section id="resultsPanel" class="panel results" hidden>

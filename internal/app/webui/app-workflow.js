@@ -68,6 +68,10 @@
     return $("#promptFieldLabel");
   }
 
+  function referenceUploadLabel() {
+    return $("#referenceUploadLabel");
+  }
+
   function workflowDef(id) {
     return state.catalog.find((item) => String(item.id || "") === String(id || ""));
   }
@@ -154,6 +158,15 @@
       if (field.type === "textarea") {
         control = '<textarea data-workflow-key="' + esc(field.key) + '" name="' + esc(name) + '" placeholder="' +
           esc(field.placeholder || "") + '"' + (field.required ? " required" : "") + ">" + esc(value) + "</textarea>";
+      } else if (field.type === "combo") {
+        const listId = "workflowList_" + String(field.key || "").replace(/[^a-zA-Z0-9_-]/g, "_");
+        control = '<input data-workflow-key="' + esc(field.key) + '" name="' + esc(name) + '" type="text" value="' +
+          esc(value) + '" placeholder="' + esc(field.placeholder || "") + '" list="' + esc(listId) + '"' +
+          (field.required ? " required" : "") + ">" +
+          '<datalist id="' + esc(listId) + '">' +
+          (field.options || []).map((option) => (
+            '<option value="' + esc(option.value) + '">' + esc(option.label || option.value) + "</option>"
+          )).join("") + "</datalist>";
       } else if (field.type === "select") {
         control = '<select data-workflow-key="' + esc(field.key) + '" name="' + esc(name) + '">' +
           (field.options || []).map((option) => (
@@ -260,10 +273,16 @@
       '<label class="workflow-template-card" data-workflow-template-card="' + esc(step.id) + '">' +
         '<input type="checkbox" data-workflow-template="' + esc(step.id) + '" checked>' +
         '<div><strong>' + esc(step.title || step.id || "模板") + '</strong>' +
-        '<p>生成 1 张图片</p></div>' +
+        '<p>' + esc(workflowStepMeta(step)) + '</p></div>' +
       '</label>'
     )).join("") + "</div>";
     setWorkflowTemplateIDs(currentWorkflowTemplateIDs());
+  }
+
+  function workflowStepMeta(step) {
+    const title = String(step && step.title || "");
+    const type = title.includes("主图") ? "主图 1:1" : title.includes("详情图") ? "详情图 3:4" : "图片";
+    return type + " · 生成 1 张";
   }
 
   function syncWorkflowMode() {
@@ -282,7 +301,11 @@
     }
     const promptLabel = promptFieldLabel();
     if (promptLabel) {
-      promptLabel.textContent = String(id || "") === "single" ? "提示词" : "参考图";
+      promptLabel.textContent = String(id || "") === "single" ? "提示词" : "产品参考图片";
+    }
+    const uploadLabel = referenceUploadLabel();
+    if (uploadLabel) {
+      uploadLabel.textContent = String(id || "") === "single" ? "参考图" : "产品参考图";
     }
     const controls = singleGenerationControls();
     if (controls) {

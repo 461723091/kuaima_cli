@@ -112,49 +112,178 @@ func builtinWorkflowCatalog() workflowCatalogResponse {
 			{
 				ID:          "product-pack",
 				Name:        "电商套图",
-				Description: "勾选需要的图片模板，自动生成对应的商品展示图。",
+				Description: "上传产品参考图，配置平台、语言、受众和视觉风格，勾选需要的主图或详情图模板。",
 				Inputs: []workflowInputField{
 					{Key: "product_brief", Label: "商品信息", Type: "textarea", Required: true, Placeholder: "描述商品卖点、材质、用途、规格等"},
-					{Key: "visual_style", Label: "视觉风格", Type: "text", Default: "高级感、干净背景、商业摄影", Placeholder: "例如：极简、科技感、母婴、户外"},
+					{Key: "platform", Label: "平台", Type: "combo", Default: "淘宝", Placeholder: "选择或输入平台", Options: []workflowFieldOption{
+						{Value: "淘宝", Label: "淘宝"},
+						{Value: "抖音", Label: "抖音"},
+						{Value: "微信小店", Label: "微信小店"},
+						{Value: "拼多多", Label: "拼多多"},
+						{Value: "亚马逊", Label: "亚马逊"},
+						{Value: "TikTok", Label: "TikTok"},
+					}},
+					{Key: "copy_language", Label: "文案语言", Type: "combo", Default: "简体中文", Placeholder: "选择或输入语言", Options: []workflowFieldOption{
+						{Value: "简体中文", Label: "简体中文"},
+						{Value: "英文", Label: "英文"},
+						{Value: "繁体中文", Label: "繁体中文"},
+						{Value: "日文", Label: "日文"},
+						{Value: "韩文", Label: "韩文"},
+					}},
+					{Key: "audience", Label: "受众目标", Type: "combo", Default: "年轻女性", Placeholder: "选择或输入受众", Options: []workflowFieldOption{
+						{Value: "年轻女性", Label: "年轻女性"},
+						{Value: "商务人士", Label: "商务人士"},
+						{Value: "老年群体", Label: "老年群体"},
+						{Value: "新手妈妈", Label: "新手妈妈"},
+						{Value: "学生群体", Label: "学生群体"},
+						{Value: "户外运动人群", Label: "户外运动人群"},
+					}},
+					{Key: "visual_style", Label: "视觉风格", Type: "combo", Default: "高级感、干净背景、商业摄影", Placeholder: "选择或输入视觉风格", Options: []workflowFieldOption{
+						{Value: "高级感、干净背景、商业摄影", Label: "高级商业摄影"},
+						{Value: "极简白底、清晰产品轮廓", Label: "极简白底"},
+						{Value: "年轻潮流、强对比色、社媒感", Label: "年轻潮流"},
+						{Value: "科技感、冷色调、精密质感", Label: "科技感"},
+						{Value: "温暖生活方式、自然光、真实场景", Label: "生活方式"},
+						{Value: "跨境电商、干净排版、英文卖点", Label: "跨境电商"},
+					}},
+					{Key: "image_resolution", Label: "工作流分辨率", Type: "select", Default: "1k", Options: []workflowFieldOption{
+						{Value: "1k", Label: "1k"},
+						{Value: "2k", Label: "2k"},
+						{Value: "4k", Label: "4k"},
+					}},
 				},
 				Steps: []workflowStepDefinition{
 					{
 						ID:        "brief",
 						Kind:      "response",
 						Title:     "提炼卖点",
-						Prompt:    "根据商品信息提炼一句适合做套图的核心卖点，并列出3个关键词。商品信息：\n{{field \"product_brief\"}}\n{{end}}{{with field \"visual_style\"}}视觉风格：{{.}}\n{{end}}",
+						Prompt:    "根据商品信息为电商套图提炼核心卖点、目标受众、平台表达重点和文案关键词。平台：{{field \"platform\"}}。文案语言：{{field \"copy_language\"}}。受众目标：{{field \"audience\"}}。商品信息：\n{{field \"product_brief\"}}\n{{with field \"visual_style\"}}视觉风格：{{.}}\n{{end}}",
 						TextModel: "",
 					},
 					{
-						ID:            "core_value",
+						ID:            "white_bg_main",
 						Kind:          "image",
-						Title:         "核心卖点图",
-						Prompt:        "根据以下商品信息生成核心卖点图，突出商品最强的购买理由和视觉第一眼冲击。商品信息：\n{{field \"product_brief\"}}\n卖点提炼：\n{{stepText \"brief\"}}\n{{with field \"visual_style\"}}视觉风格：{{.}}\n{{end}}",
+						Title:         "主图 · 产品白底图",
+						Prompt:        "生成电商主图：产品白底图。画面比例 1:1，产品居中，占画面主体，背景纯净，边缘清晰，适合{{field \"platform\"}}商品主图。文案语言：{{field \"copy_language\"}}。受众：{{field \"audience\"}}。商品信息：\n{{field \"product_brief\"}}\n卖点提炼：\n{{stepText \"brief\"}}\n{{with field \"visual_style\"}}视觉风格：{{.}}\n{{end}}",
 						Count:         "1",
+						Size:          "{{commerceSize (field \"image_resolution\") \"main\"}}",
 						UseReferences: true,
 					},
 					{
-						ID:            "pain_point",
+						ID:            "hero_main",
 						Kind:          "image",
-						Title:         "痛点展示图",
-						Prompt:        "根据以下商品信息生成痛点展示图，先放大用户痛点，再给出商品解决方案。商品信息：\n{{field \"product_brief\"}}\n卖点提炼：\n{{stepText \"brief\"}}\n{{with field \"visual_style\"}}视觉风格：{{.}}\n{{end}}",
+						Title:         "主图 · 首屏主视觉",
+						Prompt:        "生成电商主图：首屏主视觉。画面比例 1:1，突出第一眼点击欲望和核心购买理由，适合{{field \"platform\"}}列表或首屏。文案语言：{{field \"copy_language\"}}。受众：{{field \"audience\"}}。商品信息：\n{{field \"product_brief\"}}\n卖点提炼：\n{{stepText \"brief\"}}\n{{with field \"visual_style\"}}视觉风格：{{.}}\n{{end}}",
 						Count:         "1",
+						Size:          "{{commerceSize (field \"image_resolution\") \"main\"}}",
 						UseReferences: true,
 					},
 					{
-						ID:            "scenario",
+						ID:            "multi_angle",
 						Kind:          "image",
-						Title:         "使用场景图",
-						Prompt:        "根据以下商品信息生成使用场景图，展示真实的使用环境和目标人群。商品信息：\n{{field \"product_brief\"}}\n卖点提炼：\n{{stepText \"brief\"}}\n{{with field \"visual_style\"}}视觉风格：{{.}}\n{{end}}",
+						Title:         "详情图 · 多角度展示",
+						Prompt:        "生成电商详情图：多角度展示。画面比例 3:4，用清晰分区展示产品正面、侧面、背面或局部角度，强调真实结构和质感。平台：{{field \"platform\"}}。文案语言：{{field \"copy_language\"}}。受众：{{field \"audience\"}}。商品信息：\n{{field \"product_brief\"}}\n卖点提炼：\n{{stepText \"brief\"}}\n{{with field \"visual_style\"}}视觉风格：{{.}}\n{{end}}",
 						Count:         "1",
+						Size:          "{{commerceSize (field \"image_resolution\") \"detail\"}}",
 						UseReferences: true,
 					},
 					{
-						ID:            "detail",
+						ID:            "specs",
 						Kind:          "image",
-						Title:         "细节展示图",
-						Prompt:        "根据以下商品信息生成细节展示图，突出材质、做工、结构、参数等细节。商品信息：\n{{field \"product_brief\"}}\n卖点提炼：\n{{stepText \"brief\"}}\n{{with field \"visual_style\"}}视觉风格：{{.}}\n{{end}}",
+						Title:         "详情图 · 规格参数",
+						Prompt:        "生成电商详情图：规格参数。画面比例 3:4，排版清晰，展示尺寸、材质、容量、型号或关键参数，信息层级明确。平台：{{field \"platform\"}}。文案语言：{{field \"copy_language\"}}。商品信息：\n{{field \"product_brief\"}}\n卖点提炼：\n{{stepText \"brief\"}}\n{{with field \"visual_style\"}}视觉风格：{{.}}\n{{end}}",
 						Count:         "1",
+						Size:          "{{commerceSize (field \"image_resolution\") \"detail\"}}",
+						UseReferences: true,
+					},
+					{
+						ID:            "effect_compare",
+						Kind:          "image",
+						Title:         "详情图 · 效果对比",
+						Prompt:        "生成电商详情图：效果对比。画面比例 3:4，用对比结构呈现使用前后、普通方案和本商品方案的差异，转化导向明确。平台：{{field \"platform\"}}。文案语言：{{field \"copy_language\"}}。受众：{{field \"audience\"}}。商品信息：\n{{field \"product_brief\"}}\n卖点提炼：\n{{stepText \"brief\"}}\n{{with field \"visual_style\"}}视觉风格：{{.}}\n{{end}}",
+						Count:         "1",
+						Size:          "{{commerceSize (field \"image_resolution\") \"detail\"}}",
+						UseReferences: true,
+					},
+					{
+						ID:            "craft",
+						Kind:          "image",
+						Title:         "详情图 · 工艺制作图",
+						Prompt:        "生成电商详情图：工艺制作图。画面比例 3:4，展示材质、工艺、制作流程或细节放大，强调品质可信度。平台：{{field \"platform\"}}。文案语言：{{field \"copy_language\"}}。商品信息：\n{{field \"product_brief\"}}\n卖点提炼：\n{{stepText \"brief\"}}\n{{with field \"visual_style\"}}视觉风格：{{.}}\n{{end}}",
+						Count:         "1",
+						Size:          "{{commerceSize (field \"image_resolution\") \"detail\"}}",
+						UseReferences: true,
+					},
+					{
+						ID:            "accessories",
+						Kind:          "image",
+						Title:         "详情图 · 配件赠品",
+						Prompt:        "生成电商详情图：配件赠品。画面比例 3:4，清楚展示包装内含物、配件、赠品和数量关系，画面整洁可信。平台：{{field \"platform\"}}。文案语言：{{field \"copy_language\"}}。商品信息：\n{{field \"product_brief\"}}\n卖点提炼：\n{{stepText \"brief\"}}\n{{with field \"visual_style\"}}视觉风格：{{.}}\n{{end}}",
+						Count:         "1",
+						Size:          "{{commerceSize (field \"image_resolution\") \"detail\"}}",
+						UseReferences: true,
+					},
+					{
+						ID:            "series",
+						Kind:          "image",
+						Title:         "详情图 · 系列展示图",
+						Prompt:        "生成电商详情图：系列展示图。画面比例 3:4，展示多规格、多颜色、多款式或系列组合，统一视觉秩序。平台：{{field \"platform\"}}。文案语言：{{field \"copy_language\"}}。商品信息：\n{{field \"product_brief\"}}\n卖点提炼：\n{{stepText \"brief\"}}\n{{with field \"visual_style\"}}视觉风格：{{.}}\n{{end}}",
+						Count:         "1",
+						Size:          "{{commerceSize (field \"image_resolution\") \"detail\"}}",
+						UseReferences: true,
+					},
+					{
+						ID:            "package",
+						Kind:          "image",
+						Title:         "详情图 · 包装展示图",
+						Prompt:        "生成电商详情图：包装展示图。画面比例 3:4，展示外包装、开箱内容、包装质感和送礼属性。平台：{{field \"platform\"}}。文案语言：{{field \"copy_language\"}}。商品信息：\n{{field \"product_brief\"}}\n卖点提炼：\n{{stepText \"brief\"}}\n{{with field \"visual_style\"}}视觉风格：{{.}}\n{{end}}",
+						Count:         "1",
+						Size:          "{{commerceSize (field \"image_resolution\") \"detail\"}}",
+						UseReferences: true,
+					},
+					{
+						ID:            "ingredients",
+						Kind:          "image",
+						Title:         "详情图 · 商品成分图",
+						Prompt:        "生成电商详情图：商品成分图。画面比例 3:4，适合展示成分、材质构成、配方或核心模块，表达专业、清晰、可信。平台：{{field \"platform\"}}。文案语言：{{field \"copy_language\"}}。商品信息：\n{{field \"product_brief\"}}\n卖点提炼：\n{{stepText \"brief\"}}\n{{with field \"visual_style\"}}视觉风格：{{.}}\n{{end}}",
+						Count:         "1",
+						Size:          "{{commerceSize (field \"image_resolution\") \"detail\"}}",
+						UseReferences: true,
+					},
+					{
+						ID:            "service",
+						Kind:          "image",
+						Title:         "详情图 · 售后保障图",
+						Prompt:        "生成电商详情图：售后保障图。画面比例 3:4，呈现质保、退换、客服、配送或服务承诺，风格可靠克制。平台：{{field \"platform\"}}。文案语言：{{field \"copy_language\"}}。商品信息：\n{{field \"product_brief\"}}\n卖点提炼：\n{{stepText \"brief\"}}\n{{with field \"visual_style\"}}视觉风格：{{.}}\n{{end}}",
+						Count:         "1",
+						Size:          "{{commerceSize (field \"image_resolution\") \"detail\"}}",
+						UseReferences: true,
+					},
+					{
+						ID:            "usage_advice",
+						Kind:          "image",
+						Title:         "详情图 · 使用建议图",
+						Prompt:        "生成电商详情图：使用建议图。画面比例 3:4，展示使用步骤、适用场景、注意事项或搭配建议，让用户快速理解怎么用。平台：{{field \"platform\"}}。文案语言：{{field \"copy_language\"}}。受众：{{field \"audience\"}}。商品信息：\n{{field \"product_brief\"}}\n卖点提炼：\n{{stepText \"brief\"}}\n{{with field \"visual_style\"}}视觉风格：{{.}}\n{{end}}",
+						Count:         "1",
+						Size:          "{{commerceSize (field \"image_resolution\") \"detail\"}}",
+						UseReferences: true,
+					},
+					{
+						ID:            "brand_story",
+						Kind:          "image",
+						Title:         "详情图 · 品牌故事图",
+						Prompt:        "生成电商详情图：品牌故事图。画面比例 3:4，表达品牌理念、产地、研发背景或品质主张，避免空泛，用视觉建立信任。平台：{{field \"platform\"}}。文案语言：{{field \"copy_language\"}}。商品信息：\n{{field \"product_brief\"}}\n卖点提炼：\n{{stepText \"brief\"}}\n{{with field \"visual_style\"}}视觉风格：{{.}}\n{{end}}",
+						Count:         "1",
+						Size:          "{{commerceSize (field \"image_resolution\") \"detail\"}}",
+						UseReferences: true,
+					},
+					{
+						ID:            "buyer_show",
+						Kind:          "image",
+						Title:         "详情图 · 买家秀图",
+						Prompt:        "生成电商详情图：买家秀图。画面比例 3:4，模拟真实买家使用或展示商品的自然场景，真实、可信、有生活感，符合{{field \"audience\"}}审美。平台：{{field \"platform\"}}。文案语言：{{field \"copy_language\"}}。商品信息：\n{{field \"product_brief\"}}\n卖点提炼：\n{{stepText \"brief\"}}\n{{with field \"visual_style\"}}视觉风格：{{.}}\n{{end}}",
+						Count:         "1",
+						Size:          "{{commerceSize (field \"image_resolution\") \"detail\"}}",
 						UseReferences: true,
 					},
 				},
@@ -175,7 +304,7 @@ func builtinWorkflowCatalog() workflowCatalogResponse {
 						ID:        "copy",
 						Kind:      "response",
 						Title:     "生成文案",
-						Prompt:    "根据商品信息生成图文带货文案，包含标题、正文、3个短卖点和5个标签。语气：{{field \"tone\"}}。目标人群：{{field \"audience\"}}。商品信息：\n{{field \"product_brief\"}}\n{{end}}",
+						Prompt:    "根据商品信息生成图文带货文案，包含标题、正文、3个短卖点和5个标签。语气：{{field \"tone\"}}。目标人群：{{field \"audience\"}}。商品信息：\n{{field \"product_brief\"}}\n",
 						TextModel: "",
 					},
 					{
@@ -642,11 +771,39 @@ func workflowTemplateFuncMap(data workflowTemplateData) template.FuncMap {
 			}
 			return fallback
 		},
+		"commerceSize": commerceWorkflowSize,
 		"join": func(values []string, sep string) string {
 			return strings.Join(values, sep)
 		},
 		"trim": strings.TrimSpace,
 	}
+}
+
+func commerceWorkflowSize(resolution, kind string) string {
+	resolution = strings.ToLower(strings.TrimSpace(resolution))
+	if resolution == "" {
+		resolution = "1k"
+	}
+	mainSizes := map[string]string{
+		"1k": "1024x1024",
+		"2k": "2048x2048",
+		"4k": "2880x2880",
+	}
+	detailSizes := map[string]string{
+		"1k": "1024x1536",
+		"2k": "1440x2560",
+		"4k": "2160x3840",
+	}
+	if strings.EqualFold(strings.TrimSpace(kind), "detail") {
+		if size := detailSizes[resolution]; size != "" {
+			return size
+		}
+		return detailSizes["1k"]
+	}
+	if size := mainSizes[resolution]; size != "" {
+		return size
+	}
+	return mainSizes["1k"]
 }
 
 func workflowStepImageOptions(base imageOptions, step workflowStepDefinition, data workflowTemplateData) (imageOptions, error) {

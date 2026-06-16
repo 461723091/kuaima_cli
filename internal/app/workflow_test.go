@@ -65,3 +65,48 @@ func TestWorkflowTemplateStepTextOverride(t *testing.T) {
 		t.Fatalf("unexpected step text: %q", got)
 	}
 }
+
+func TestCommerceWorkflowSizes(t *testing.T) {
+	if got := commerceWorkflowSize("2k", "main"); got != "2048x2048" {
+		t.Fatalf("unexpected main size: %q", got)
+	}
+	if got := commerceWorkflowSize("4k", "detail"); got != "2160x3840" {
+		t.Fatalf("unexpected detail size: %q", got)
+	}
+	if got := commerceWorkflowSize("unknown", "detail"); got != "1024x1536" {
+		t.Fatalf("unexpected fallback detail size: %q", got)
+	}
+}
+
+func TestBuiltinWorkflowTemplatesRender(t *testing.T) {
+	data := workflowTemplateData{
+		Prompt: "",
+		Params: map[string]string{
+			"product_brief":    "test product",
+			"platform":         "淘宝",
+			"copy_language":    "简体中文",
+			"audience":         "年轻女性",
+			"visual_style":     "高级感",
+			"image_resolution": "1k",
+			"tone":             "真实",
+			"image_count":      "1",
+		},
+		Steps: map[string]workflowStepResult{
+			"brief": {Text: "core selling point"},
+			"copy":  {Text: "copy text"},
+		},
+		Overrides: map[string]string{},
+	}
+	for _, workflow := range builtinWorkflowCatalog().Workflows {
+		for _, step := range workflow.Steps {
+			if _, err := renderWorkflowTemplate(step.Prompt, data); err != nil {
+				t.Fatalf("render prompt for %s/%s: %v", workflow.ID, step.ID, err)
+			}
+			if step.Size != "" {
+				if _, err := renderWorkflowTemplate(step.Size, data); err != nil {
+					t.Fatalf("render size for %s/%s: %v", workflow.ID, step.ID, err)
+				}
+			}
+		}
+	}
+}

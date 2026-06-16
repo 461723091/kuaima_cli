@@ -56,7 +56,8 @@
       cancelButton.hidden = true;
       if (submitButton) {
         submitButton.disabled = false;
-        submitButton.textContent = "生成图片";
+        const workflowId = $("#workflowId") ? $("#workflowId").value : "single";
+        submitButton.textContent = String(workflowId || "") === "single" ? "生成图片" : "运行工作流";
       }
     }
   };
