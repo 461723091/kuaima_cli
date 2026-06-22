@@ -108,7 +108,7 @@ function renderPlans(info) {
     '<div class="plan-price"><strong>￥' + esc(formatAmount(plan.price_amount)) + '</strong><span>' +
     esc(plan.duration_value) + unit(plan.duration_unit) + '</span></div>' +
     '<button class="btn small primary" type="button" data-plan-id="' + Number(plan.id) +
-    '" data-plan-title="' + esc(plan.title) + '">订阅</button>' +
+    '" data-plan-title="' + esc(plan.title) + '">' + iconHTML("badge-plus") + '<span>订阅</span></button>' +
     '</div>'
   )).join("") || '<span class="status">暂无套餐</span>';
 }

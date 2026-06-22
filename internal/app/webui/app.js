@@ -57,7 +57,8 @@
       if (submitButton) {
         submitButton.disabled = false;
         const workflowId = $("#workflowId") ? $("#workflowId").value : "single";
-        submitButton.textContent = String(workflowId || "") === "single" ? "生成图片" : "运行工作流";
+        submitButton.innerHTML = iconHTML(String(workflowId || "") === "single" ? "image-plus" : "workflow") +
+          '<span>' + (String(workflowId || "") === "single" ? "生成图片" : "运行工作流") + '</span>';
       }
     }
   };
@@ -290,7 +291,7 @@
     sidebar.classList.toggle("collapsed", collapsed);
     $("#toggleHistory").setAttribute("aria-expanded", String(!collapsed));
     $("#toggleHistory").setAttribute("aria-label", collapsed ? "展开历史记录" : "收起历史记录");
-    $("#toggleHistory").textContent = collapsed ? "›" : "‹";
+    $("#toggleHistory").innerHTML = iconHTML(collapsed ? "panel-left-open" : "panel-left-close");
   };
   $("#chooseOutputDir").onclick = chooseOutputDir;
   $("#openDefaultOutputDir").onclick = openDefaultOutputDir;

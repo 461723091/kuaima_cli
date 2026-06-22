@@ -74,6 +74,10 @@ function esc(value) {
   }[char]));
 }
 
+function iconHTML(name) {
+  return '<i data-lucide="' + esc(name) + '" aria-hidden="true"></i>';
+}
+
 function unit(value) {
   if (value == "month") return "月";
   else if (value == "year") return "年";
@@ -416,8 +420,9 @@ function renderImagePreviews() {
         '<div class="image-preview-actions">' +
         (index === 0 ? '<button type="button" class="image-preview-mask-btn' + (hasMask ? ' active' : '') +
           '" title="局部编辑" data-image-action="edit-mask" data-image-index="' + index + '">' +
-          (hasMask ? '已涂抹' : '局部修改') + '</button>' : '') +
-        '<button type="button" title="删除" data-image-action="remove" data-image-index="' + index + '">×</button>' +
+          iconHTML("brush") + '<span>' + (hasMask ? '已涂抹' : '局部修改') + '</span></button>' : '') +
+        '<button type="button" title="删除" data-image-action="remove" data-image-index="' + index + '">' +
+        iconHTML("trash-2") + '<span class="sr-only">删除</span></button>' +
         '</div>' +
         '</div>'
       );

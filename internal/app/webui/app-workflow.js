@@ -122,16 +122,16 @@
     const workflowButtons = items.map((item) => (
       '<button class="workflow-tab' + (!agentActive && String(item.id) === String(current) ? " active" : "") + '" type="button" role="tab" ' +
       'aria-selected="' + String(!agentActive && String(item.id) === String(current)) + '" data-mode-tab="generate" data-workflow-id="' + esc(item.id) + '">' +
-      esc(item.name) + '</button>'
+      iconHTML("image-plus") + '<span>' + esc(item.name) + '</span></button>'
     )).join("");
     const catalogButtons = state.catalog.map((item) => (
       '<button class="workflow-tab' + (!agentActive && String(item.id) === String(current) ? " active" : "") + '" type="button" role="tab" ' +
       'aria-selected="' + String(!agentActive && String(item.id) === String(current)) + '" data-mode-tab="generate" data-workflow-id="' + esc(item.id) + '">' +
-      esc(item.name) + '</button>'
+      iconHTML("workflow") + '<span>' + esc(item.name) + '</span></button>'
     )).join("");
     container.innerHTML = workflowButtons +
       '<button class="workflow-tab' + (agentActive ? " active" : "") + '" type="button" role="tab" aria-selected="' +
-      String(agentActive) + '" data-mode-tab="agent">Agent 模式</button>' +
+      String(agentActive) + '" data-mode-tab="agent">' + iconHTML("bot-message-square") + '<span>Agent 模式</span></button>' +
       catalogButtons;
   }
 
@@ -170,7 +170,8 @@
         control = '<div class="workflow-textarea-group">' +
           '<textarea data-workflow-key="' + esc(field.key) + '" name="' + esc(name) + '" placeholder="' +
           esc(field.placeholder || "") + '"' + (field.required ? " required" : "") + ">" + esc(value) + "</textarea>" +
-          '<button class="btn small workflow-rewrite" type="button" data-workflow-rewrite>AI改写</button>' +
+          '<button class="btn small workflow-rewrite" type="button" data-workflow-rewrite>' +
+          iconHTML("wand-sparkles") + '<span>AI改写</span></button>' +
           '</div>';
       } else if (field.type === "combo") {
         control = '<div class="workflow-combo" data-workflow-combo>' +
@@ -337,7 +338,8 @@
     state.pendingReview = null;
     const submit = $("#genForm") && $("#genForm").querySelector('button[type="submit"]');
     if (submit) {
-      submit.textContent = String(id || "") === "single" ? "生成图片" : "运行工作流";
+      submit.innerHTML = iconHTML(String(id || "") === "single" ? "image-plus" : "workflow") +
+        '<span>' + (String(id || "") === "single" ? "生成图片" : "运行工作流") + '</span>';
     }
     renderWorkflowTabs();
   }
@@ -453,7 +455,8 @@
         );
       }).join("") +
       '<div class="workflow-review-actions">' +
-      '<button class="btn primary" type="button" data-workflow-review-action="continue">确认并继续</button>' +
+      '<button class="btn primary" type="button" data-workflow-review-action="continue">' +
+      iconHTML("circle-check") + '<span>确认并继续</span></button>' +
       '</div>'
     );
   }
@@ -639,7 +642,8 @@
       cancelButton.hidden = true;
       if (submitButton) {
         submitButton.disabled = false;
-        submitButton.textContent = String(currentWorkflowId() || "") === "single" ? "生成图片" : "运行工作流";
+        submitButton.innerHTML = iconHTML(String(currentWorkflowId() || "") === "single" ? "image-plus" : "workflow") +
+          '<span>' + (String(currentWorkflowId() || "") === "single" ? "生成图片" : "运行工作流") + '</span>';
       }
     }
   }

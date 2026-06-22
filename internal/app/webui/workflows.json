@@ -142,7 +142,7 @@
         },
         {
           "key": "image_resolution",
-          "label": "工作流分辨率",
+          "label": "图片分辨率",
           "type": "select",
           "default": "1k",
           "options": [

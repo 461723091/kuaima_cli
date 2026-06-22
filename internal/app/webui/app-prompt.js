@@ -11,7 +11,7 @@
     button.disabled = running;
     button.innerHTML = running
       ? '<span class="spinner small"></span><span>生成中...</span>'
-      : "AI改写";
+      : iconHTML("wand-sparkles") + '<span>AI改写</span>';
   }
 
   function setRewriteButtonRunning(button, running) {
@@ -21,7 +21,7 @@
     button.disabled = running;
     button.innerHTML = running
       ? '<span class="spinner small"></span><span>生成中...</span>'
-      : "AI改写";
+      : iconHTML("wand-sparkles") + '<span>AI改写</span>';
   }
 
   function setAutoPromptButtonVisible(visible) {

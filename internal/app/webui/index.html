@@ -8,6 +8,7 @@
   <link rel="icon" href="/favicon.ico" sizes="any">
   <link rel="apple-touch-icon" href="/logo.png">
   <link rel="stylesheet" href="/app.css">
+  <script src="/lucide.min.js" defer></script>
 </head>
 
 <body>
@@ -15,12 +16,16 @@
     <div class="brand">
       <span class="brand-mark"></span>
       <span id="appVersion" class="app-version"></span>
-      <span>快马 AI WebUI</span>
+      <span class="brand-name">快马 AI WebUI</span>
     </div>
     <div class="billing-menu">
       <button id="toggleBillingTop" class="wallet-pill" type="button" aria-expanded="false">
-        <span id="balanceTopLabel">可用token</span>
-        <strong id="balanceTop">读取中...</strong>
+        <i data-lucide="wallet-cards" aria-hidden="true"></i>
+        <span class="wallet-copy">
+          <span id="balanceTopLabel">可用token</span>
+          <strong id="balanceTop">读取中...</strong>
+        </span>
+        <i class="wallet-chevron" data-lucide="chevron-down" aria-hidden="true"></i>
       </button>
       <div id="billingDropdown" class="billing-dropdown" hidden>
         <div class="menu-row">
@@ -46,11 +51,14 @@
             <span id="usageProgressUsedLabel">已用 0%</span>
           </div>
         </div>
-        <a id="usageDetailLink" class="detail-link" href="#" target="_blank" rel="noreferrer">查看使用详情</a>
+        <a id="usageDetailLink" class="detail-link" href="#" target="_blank" rel="noreferrer">
+          <i data-lucide="external-link" aria-hidden="true"></i>
+          <span>查看使用详情</span>
+        </a>
 
         <div class="subscription">
           <div class="section-title">
-            <span>已订阅套餐</span>
+            <span><i data-lucide="badge-check" aria-hidden="true"></i>已订阅套餐</span>
             <span id="subscriptionCount" class="status"></span>
           </div>
           <div id="subscriptionList" class="subscription-list"></div>
@@ -70,12 +78,15 @@
           <div id="amountOptions" class="chip-grid"></div>
           <div class="amount-row">
             <input id="amount" type="number" min="1" step="0.01" placeholder="输入金额">
-            <button id="amountPay" class="btn primary small" type="button">支付</button>
+            <button id="amountPay" class="btn primary small" type="button">
+              <i data-lucide="scan-line" aria-hidden="true"></i>
+              <span>支付</span>
+            </button>
           </div>
         </div>
 
         <div class="section-title">
-          <span>套餐</span>
+          <span><i data-lucide="layers-3" aria-hidden="true"></i>套餐</span>
           <span id="rechargeStatus" class="status"></span>
         </div>
         <div id="plans" class="plans"></div>
@@ -87,7 +98,10 @@
     <section class="hero-panel">
       <div class="hero-copy">
         <p class="eyebrow">Image Studio</p>
-        <h1>图像生成工作台</h1>
+        <div class="hero-title-row">
+          <span class="hero-symbol"><i data-lucide="sparkles" aria-hidden="true"></i></span>
+          <h1>图像生成工作台</h1>
+        </div>
         <div id="workflowDescription" class="workflow-description"></div>
       </div>
       <div class="hero-tools">
@@ -103,10 +117,10 @@
           <div class="panel-head">
             <div>
               <p class="eyebrow">History</p>
-              <h2>历史记录</h2>
+              <h2 class="panel-title"><i data-lucide="history" aria-hidden="true"></i><span>历史记录</span></h2>
             </div>
-            <button id="toggleHistory" class="icon-btn" type="button" aria-label="收起历史记录"
-              aria-expanded="true">‹</button>
+            <button id="toggleHistory" class="icon-btn" type="button" aria-label="收起历史记录" aria-expanded="true"><i
+                data-lucide="panel-left-close" aria-hidden="true"></i></button>
           </div>
           <div id="historyPanel" class="history-panel"></div>
         </aside>
@@ -115,7 +129,7 @@
           <div class="panel-head">
             <div>
               <p class="eyebrow">Prompt</p>
-              <h2>生成参数</h2>
+              <h2 class="panel-title"><i data-lucide="sliders-horizontal" aria-hidden="true"></i><span>生成参数</span></h2>
             </div>
           </div>
 
@@ -124,16 +138,25 @@
             <div class="prompt-composer">
               <div id="promptTextGroup" class="prompt-text-group">
                 <textarea name="prompt" required placeholder="描述你想生成或编辑的图片，例如：未来感产品海报，金属材质，柔和棚拍灯光，高级科技风。"></textarea>
-                <button id="autoPromptButton" class="btn small" type="button" title="自动写提示词" hidden>AI改写</button>
+                <button id="autoPromptButton" class="btn small" type="button" title="自动写提示词" hidden>
+                  <i data-lucide="wand-sparkles" aria-hidden="true"></i>
+                  <span>AI改写</span>
+                </button>
               </div>
               <div class="composer-actions">
                 <label class="upload-button" for="imageInput" title="上传参考图">
-                  <span class="upload-icon">+</span>
+                  <span class="upload-icon"><i data-lucide="image-up" aria-hidden="true"></i></span>
                   <span id="referenceUploadLabel">参考图</span>
                 </label>
                 <input id="imageInput" class="sr-only" name="images" type="file" accept="image/*" multiple>
-                <button id="cancelGenerate" class="btn cancel-generate" type="button" hidden>取消</button>
-                <button class="btn primary" type="submit">生成图片</button>
+                <button id="cancelGenerate" class="btn cancel-generate" type="button" hidden>
+                  <i data-lucide="circle-x" aria-hidden="true"></i>
+                  <span>取消</span>
+                </button>
+                <button class="btn primary" type="submit">
+                  <i data-lucide="image-plus" aria-hidden="true"></i>
+                  <span>生成图片</span>
+                </button>
               </div>
             </div>
             <div id="genStatus" class="status gen-status"></div>
@@ -164,7 +187,7 @@
           <input name="image_size" type="hidden" value="1024x1024">
           <details class="advanced-options">
             <summary>
-              <span>高级选项</span>
+              <span><i data-lucide="settings-2" aria-hidden="true"></i>高级选项</span>
               <span id="sizePreview">1024x1024</span>
             </summary>
             <div class="row">
@@ -220,8 +243,14 @@
               <label>图片生成结果目录</label>
               <div class="output-dir-row">
                 <input name="save_dir" type="text" autocomplete="off" spellcheck="false" placeholder="输入本机保存目录路径">
-                <button id="chooseOutputDir" class="btn small" type="button">应用目录</button>
-                <button id="openDefaultOutputDir" class="btn small" type="button">打开文件夹</button>
+                <button id="chooseOutputDir" class="btn small" type="button">
+                  <i data-lucide="check" aria-hidden="true"></i>
+                  <span>应用目录</span>
+                </button>
+                <button id="openDefaultOutputDir" class="btn small" type="button">
+                  <i data-lucide="folder-open" aria-hidden="true"></i>
+                  <span>打开文件夹</span>
+                </button>
               </div>
               <div id="saveDirStatus" class="status"></div>
             </div>
@@ -232,7 +261,7 @@
           <div class="panel-head">
             <div>
               <p class="eyebrow">Output</p>
-              <h2>结果预览</h2>
+              <h2 class="panel-title"><i data-lucide="images" aria-hidden="true"></i><span>结果预览</span></h2>
             </div>
           </div>
           <div id="resultTiming" class="result-timing" aria-live="polite"></div>
@@ -247,10 +276,13 @@
       <div class="panel-head">
         <div>
           <p class="eyebrow">Agent</p>
-          <h2>直接对话</h2>
+          <h2 class="panel-title"><i data-lucide="bot-message-square" aria-hidden="true"></i><span>直接对话</span></h2>
         </div>
         <div class="agent-head-actions">
-          <button id="clearAgentChat" class="btn small" type="button">清空</button>
+          <button id="clearAgentChat" class="btn small" type="button">
+            <i data-lucide="eraser" aria-hidden="true"></i>
+            <span>清空</span>
+          </button>
         </div>
       </div>
       <div id="agentChatLog" class="agent-chat-log" aria-live="polite"></div>
@@ -258,14 +290,20 @@
         <input id="agentImageInput" class="sr-only" type="file" accept="image/*" multiple>
         <div id="agentAttachmentList" class="agent-attachment-list"></div>
         <label class="upload-button agent-upload" for="agentImageInput" title="上传图片">
-          <span class="upload-icon">+</span>
+          <span class="upload-icon"><i data-lucide="image-up" aria-hidden="true"></i></span>
           <span>图片</span>
         </label>
         <div class="agent-input-row">
           <textarea id="agentPrompt" placeholder="输入消息，Shift+Enter 换行"></textarea>
           <div class="agent-actions">
-            <button id="cancelAgentSend" class="btn cancel-generate" type="button" hidden>取消</button>
-            <button class="btn primary" type="submit">发送</button>
+            <button id="cancelAgentSend" class="btn cancel-generate" type="button" hidden>
+              <i data-lucide="circle-x" aria-hidden="true"></i>
+              <span>取消</span>
+            </button>
+            <button class="btn primary" type="submit">
+              <i data-lucide="send-horizontal" aria-hidden="true"></i>
+              <span>发送</span>
+            </button>
           </div>
         </div>
       </form>
@@ -303,7 +341,8 @@
       <div class="mask-editor-head">
         <div>
           <p class="eyebrow">Mask</p>
-          <h2 id="maskEditorTitle">局部修改</h2>
+          <h2 id="maskEditorTitle" class="panel-title"><i data-lucide="brush" aria-hidden="true"></i><span>局部修改</span>
+          </h2>
           <span id="maskEditorHint">仅修改涂抹的区域</span>
         </div>
         <div class="mask-actions">
@@ -319,8 +358,14 @@
             <span>画面缩放</span>
             <input id="maskZoom" type="range" min="50" max="300" value="100">
           </label>
-          <button id="clearMask" class="btn small" type="button">清空</button>
-          <button id="disableMask" class="btn small danger" type="button">关闭蒙版</button>
+          <button id="clearMask" class="btn small" type="button">
+            <i data-lucide="eraser" aria-hidden="true"></i>
+            <span>清空</span>
+          </button>
+          <button id="disableMask" class="btn small danger" type="button">
+            <i data-lucide="ban" aria-hidden="true"></i>
+            <span>关闭蒙版</span>
+          </button>
         </div>
       </div>
       <div class="mask-canvas-scroll">
@@ -332,6 +377,7 @@
     </div>
   </div>
 
+  <script src="/app-icons.js"></script>
   <script src="/app-shared.js"></script>
   <script src="/app-billing.js"></script>
   <script src="/app-history.js"></script>

@@ -35,7 +35,8 @@
     list.innerHTML = state.attachments.map((item, index) => (
       '<div class="agent-attachment">' +
         '<img src="' + esc(item.url) + '" alt="' + esc(item.name || "image") + '">' +
-        '<button type="button" class="icon-btn" data-agent-remove-attachment="' + index + '" aria-label="移除图片">×</button>' +
+        '<button type="button" class="icon-btn" data-agent-remove-attachment="' + index + '" aria-label="移除图片">' +
+        iconHTML("x") + '</button>' +
       '</div>'
     )).join("");
   }

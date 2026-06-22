@@ -328,9 +328,9 @@ async function renderHistory() {
     '</strong><p>' + esc(item.prompt || "") + '</p></div>' +
     '<div class="history-actions">' +
     '<button class="btn small" type="button" data-history-action="restore" data-history-id="' + esc(item.id) +
-    '">复用</button>' +
+    '">' + iconHTML("rotate-ccw") + '<span>复用</span></button>' +
     '<button class="btn small danger" type="button" data-history-action="delete" data-history-id="' + esc(item.id) +
-    '">删除</button></div></div>' +
+    '">' + iconHTML("trash-2") + '<span>删除</span></button></div></div>' +
     '<div class="history-meta">' + esc(item.workflow_name || item.workflow_id || "图片生成") + ' · ' +
     esc(item.image_model || "-") + ' · ' +
     esc(item.image_size || "-") + ' · ' + esc(qualityLabel(item.image_quality)) +
@@ -429,7 +429,7 @@ function renderGalleryImages(images) {
     '"><img src="' + esc(url) +
     '" alt="生成结果"><span class="image-size-label" data-image-size>读取尺寸...</span></button>' +
     '<button class="gallery-use" type="button" data-history-action="use-image" data-image-url="' +
-    esc(url) + '">作为参考图</button></div>'
+    esc(url) + '">' + iconHTML("image-plus") + '<span>作为参考图</span></button></div>'
   )).join("");
 }
 
