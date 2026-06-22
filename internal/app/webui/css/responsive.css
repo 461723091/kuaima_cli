@@ -87,8 +87,15 @@
   .output-dir-row,
   .chip-grid,
   .plan-card,
-  .paybox {
+  .paybox,
+  .workflow-section-grid,
+  .workflow-template-summary {
     grid-template-columns: 1fr;
+  }
+
+  .workflow-template-modal {
+    width: calc(100vw - 24px);
+    max-height: calc(100vh - 24px);
   }
 
   .field.compact {

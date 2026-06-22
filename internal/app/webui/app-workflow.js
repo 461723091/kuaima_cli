@@ -145,6 +145,162 @@
     return "";
   }
 
+  function workflowFieldIconAsset(key, value) {
+    const text = String(value || "").trim();
+    if (key === "platform") {
+      if (text.includes("淘宝")) return "imgs/淘宝.png";
+      if (text.includes("天猫")) return "imgs/天猫.png";
+      if (text.includes("京东")) return "imgs/京东.png";
+      if (text.includes("抖音")) return "imgs/抖音.png";
+      if (text.toLowerCase().includes("tiktok")) return "imgs/抖音.png";
+      if (text.includes("微信")) return "imgs/微信小店.png";
+      if (text.includes("拼多多")) return "imgs/拼多多.png";
+      if (text.includes("小红书")) return "imgs/小红书.png";
+      if (text.toLowerCase().includes("amazon") || text.includes("亚马逊")) return "imgs/亚马逊.png";
+      return "";
+    }
+    if (key === "copy_language") {
+      if (text.includes("英文")) return "imgs/us.png";
+      if (text.includes("繁体")) return "imgs/hk.png";
+      if (text.includes("日文")) return "imgs/jp.png";
+      if (text.includes("韩文")) return "imgs/kr.png";
+      if (text.includes("俄文") || text.includes("俄语")) return "imgs/ru.png";
+      if (text.includes("中文") || text.includes("中国")) return "imgs/cn.png";
+      return "";
+    }
+    return "";
+  }
+
+  function workflowFieldIconHTML(key, value) {
+    const src = workflowFieldIconAsset(key, value);
+    if (!src) {
+      return "";
+    }
+    return '<img src="' + esc(src) + '" alt="' + esc(String(value || "").trim()) + '" loading="lazy">';
+  }
+
+  function workflowComboClass(field) {
+    return field.key === "platform" ? " platform" : field.key === "copy_language" ? " language" : "";
+  }
+
+  function workflowOptionLabel(field, option) {
+    const value = option && option.value != null ? String(option.value) : "";
+    const icon = workflowFieldIconHTML(field.key, value);
+    return (icon ? '<span class="workflow-option-icon">' + icon + '</span>' : "") +
+      '<span>' + esc(option.label || option.value) + '</span>';
+  }
+
+  function renderWorkflowField(field, cached) {
+    const name = "workflow_" + field.key;
+    const value = buildInputValue(field, cached[field.key]);
+    const help = field.help ? '<div class="workflow-help">' + esc(field.help) + '</div>' : "";
+    let control = "";
+    if (field.type === "textarea") {
+      control = '<div class="workflow-textarea-group">' +
+        '<textarea data-workflow-key="' + esc(field.key) + '" name="' + esc(name) + '" placeholder="' +
+        esc(field.placeholder || "") + '"' + (field.required ? " required" : "") + ">" + esc(value) + "</textarea>" +
+        '<button class="btn small workflow-rewrite" type="button" data-workflow-rewrite>' +
+        iconHTML("wand-sparkles") + '<span>AI改写</span></button>' +
+        '</div>';
+    } else if (field.type === "combo") {
+      const icon = workflowFieldIconHTML(field.key, value);
+      control = '<div class="workflow-combo' + workflowComboClass(field) + '" data-workflow-combo>' +
+        '<div class="workflow-combo-control' + (icon ? " has-icon" : "") + '">' +
+        (icon ? '<span class="workflow-combo-icon" data-workflow-combo-icon>' + icon + '</span>' : "") +
+        '<input data-workflow-key="' + esc(field.key) + '" name="' + esc(name) + '" type="text" value="' +
+        esc(value) + '" placeholder="' + esc(field.placeholder || "") + '"' +
+        (field.required ? " required" : "") + ' autocomplete="off">' +
+        '<button class="workflow-combo-toggle" type="button" aria-label="展开选项" data-workflow-combo-toggle>v</button>' +
+        '</div>' +
+        '<div class="workflow-combo-menu" data-workflow-combo-menu hidden>' +
+        (field.options || []).map((option) => (
+          '<button type="button" data-workflow-combo-option="' + esc(option.value) + '">' +
+          workflowOptionLabel(field, option) + '</button>'
+        )).join("") + "</div></div>";
+    } else if (field.type === "select") {
+      control = '<select data-workflow-key="' + esc(field.key) + '" name="' + esc(name) + '">' +
+        (field.options || []).map((option) => (
+          '<option value="' + esc(option.value) + '"' + (String(option.value) === String(value) ? " selected" : "") + '>' +
+          esc(option.label || option.value) + "</option>"
+        )).join("") + "</select>";
+    } else if (field.type === "number") {
+      control = '<input data-workflow-key="' + esc(field.key) + '" name="' + esc(name) + '" type="number" value="' +
+        esc(value) + '"' +
+        (field.min != null ? ' min="' + esc(field.min) + '"' : "") +
+        (field.max != null ? ' max="' + esc(field.max) + '"' : "") +
+        (field.required ? " required" : "") +
+        '>';
+    } else {
+      control = '<input data-workflow-key="' + esc(field.key) + '" name="' + esc(name) + '" type="' +
+        esc(field.type || "text") + '" value="' + esc(value) + '" placeholder="' + esc(field.placeholder || "") + '"' +
+        (field.required ? " required" : "") + ">";
+    }
+    return '<div class="workflow-input" data-workflow-field="' + esc(field.key) + '">' +
+      '<label>' + esc(field.label || field.key) + (field.required ? '<span class="workflow-required">*</span>' : "") + "</label>" +
+      control +
+      help +
+      "</div>";
+  }
+
+  function workflowFieldSummary(container) {
+    if (!container) {
+      return "";
+    }
+    const summaryKeys = ["platform", "copy_language", "audience", "visual_style", "image_resolution"];
+    return summaryKeys.map((key) => {
+      const input = container.querySelector('[data-workflow-key="' + key + '"]');
+      const value = input ? String(input.value || "").trim() : "";
+      if (!value) {
+        return "";
+      }
+      const icon = workflowFieldIconHTML(key, value);
+      return '<span class="workflow-summary-chip">' + (icon ? '<span class="workflow-summary-icon">' + icon + '</span>' : "") +
+        '<span>' + esc(value) + '</span></span>';
+    }).filter(Boolean).join("");
+  }
+
+  function updateWorkflowSectionSummaries() {
+    const container = workflowFields();
+    if (!container) {
+      return;
+    }
+    const target = container.querySelector("[data-workflow-config-summary]");
+    if (target) {
+      target.innerHTML = workflowFieldSummary(container) || '<span class="workflow-summary-chip">未配置</span>';
+    }
+    container.querySelectorAll("[data-workflow-combo]").forEach((combo) => {
+      const input = combo.querySelector("[data-workflow-key]");
+      if (!input) {
+        return;
+      }
+      updateWorkflowComboIcon(combo, input);
+    });
+  }
+
+  function updateWorkflowComboIcon(combo, input) {
+    const control = combo && combo.querySelector(".workflow-combo-control");
+    const iconHTMLValue = workflowFieldIconHTML(input.dataset.workflowKey, input.value);
+    let icon = combo && combo.querySelector("[data-workflow-combo-icon]");
+    if (!control) {
+      return;
+    }
+    if (!iconHTMLValue) {
+      if (icon) {
+        icon.remove();
+      }
+      control.classList.remove("has-icon");
+      return;
+    }
+    if (!icon) {
+      icon = document.createElement("span");
+      icon.className = "workflow-combo-icon";
+      icon.dataset.workflowComboIcon = "";
+      control.insertBefore(icon, input);
+    }
+    icon.innerHTML = iconHTMLValue;
+    control.classList.add("has-icon");
+  }
+
   function renderWorkflowFields(def) {
     const container = workflowFields();
     const description = workflowDescription();
@@ -161,55 +317,23 @@
     const cached = state.cache[def.id] || {};
     description.textContent = def.description || "";
     container.hidden = false;
-    container.innerHTML = (def.inputs || []).map((field) => {
-      const name = "workflow_" + field.key;
-      const value = buildInputValue(field, cached[field.key]);
-      const help = field.help ? '<div class="workflow-help">' + esc(field.help) + '</div>' : "";
-      let control = "";
-      if (field.type === "textarea") {
-        control = '<div class="workflow-textarea-group">' +
-          '<textarea data-workflow-key="' + esc(field.key) + '" name="' + esc(name) + '" placeholder="' +
-          esc(field.placeholder || "") + '"' + (field.required ? " required" : "") + ">" + esc(value) + "</textarea>" +
-          '<button class="btn small workflow-rewrite" type="button" data-workflow-rewrite>' +
-          iconHTML("wand-sparkles") + '<span>AI改写</span></button>' +
-          '</div>';
-      } else if (field.type === "combo") {
-        control = '<div class="workflow-combo" data-workflow-combo>' +
-          '<div class="workflow-combo-control">' +
-          '<input data-workflow-key="' + esc(field.key) + '" name="' + esc(name) + '" type="text" value="' +
-          esc(value) + '" placeholder="' + esc(field.placeholder || "") + '"' +
-          (field.required ? " required" : "") + ' autocomplete="off">' +
-          '<button class="workflow-combo-toggle" type="button" aria-label="展开选项" data-workflow-combo-toggle>v</button>' +
-          '</div>' +
-          '<div class="workflow-combo-menu" data-workflow-combo-menu hidden>' +
-          (field.options || []).map((option) => (
-            '<button type="button" data-workflow-combo-option="' + esc(option.value) + '">' +
-            esc(option.label || option.value) + '</button>'
-          )).join("") + "</div></div>";
-      } else if (field.type === "select") {
-        control = '<select data-workflow-key="' + esc(field.key) + '" name="' + esc(name) + '">' +
-          (field.options || []).map((option) => (
-            '<option value="' + esc(option.value) + '"' + (String(option.value) === String(value) ? " selected" : "") + '>' +
-            esc(option.label || option.value) + "</option>"
-          )).join("") + "</select>";
-      } else if (field.type === "number") {
-        control = '<input data-workflow-key="' + esc(field.key) + '" name="' + esc(name) + '" type="number" value="' +
-          esc(value) + '"' +
-          (field.min != null ? ' min="' + esc(field.min) + '"' : "") +
-          (field.max != null ? ' max="' + esc(field.max) + '"' : "") +
-          (field.required ? " required" : "") +
-          '>';
-      } else {
-        control = '<input data-workflow-key="' + esc(field.key) + '" name="' + esc(name) + '" type="' +
-          esc(field.type || "text") + '" value="' + esc(value) + '" placeholder="' + esc(field.placeholder || "") + '"' +
-          (field.required ? " required" : "") + ">";
-      }
-      return '<div class="workflow-input">' +
-        '<label>' + esc(field.label || field.key) + (field.required ? '<span class="workflow-required">*</span>' : "") + "</label>" +
-        control +
-        help +
-        "</div>";
-    }).join("");
+    const inputs = def.inputs || [];
+    if (String(def.id || "") === "product-pack") {
+      const mainFields = inputs.filter((field) => field.key === "product_brief");
+      const configFields = inputs.filter((field) => field.key !== "product_brief");
+      container.innerHTML =
+        '<section class="workflow-section">' +
+        '<div class="workflow-section-head"><span class="workflow-step-index">1</span><div><strong>商品信息</strong><span>先描述产品，再补充图片参考。</span></div></div>' +
+        mainFields.map((field) => renderWorkflowField(field, cached)).join("") +
+        '</section>' +
+        '<details class="workflow-section workflow-collapsible">' +
+        '<summary><span class="workflow-step-index">2</span><div><strong>配置偏好</strong><span data-workflow-config-summary></span></div></summary>' +
+        '<div class="workflow-section-grid">' + configFields.map((field) => renderWorkflowField(field, cached)).join("") + '</div>' +
+        '</details>';
+      updateWorkflowSectionSummaries();
+      return;
+    }
+    container.innerHTML = inputs.map((field) => renderWorkflowField(field, cached)).join("");
   }
 
   function workflowImageSteps(def) {
@@ -273,6 +397,7 @@
           card.classList.toggle("active", selected);
         }
       });
+      renderWorkflowTemplateSummary(def, finalValues);
     }
   }
 
@@ -288,14 +413,69 @@
       return;
     }
     container.hidden = false;
-    container.innerHTML = '<div class="workflow-template-grid">' + templates.map((step) => (
-      '<label class="workflow-template-card" data-workflow-template-card="' + esc(step.id) + '">' +
-      '<input type="checkbox" data-workflow-template="' + esc(step.id) + '" checked>' +
-      '<div><strong>' + esc(step.title || step.id || "模板") + '</strong>' +
-      '<p>' + esc(workflowStepMeta(step)) + '</p></div>' +
-      '</label>'
-    )).join("") + "</div>";
+    container.innerHTML =
+      '<section class="workflow-section workflow-template-section">' +
+      '<div class="workflow-section-head"><span class="workflow-step-index">3</span><div><strong>出图类型</strong><span>已选择的主图和详情图会按顺序生成。</span></div></div>' +
+      '<div class="workflow-template-summary" data-workflow-template-summary></div>' +
+      '<button class="btn small workflow-template-add" type="button" data-workflow-template-open>' +
+      iconHTML("plus") + '<span>添加更多</span></button>' +
+      '</section>' +
+      '<div class="modal-backdrop workflow-template-modal-backdrop" data-workflow-template-modal hidden>' +
+      '<div class="workflow-template-modal" role="dialog" aria-modal="true" aria-labelledby="workflowTemplateTitle">' +
+      '<button class="modal-close" type="button" aria-label="关闭" data-workflow-template-close>×</button>' +
+      '<div class="workflow-template-modal-head"><p class="eyebrow">Templates</p><h2 id="workflowTemplateTitle">选择出图类型</h2></div>' +
+      '<div class="workflow-template-modal-body">' +
+      renderWorkflowTemplateGroup("主图", templates.filter((step) => workflowTemplateType(step) === "main")) +
+      renderWorkflowTemplateGroup("详情图", templates.filter((step) => workflowTemplateType(step) === "detail")) +
+      '</div></div></div>';
     setWorkflowTemplateIDs(currentWorkflowTemplateIDs());
+  }
+
+  function workflowTemplateType(step) {
+    const title = String(step && step.title || "");
+    return title.includes("主图") ? "main" : title.includes("详情图") ? "detail" : "other";
+  }
+
+  function workflowTemplateShortTitle(step) {
+    return String(step && (step.title || step.id) || "模板").replace(/^主图\s*·\s*/, "").replace(/^详情图\s*·\s*/, "");
+  }
+
+  function renderWorkflowTemplateGroup(title, items) {
+    if (!items.length) {
+      return "";
+    }
+    return '<div class="workflow-template-modal-group">' +
+      '<h3>' + esc(title) + '</h3>' +
+      '<div class="workflow-template-grid">' + items.map((step) => (
+        '<label class="workflow-template-card" data-workflow-template-card="' + esc(step.id) + '">' +
+        '<input type="checkbox" data-workflow-template="' + esc(step.id) + '" checked>' +
+        '<div><strong>' + esc(workflowTemplateShortTitle(step)) + '</strong>' +
+        '<p>' + esc(workflowStepMeta(step)) + '</p></div>' +
+        '</label>'
+      )).join("") + "</div></div>";
+  }
+
+  function renderWorkflowTemplateSummary(def, selectedIds) {
+    const container = workflowTemplatePicker();
+    const target = container && container.querySelector("[data-workflow-template-summary]");
+    if (!target) {
+      return;
+    }
+    const selected = workflowImageSteps(def).filter((step) => selectedIds.includes(String(step.id || "")));
+    const main = selected.filter((step) => workflowTemplateType(step) === "main");
+    const detail = selected.filter((step) => workflowTemplateType(step) === "detail");
+    target.innerHTML = renderSelectedTemplateBlock("主图", main, "image") +
+      renderSelectedTemplateBlock("详情图", detail, "images");
+  }
+
+  function renderSelectedTemplateBlock(title, items, icon) {
+    return '<div class="workflow-selected-block">' +
+      '<div class="workflow-selected-head">' + iconHTML(icon) + '<strong>' + esc(title) + '</strong><span>' + items.length + ' 项</span></div>' +
+      '<div class="workflow-selected-list">' +
+      (items.length ? items.map((step) => (
+        '<span class="workflow-selected-chip">' + esc(workflowTemplateShortTitle(step)) + '</span>'
+      )).join("") : '<span class="workflow-selected-empty">未选择</span>') +
+      '</div></div>';
   }
 
   function workflowStepMeta(step) {
@@ -691,6 +871,8 @@
     if (fields) {
       fields.addEventListener("input", persistCurrentValues);
       fields.addEventListener("change", persistCurrentValues);
+      fields.addEventListener("input", updateWorkflowSectionSummaries);
+      fields.addEventListener("change", updateWorkflowSectionSummaries);
       fields.addEventListener("click", (event) => {
         const toggle = event.target.closest("[data-workflow-combo-toggle]");
         if (toggle) {
@@ -730,10 +912,12 @@
         }
         const needle = String(input.value || "").trim().toLowerCase();
         menu.hidden = false;
+        /*
         menu.querySelectorAll("[data-workflow-combo-option]").forEach((option) => {
           option.hidden = Boolean(needle) && !String(option.textContent || "").toLowerCase().includes(needle) &&
             !String(option.dataset.workflowComboOption || "").toLowerCase().includes(needle);
         });
+        */
       });
     }
     document.addEventListener("click", (event) => {
@@ -744,8 +928,35 @@
         menu.hidden = true;
       });
     });
+    document.addEventListener("keydown", (event) => {
+      if (event.key !== "Escape") {
+        return;
+      }
+      const modal = workflowTemplatePicker() && workflowTemplatePicker().querySelector("[data-workflow-template-modal]");
+      if (modal && !modal.hidden) {
+        modal.hidden = true;
+      }
+    });
     const templatePicker = workflowTemplatePicker();
     if (templatePicker) {
+      templatePicker.addEventListener("click", (event) => {
+        const open = event.target.closest("[data-workflow-template-open]");
+        if (open) {
+          const modal = templatePicker.querySelector("[data-workflow-template-modal]");
+          if (modal) {
+            modal.hidden = false;
+          }
+          return;
+        }
+        const close = event.target.closest("[data-workflow-template-close]");
+        const backdrop = event.target.matches("[data-workflow-template-modal]");
+        if (close || backdrop) {
+          const modal = templatePicker.querySelector("[data-workflow-template-modal]");
+          if (modal) {
+            modal.hidden = true;
+          }
+        }
+      });
       templatePicker.addEventListener("change", () => {
         const selected = Array.from(templatePicker.querySelectorAll("[data-workflow-template]"))
           .filter((input) => input.checked)
