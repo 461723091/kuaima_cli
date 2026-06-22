@@ -116,12 +116,23 @@
       return;
     }
     const current = currentWorkflowId();
-    const items = [{ id: "single", name: "图片生成" }].concat(state.catalog);
-    container.innerHTML = items.map((item) => (
-      '<button class="workflow-tab' + (String(item.id) === String(current) ? " active" : "") + '" type="button" role="tab" ' +
-      'aria-selected="' + String(String(item.id) === String(current)) + '" data-workflow-id="' + esc(item.id) + '">' +
+    const agentPane = document.querySelector('[data-mode-pane="agent"]');
+    const agentActive = Boolean(agentPane && !agentPane.hidden);
+    const items = [{ id: "single", name: "图片生成" }];
+    const workflowButtons = items.map((item) => (
+      '<button class="workflow-tab' + (!agentActive && String(item.id) === String(current) ? " active" : "") + '" type="button" role="tab" ' +
+      'aria-selected="' + String(!agentActive && String(item.id) === String(current)) + '" data-mode-tab="generate" data-workflow-id="' + esc(item.id) + '">' +
       esc(item.name) + '</button>'
     )).join("");
+    const catalogButtons = state.catalog.map((item) => (
+      '<button class="workflow-tab' + (!agentActive && String(item.id) === String(current) ? " active" : "") + '" type="button" role="tab" ' +
+      'aria-selected="' + String(!agentActive && String(item.id) === String(current)) + '" data-mode-tab="generate" data-workflow-id="' + esc(item.id) + '">' +
+      esc(item.name) + '</button>'
+    )).join("");
+    container.innerHTML = workflowButtons +
+      '<button class="workflow-tab' + (agentActive ? " active" : "") + '" type="button" role="tab" aria-selected="' +
+      String(agentActive) + '" data-mode-tab="agent">Agent 模式</button>' +
+      catalogButtons;
   }
 
   function buildInputValue(field, cached) {
@@ -156,17 +167,24 @@
       const help = field.help ? '<div class="workflow-help">' + esc(field.help) + '</div>' : "";
       let control = "";
       if (field.type === "textarea") {
-        control = '<textarea data-workflow-key="' + esc(field.key) + '" name="' + esc(name) + '" placeholder="' +
-          esc(field.placeholder || "") + '"' + (field.required ? " required" : "") + ">" + esc(value) + "</textarea>";
+        control = '<div class="workflow-textarea-group">' +
+          '<textarea data-workflow-key="' + esc(field.key) + '" name="' + esc(name) + '" placeholder="' +
+          esc(field.placeholder || "") + '"' + (field.required ? " required" : "") + ">" + esc(value) + "</textarea>" +
+          '<button class="btn small workflow-rewrite" type="button" data-workflow-rewrite>AI改写</button>' +
+          '</div>';
       } else if (field.type === "combo") {
-        const listId = "workflowList_" + String(field.key || "").replace(/[^a-zA-Z0-9_-]/g, "_");
-        control = '<input data-workflow-key="' + esc(field.key) + '" name="' + esc(name) + '" type="text" value="' +
-          esc(value) + '" placeholder="' + esc(field.placeholder || "") + '" list="' + esc(listId) + '"' +
-          (field.required ? " required" : "") + ">" +
-          '<datalist id="' + esc(listId) + '">' +
+        control = '<div class="workflow-combo" data-workflow-combo>' +
+          '<div class="workflow-combo-control">' +
+          '<input data-workflow-key="' + esc(field.key) + '" name="' + esc(name) + '" type="text" value="' +
+          esc(value) + '" placeholder="' + esc(field.placeholder || "") + '"' +
+          (field.required ? " required" : "") + ' autocomplete="off">' +
+          '<button class="workflow-combo-toggle" type="button" aria-label="展开选项" data-workflow-combo-toggle>v</button>' +
+          '</div>' +
+          '<div class="workflow-combo-menu" data-workflow-combo-menu hidden>' +
           (field.options || []).map((option) => (
-            '<option value="' + esc(option.value) + '">' + esc(option.label || option.value) + "</option>"
-          )).join("") + "</datalist>";
+            '<button type="button" data-workflow-combo-option="' + esc(option.value) + '">' +
+            esc(option.label || option.value) + '</button>'
+          )).join("") + "</div></div>";
       } else if (field.type === "select") {
         control = '<select data-workflow-key="' + esc(field.key) + '" name="' + esc(name) + '">' +
           (field.options || []).map((option) => (
@@ -669,7 +687,59 @@
     if (fields) {
       fields.addEventListener("input", persistCurrentValues);
       fields.addEventListener("change", persistCurrentValues);
+      fields.addEventListener("click", (event) => {
+        const toggle = event.target.closest("[data-workflow-combo-toggle]");
+        if (toggle) {
+          const combo = toggle.closest("[data-workflow-combo]");
+          const menu = combo && combo.querySelector("[data-workflow-combo-menu]");
+          if (menu) {
+            menu.hidden = !menu.hidden;
+          }
+          return;
+        }
+        const option = event.target.closest("[data-workflow-combo-option]");
+        if (!option) {
+          return;
+        }
+        const combo = option.closest("[data-workflow-combo]");
+        const input = combo && combo.querySelector("[data-workflow-key]");
+        const menu = combo && combo.querySelector("[data-workflow-combo-menu]");
+        if (input) {
+          input.value = option.dataset.workflowComboOption || "";
+          input.dispatchEvent(new Event("input", { bubbles: true }));
+          input.dispatchEvent(new Event("change", { bubbles: true }));
+          input.focus();
+        }
+        if (menu) {
+          menu.hidden = true;
+        }
+      });
+      fields.addEventListener("input", (event) => {
+        const input = event.target.closest("[data-workflow-combo] [data-workflow-key]");
+        if (!input) {
+          return;
+        }
+        const combo = input.closest("[data-workflow-combo]");
+        const menu = combo && combo.querySelector("[data-workflow-combo-menu]");
+        if (!menu) {
+          return;
+        }
+        const needle = String(input.value || "").trim().toLowerCase();
+        menu.hidden = false;
+        menu.querySelectorAll("[data-workflow-combo-option]").forEach((option) => {
+          option.hidden = Boolean(needle) && !String(option.textContent || "").toLowerCase().includes(needle) &&
+            !String(option.dataset.workflowComboOption || "").toLowerCase().includes(needle);
+        });
+      });
     }
+    document.addEventListener("click", (event) => {
+      if (event.target.closest("[data-workflow-combo]")) {
+        return;
+      }
+      document.querySelectorAll("[data-workflow-combo-menu]").forEach((menu) => {
+        menu.hidden = true;
+      });
+    });
     const templatePicker = workflowTemplatePicker();
     if (templatePicker) {
       templatePicker.addEventListener("change", () => {

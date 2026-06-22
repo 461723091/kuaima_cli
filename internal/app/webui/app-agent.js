@@ -10,7 +10,11 @@
 
   function renderMode(mode) {
     document.querySelectorAll("[data-mode-tab]").forEach((button) => {
-      const active = button.dataset.modeTab === mode;
+      let active = button.dataset.modeTab === mode;
+      if (active && mode === "generate" && button.dataset.workflowId != null) {
+        const workflowId = $("#workflowId") ? $("#workflowId").value : "single";
+        active = String(button.dataset.workflowId || "single") === String(workflowId || "single");
+      }
       button.classList.toggle("active", active);
       button.setAttribute("aria-selected", String(active));
     });
@@ -231,8 +235,12 @@
     }
   }
 
-  document.querySelectorAll("[data-mode-tab]").forEach((button) => {
-    button.addEventListener("click", () => renderMode(button.dataset.modeTab));
+  document.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-mode-tab]");
+    if (!button) {
+      return;
+    }
+    renderMode(button.dataset.modeTab);
   });
 
   $("#agentImageInput").addEventListener("change", async (event) => {
