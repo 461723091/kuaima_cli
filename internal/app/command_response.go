@@ -74,6 +74,7 @@ func runAsk(args []string) error {
 		}
 
 		req.Tools = []map[string]any{tool}
+		req.Reasoning = defaultImageReasoning
 	}
 
 	runCount := 1

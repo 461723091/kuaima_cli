@@ -16,11 +16,17 @@ type client struct {
 	httpClient *http.Client
 }
 
+var defaultImageReasoning = map[string]any{
+	"effort":  "medium",
+	"summary": "auto",
+}
+
 type responseRequest struct {
-	Model  string `json:"model"`
-	Input  any    `json:"input"`
-	Tools  any    `json:"tools,omitempty"`
-	Stream bool   `json:"stream,omitempty"`
+	Model     string `json:"model"`
+	Input     any    `json:"input"`
+	Tools     any    `json:"tools,omitempty"`
+	Reasoning any    `json:"reasoning,omitempty"`
+	Stream    bool   `json:"stream,omitempty"`
 }
 
 type imageGenerationRequest struct {

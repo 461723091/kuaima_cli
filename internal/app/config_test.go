@@ -168,6 +168,43 @@ func TestPersistConfigFlagsUpdatesOnlyExplicitPersistentFlags(t *testing.T) {
 	}
 }
 
+func TestSaveAppConfigPreservesUnknownFields(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("KUAIMA_CONFIG_DIR", dir)
+	if err := os.MkdirAll(dir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "config.json"), []byte(`{"model":"old-model","extra":"keep","nested":{"enabled":true}}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := saveAppConfig(appConfig{BaseURL: stringPtr("https://new.example.com")}); err != nil {
+		t.Fatal(err)
+	}
+
+	data, err := os.ReadFile(filepath.Join(dir, "config.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got map[string]any
+	if err := json.Unmarshal(data, &got); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := got["model"]; ok {
+		t.Fatalf("expected omitted known field to be removed, got %#v", got["model"])
+	}
+	if got["base_url"] != "https://new.example.com" {
+		t.Fatalf("expected updated base_url, got %#v", got["base_url"])
+	}
+	if got["extra"] != "keep" {
+		t.Fatalf("expected unknown field to be preserved, got %#v", got["extra"])
+	}
+	nested, ok := got["nested"].(map[string]any)
+	if !ok || nested["enabled"] != true {
+		t.Fatalf("expected nested unknown field to be preserved, got %#v", got["nested"])
+	}
+}
+
 func TestConfigSaveImagesAllowsEmptyValue(t *testing.T) {
 	cfg := appConfig{SaveImages: stringPtr("")}
 	fs := newFlagSet("image")

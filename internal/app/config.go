@@ -80,12 +80,66 @@ func saveAppConfig(cfg appConfig) error {
 	if err := ensureAppConfigDir(filepath.Dir(path)); err != nil {
 		return err
 	}
-	data, err := json.MarshalIndent(cfg, "", "  ")
+	data, err := marshalAppConfigPreservingExtraFields(path, cfg)
 	if err != nil {
 		return err
 	}
 	data = append(data, '\n')
 	return os.WriteFile(path, data, 0600)
+}
+
+func marshalAppConfigPreservingExtraFields(path string, cfg appConfig) ([]byte, error) {
+	merged := map[string]json.RawMessage{}
+	existingData, err := os.ReadFile(path)
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return nil, err
+	}
+	if strings.TrimSpace(string(existingData)) != "" {
+		if err := json.Unmarshal(existingData, &merged); err != nil {
+			return nil, fmt.Errorf("read config %s: %w", path, err)
+		}
+	}
+
+	cfgData, err := json.Marshal(cfg)
+	if err != nil {
+		return nil, err
+	}
+	var cfgFields map[string]json.RawMessage
+	if err := json.Unmarshal(cfgData, &cfgFields); err != nil {
+		return nil, err
+	}
+
+	for _, key := range appConfigJSONFields() {
+		delete(merged, key)
+	}
+	for key, value := range cfgFields {
+		merged[key] = value
+	}
+	return json.MarshalIndent(merged, "", "  ")
+}
+
+func appConfigJSONFields() []string {
+	return []string{
+		"model",
+		"image_model",
+		"image_size",
+		"image_quality",
+		"image_count",
+		"image_output_format",
+		"image_output_compression",
+		"image_background",
+		"image_moderation",
+		"image_action",
+		"base_url",
+		"oss_url",
+		"api_key",
+		"username",
+		"password",
+		"system",
+		"stream",
+		"file_format",
+		"save_images",
+	}
 }
 
 // webui默认生图保存路径

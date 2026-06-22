@@ -659,9 +659,10 @@ func (s *webUIServer) handleGenerateWithResponsesStream(ctx context.Context, c *
 	addAutoString(tool, "model", &imageModel)
 	addResponseImageMask(tool, mask)
 	req := responseRequest{
-		Model: strings.TrimSpace(*s.clientOpts.model),
-		Input: s.responseInput(prompt, refs),
-		Tools: []map[string]any{tool},
+		Model:     strings.TrimSpace(*s.clientOpts.model),
+		Input:     s.responseInput(prompt, refs),
+		Tools:     []map[string]any{tool},
+		Reasoning: defaultImageReasoning,
 	}
 	runCount := opts.responseRunCount()
 	var combined responsePayload
@@ -692,9 +693,10 @@ func (s *webUIServer) handleGenerateWithResponses(ctx context.Context, c *client
 	addAutoString(tool, "model", &imageModel)
 	addResponseImageMask(tool, mask)
 	req := responseRequest{
-		Model: strings.TrimSpace(*s.clientOpts.model),
-		Input: s.responseInput(prompt, refs),
-		Tools: []map[string]any{tool},
+		Model:     strings.TrimSpace(*s.clientOpts.model),
+		Input:     s.responseInput(prompt, refs),
+		Tools:     []map[string]any{tool},
+		Reasoning: defaultImageReasoning,
 	}
 	runCount := opts.responseRunCount()
 	var saved []string
