@@ -1,0 +1,357 @@
+{
+  "workflows": [
+    {
+      "id": "product-pack",
+      "name": "电商套图",
+      "description": "上传产品参考图，配置平台、语言、受众和视觉风格，勾选需要的主图或详情图模板。",
+      "inputs": [
+        {
+          "key": "product_brief",
+          "label": "商品信息",
+          "type": "textarea",
+          "placeholder": "描述商品卖点、材质、用途、规格等",
+          "required": true
+        },
+        {
+          "key": "platform",
+          "label": "平台",
+          "type": "combo",
+          "default": "淘宝",
+          "placeholder": "选择或输入平台",
+          "options": [
+            {
+              "value": "淘宝",
+              "label": "淘宝"
+            },
+            {
+              "value": "抖音",
+              "label": "抖音"
+            },
+            {
+              "value": "微信小店",
+              "label": "微信小店"
+            },
+            {
+              "value": "拼多多",
+              "label": "拼多多"
+            },
+            {
+              "value": "亚马逊",
+              "label": "亚马逊"
+            },
+            {
+              "value": "TikTok",
+              "label": "TikTok"
+            }
+          ]
+        },
+        {
+          "key": "copy_language",
+          "label": "文案语言",
+          "type": "combo",
+          "default": "简体中文",
+          "placeholder": "选择或输入语言",
+          "options": [
+            {
+              "value": "简体中文",
+              "label": "简体中文"
+            },
+            {
+              "value": "英文",
+              "label": "英文"
+            },
+            {
+              "value": "繁体中文",
+              "label": "繁体中文"
+            },
+            {
+              "value": "日文",
+              "label": "日文"
+            },
+            {
+              "value": "韩文",
+              "label": "韩文"
+            }
+          ]
+        },
+        {
+          "key": "audience",
+          "label": "受众目标",
+          "type": "combo",
+          "default": "年轻女性",
+          "placeholder": "选择或输入受众",
+          "options": [
+            {
+              "value": "年轻女性",
+              "label": "年轻女性"
+            },
+            {
+              "value": "商务人士",
+              "label": "商务人士"
+            },
+            {
+              "value": "老年群体",
+              "label": "老年群体"
+            },
+            {
+              "value": "新手妈妈",
+              "label": "新手妈妈"
+            },
+            {
+              "value": "学生群体",
+              "label": "学生群体"
+            },
+            {
+              "value": "户外运动人群",
+              "label": "户外运动人群"
+            }
+          ]
+        },
+        {
+          "key": "visual_style",
+          "label": "视觉风格",
+          "type": "combo",
+          "default": "高级感、干净背景、商业摄影",
+          "placeholder": "选择或输入视觉风格",
+          "options": [
+            {
+              "value": "高级感、干净背景、商业摄影",
+              "label": "高级商业摄影"
+            },
+            {
+              "value": "极简白底、清晰产品轮廓",
+              "label": "极简白底"
+            },
+            {
+              "value": "年轻潮流、强对比色、社媒感",
+              "label": "年轻潮流"
+            },
+            {
+              "value": "科技感、冷色调、精密质感",
+              "label": "科技感"
+            },
+            {
+              "value": "温暖生活方式、自然光、真实场景",
+              "label": "生活方式"
+            },
+            {
+              "value": "跨境电商、干净排版、英文卖点",
+              "label": "跨境电商"
+            }
+          ]
+        },
+        {
+          "key": "image_resolution",
+          "label": "工作流分辨率",
+          "type": "select",
+          "default": "1k",
+          "options": [
+            {
+              "value": "1k",
+              "label": "1k"
+            },
+            {
+              "value": "2k",
+              "label": "2k"
+            },
+            {
+              "value": "4k",
+              "label": "4k"
+            }
+          ]
+        }
+      ],
+      "steps": [
+        {
+          "id": "brief",
+          "kind": "response",
+          "title": "提炼卖点",
+          "prompt": "根据商品信息为电商套图提炼核心卖点、目标受众、平台表达重点和文案关键词。平台：{{field \"platform\"}}。文案语言：{{field \"copy_language\"}}。受众目标：{{field \"audience\"}}。商品信息：\n{{field \"product_brief\"}}\n{{with field \"visual_style\"}}视觉风格：{{.}}\n{{end}}"
+        },
+        {
+          "id": "white_bg_main",
+          "kind": "image",
+          "title": "主图 · 产品白底图",
+          "prompt": "生成电商主图：产品白底图。画面比例 1:1，产品居中，占画面主体，背景纯净，边缘清晰，适合{{field \"platform\"}}商品主图。文案语言：{{field \"copy_language\"}}。受众：{{field \"audience\"}}。商品信息：\n{{field \"product_brief\"}}\n卖点提炼：\n{{stepText \"brief\"}}\n{{with field \"visual_style\"}}视觉风格：{{.}}\n{{end}}",
+          "count": "1",
+          "size": "{{commerceSize (field \"image_resolution\") \"main\"}}",
+          "use_references": true
+        },
+        {
+          "id": "hero_main",
+          "kind": "image",
+          "title": "主图 · 首屏主视觉",
+          "prompt": "生成电商主图：首屏主视觉。画面比例 1:1，突出第一眼点击欲望和核心购买理由，适合{{field \"platform\"}}列表或首屏。文案语言：{{field \"copy_language\"}}。受众：{{field \"audience\"}}。商品信息：\n{{field \"product_brief\"}}\n卖点提炼：\n{{stepText \"brief\"}}\n{{with field \"visual_style\"}}视觉风格：{{.}}\n{{end}}",
+          "count": "1",
+          "size": "{{commerceSize (field \"image_resolution\") \"main\"}}",
+          "use_references": true
+        },
+        {
+          "id": "multi_angle",
+          "kind": "image",
+          "title": "详情图 · 多角度展示",
+          "prompt": "生成电商详情图：多角度展示。画面比例 3:4，用清晰分区展示产品正面、侧面、背面或局部角度，强调真实结构和质感。平台：{{field \"platform\"}}。文案语言：{{field \"copy_language\"}}。受众：{{field \"audience\"}}。商品信息：\n{{field \"product_brief\"}}\n卖点提炼：\n{{stepText \"brief\"}}\n{{with field \"visual_style\"}}视觉风格：{{.}}\n{{end}}",
+          "count": "1",
+          "size": "{{commerceSize (field \"image_resolution\") \"detail\"}}",
+          "use_references": true
+        },
+        {
+          "id": "specs",
+          "kind": "image",
+          "title": "详情图 · 规格参数",
+          "prompt": "生成电商详情图：规格参数。画面比例 3:4，排版清晰，展示尺寸、材质、容量、型号或关键参数，信息层级明确。平台：{{field \"platform\"}}。文案语言：{{field \"copy_language\"}}。商品信息：\n{{field \"product_brief\"}}\n卖点提炼：\n{{stepText \"brief\"}}\n{{with field \"visual_style\"}}视觉风格：{{.}}\n{{end}}",
+          "count": "1",
+          "size": "{{commerceSize (field \"image_resolution\") \"detail\"}}",
+          "use_references": true
+        },
+        {
+          "id": "effect_compare",
+          "kind": "image",
+          "title": "详情图 · 效果对比",
+          "prompt": "生成电商详情图：效果对比。画面比例 3:4，用对比结构呈现使用前后、普通方案和本商品方案的差异，转化导向明确。平台：{{field \"platform\"}}。文案语言：{{field \"copy_language\"}}。受众：{{field \"audience\"}}。商品信息：\n{{field \"product_brief\"}}\n卖点提炼：\n{{stepText \"brief\"}}\n{{with field \"visual_style\"}}视觉风格：{{.}}\n{{end}}",
+          "count": "1",
+          "size": "{{commerceSize (field \"image_resolution\") \"detail\"}}",
+          "use_references": true
+        },
+        {
+          "id": "craft",
+          "kind": "image",
+          "title": "详情图 · 工艺制作图",
+          "prompt": "生成电商详情图：工艺制作图。画面比例 3:4，展示材质、工艺、制作流程或细节放大，强调品质可信度。平台：{{field \"platform\"}}。文案语言：{{field \"copy_language\"}}。商品信息：\n{{field \"product_brief\"}}\n卖点提炼：\n{{stepText \"brief\"}}\n{{with field \"visual_style\"}}视觉风格：{{.}}\n{{end}}",
+          "count": "1",
+          "size": "{{commerceSize (field \"image_resolution\") \"detail\"}}",
+          "use_references": true
+        },
+        {
+          "id": "accessories",
+          "kind": "image",
+          "title": "详情图 · 配件赠品",
+          "prompt": "生成电商详情图：配件赠品。画面比例 3:4，清楚展示包装内含物、配件、赠品和数量关系，画面整洁可信。平台：{{field \"platform\"}}。文案语言：{{field \"copy_language\"}}。商品信息：\n{{field \"product_brief\"}}\n卖点提炼：\n{{stepText \"brief\"}}\n{{with field \"visual_style\"}}视觉风格：{{.}}\n{{end}}",
+          "count": "1",
+          "size": "{{commerceSize (field \"image_resolution\") \"detail\"}}",
+          "use_references": true
+        },
+        {
+          "id": "series",
+          "kind": "image",
+          "title": "详情图 · 系列展示图",
+          "prompt": "生成电商详情图：系列展示图。画面比例 3:4，展示多规格、多颜色、多款式或系列组合，统一视觉秩序。平台：{{field \"platform\"}}。文案语言：{{field \"copy_language\"}}。商品信息：\n{{field \"product_brief\"}}\n卖点提炼：\n{{stepText \"brief\"}}\n{{with field \"visual_style\"}}视觉风格：{{.}}\n{{end}}",
+          "count": "1",
+          "size": "{{commerceSize (field \"image_resolution\") \"detail\"}}",
+          "use_references": true
+        },
+        {
+          "id": "package",
+          "kind": "image",
+          "title": "详情图 · 包装展示图",
+          "prompt": "生成电商详情图：包装展示图。画面比例 3:4，展示外包装、开箱内容、包装质感和送礼属性。平台：{{field \"platform\"}}。文案语言：{{field \"copy_language\"}}。商品信息：\n{{field \"product_brief\"}}\n卖点提炼：\n{{stepText \"brief\"}}\n{{with field \"visual_style\"}}视觉风格：{{.}}\n{{end}}",
+          "count": "1",
+          "size": "{{commerceSize (field \"image_resolution\") \"detail\"}}",
+          "use_references": true
+        },
+        {
+          "id": "ingredients",
+          "kind": "image",
+          "title": "详情图 · 商品成分图",
+          "prompt": "生成电商详情图：商品成分图。画面比例 3:4，适合展示成分、材质构成、配方或核心模块，表达专业、清晰、可信。平台：{{field \"platform\"}}。文案语言：{{field \"copy_language\"}}。商品信息：\n{{field \"product_brief\"}}\n卖点提炼：\n{{stepText \"brief\"}}\n{{with field \"visual_style\"}}视觉风格：{{.}}\n{{end}}",
+          "count": "1",
+          "size": "{{commerceSize (field \"image_resolution\") \"detail\"}}",
+          "use_references": true
+        },
+        {
+          "id": "service",
+          "kind": "image",
+          "title": "详情图 · 售后保障图",
+          "prompt": "生成电商详情图：售后保障图。画面比例 3:4，呈现质保、退换、客服、配送或服务承诺，风格可靠克制。平台：{{field \"platform\"}}。文案语言：{{field \"copy_language\"}}。商品信息：\n{{field \"product_brief\"}}\n卖点提炼：\n{{stepText \"brief\"}}\n{{with field \"visual_style\"}}视觉风格：{{.}}\n{{end}}",
+          "count": "1",
+          "size": "{{commerceSize (field \"image_resolution\") \"detail\"}}",
+          "use_references": true
+        },
+        {
+          "id": "usage_advice",
+          "kind": "image",
+          "title": "详情图 · 使用建议图",
+          "prompt": "生成电商详情图：使用建议图。画面比例 3:4，展示使用步骤、适用场景、注意事项或搭配建议，让用户快速理解怎么用。平台：{{field \"platform\"}}。文案语言：{{field \"copy_language\"}}。受众：{{field \"audience\"}}。商品信息：\n{{field \"product_brief\"}}\n卖点提炼：\n{{stepText \"brief\"}}\n{{with field \"visual_style\"}}视觉风格：{{.}}\n{{end}}",
+          "count": "1",
+          "size": "{{commerceSize (field \"image_resolution\") \"detail\"}}",
+          "use_references": true
+        },
+        {
+          "id": "brand_story",
+          "kind": "image",
+          "title": "详情图 · 品牌故事图",
+          "prompt": "生成电商详情图：品牌故事图。画面比例 3:4，表达品牌理念、产地、研发背景或品质主张，避免空泛，用视觉建立信任。平台：{{field \"platform\"}}。文案语言：{{field \"copy_language\"}}。商品信息：\n{{field \"product_brief\"}}\n卖点提炼：\n{{stepText \"brief\"}}\n{{with field \"visual_style\"}}视觉风格：{{.}}\n{{end}}",
+          "count": "1",
+          "size": "{{commerceSize (field \"image_resolution\") \"detail\"}}",
+          "use_references": true
+        },
+        {
+          "id": "buyer_show",
+          "kind": "image",
+          "title": "详情图 · 买家秀图",
+          "prompt": "生成电商详情图：买家秀图。画面比例 3:4，模拟真实买家使用或展示商品的自然场景，真实、可信、有生活感，符合{{field \"audience\"}}审美。平台：{{field \"platform\"}}。文案语言：{{field \"copy_language\"}}。商品信息：\n{{field \"product_brief\"}}\n卖点提炼：\n{{stepText \"brief\"}}\n{{with field \"visual_style\"}}视觉风格：{{.}}\n{{end}}",
+          "count": "1",
+          "size": "{{commerceSize (field \"image_resolution\") \"detail\"}}",
+          "use_references": true
+        }
+      ]
+    },
+    {
+      "id": "social-commerce",
+      "name": "图文带货",
+      "description": "生成带货文案和配图，适合小红书、抖音图文和投放种草。",
+      "inputs": [
+        {
+          "key": "product_brief",
+          "label": "商品信息",
+          "type": "textarea",
+          "placeholder": "描述商品卖点、价格带、目标人群",
+          "required": true
+        },
+        {
+          "key": "audience",
+          "label": "目标人群",
+          "type": "text",
+          "default": "25-35岁女性消费人群",
+          "placeholder": "例如：新手妈妈、露营用户"
+        },
+        {
+          "key": "tone",
+          "label": "文案语气",
+          "type": "text",
+          "default": "真实、种草、带一点转化导向",
+          "placeholder": "例如：轻松、专业、强转化"
+        },
+        {
+          "key": "image_count",
+          "label": "配图数量",
+          "type": "number",
+          "default": "3"
+        },
+        {
+          "key": "visual_style",
+          "label": "视觉风格",
+          "type": "text",
+          "default": "生活方式感、真实场景、干净明亮",
+          "placeholder": "例如：种草风、生活感、氛围感"
+        }
+      ],
+      "steps": [
+        {
+          "id": "copy",
+          "kind": "response",
+          "title": "生成文案",
+          "prompt": "根据商品信息生成图文带货文案，包含标题、正文、3个短卖点和5个标签。语气：{{field \"tone\"}}。目标人群：{{field \"audience\"}}。商品信息：\n{{field \"product_brief\"}}\n"
+        },
+        {
+          "id": "images",
+          "kind": "image",
+          "title": "生成配图",
+          "prompt": "根据以下商品信息和文案生成图文带货配图，要求真实、清晰、适合社媒传播。商品信息：\n{{field \"product_brief\"}}\n文案：\n{{stepText \"copy\"}}\n{{with field \"visual_style\"}}视觉风格：{{.}}\n{{end}}",
+          "count": "{{field \"image_count\"}}",
+          "use_references": true
+        }
+      ]
+    }
+  ]
+}

@@ -97,7 +97,11 @@ func TestBuiltinWorkflowTemplatesRender(t *testing.T) {
 		},
 		Overrides: map[string]string{},
 	}
-	for _, workflow := range builtinWorkflowCatalog().Workflows {
+	catalog, err := builtinWorkflowCatalog()
+	if err != nil {
+		t.Fatalf("load builtin workflows: %v", err)
+	}
+	for _, workflow := range catalog.Workflows {
 		for _, step := range workflow.Steps {
 			if _, err := renderWorkflowTemplate(step.Prompt, data); err != nil {
 				t.Fatalf("render prompt for %s/%s: %v", workflow.ID, step.ID, err)
