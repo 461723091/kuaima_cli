@@ -11,11 +11,44 @@ function openHistoryDB() {
           db.createObjectStore(HISTORY_STORE, { keyPath: "id" });
         }
       };
-      request.onsuccess = () => resolve(request.result);
-      request.onerror = () => reject(request.error);
+      request.onsuccess = () => {
+        const db = request.result;
+        db.onversionchange = () => resetHistoryDB(db);
+        db.onclose = () => {
+          if (historyDBPromise) {
+            historyDBPromise = null;
+          }
+        };
+        resolve(db);
+      };
+      request.onerror = () => {
+        historyDBPromise = null;
+        reject(request.error);
+      };
     });
   }
   return historyDBPromise;
+}
+
+function resetHistoryDB(db) {
+  if (historyDBPromise) {
+    historyDBPromise = null;
+  }
+  if (db && typeof db.close === "function") {
+    try {
+      db.close();
+    } catch {
+      // Ignore close races; the next transaction will reopen the database.
+    }
+  }
+}
+
+function isHistoryDBConnectionError(error) {
+  const message = String(error && error.message || "");
+  return error && (
+    error.name === "InvalidStateError" ||
+    /database connection is (closing|closed)/i.test(message)
+  );
 }
 
 async function requestPersistentHistoryStorage() {
@@ -30,19 +63,43 @@ async function requestPersistentHistoryStorage() {
   }
 }
 
-async function withHistoryStore(mode, callback) {
+async function withHistoryStore(mode, callback, retry = true) {
   const db = await openHistoryDB();
   if (!db) {
     return callback(null);
   }
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(HISTORY_STORE, mode);
-    const store = tx.objectStore(HISTORY_STORE);
-    let result;
-    tx.oncomplete = () => resolve(result);
-    tx.onerror = () => reject(tx.error);
-    result = callback(store);
-  });
+  try {
+    return await new Promise((resolve, reject) => {
+      let tx;
+      try {
+        tx = db.transaction(HISTORY_STORE, mode);
+      } catch (error) {
+        resetHistoryDB(db);
+        reject(error);
+        return;
+      }
+      const store = tx.objectStore(HISTORY_STORE);
+      let result;
+      tx.oncomplete = () => resolve(result);
+      tx.onerror = () => reject(tx.error);
+      tx.onabort = () => reject(tx.error || new Error("history transaction aborted"));
+      try {
+        result = callback(store);
+      } catch (error) {
+        try {
+          tx.abort();
+        } catch {
+          // Transaction may already be inactive.
+        }
+        reject(error);
+      }
+    });
+  } catch (error) {
+    if (retry && isHistoryDBConnectionError(error)) {
+      return withHistoryStore(mode, callback, false);
+    }
+    throw error;
+  }
 }
 
 function requestResult(request) {
@@ -53,11 +110,12 @@ function requestResult(request) {
 }
 
 async function readHistory() {
-  const db = await openHistoryDB();
-  if (!db) {
-    return [];
-  }
-  const items = await requestResult(db.transaction(HISTORY_STORE, "readonly").objectStore(HISTORY_STORE).getAll());
+  const items = await withHistoryStore("readonly", (store) => {
+    if (!store) {
+      return [];
+    }
+    return requestResult(store.getAll());
+  });
   return (Array.isArray(items) ? items : []).sort((a, b) => String(b.created_at || "").localeCompare(String(a.created_at || "")));
 }
 
@@ -318,10 +376,10 @@ function workflowParamSummary(params) {
     templates: "出图",
     workflow_templates: "出图",
   };
-  return entries.slice(0, 6).map(([key, value]) => {
+  return entries.slice(0, 3).map(([key, value]) => {
     const text = String(value == null ? "" : value).trim();
     const display = text.length > 34 ? text.slice(0, 34) + "..." : text;
-    return '<span class="history-param-chip"><b>' + esc(labels[key] || key) + '</b>' + esc(display) + '</span>';
+    return '<span class="history-param-chip">' + esc(display) + '</span>';
   }).join("");
 }
 
