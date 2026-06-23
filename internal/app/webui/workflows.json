@@ -24,6 +24,10 @@
               "label": "淘宝"
             },
             {
+              "value": "天猫",
+              "label": "天猫"
+            },
+            {
               "value": "抖音",
               "label": "抖音"
             },
@@ -36,8 +40,16 @@
               "label": "拼多多"
             },
             {
-              "value": "亚马逊",
-              "label": "亚马逊"
+              "value": "小红书",
+              "label": "小红书"
+            },
+            {
+              "value": "快手",
+              "label": "快手"
+            },
+            {
+              "value": "Amazon",
+              "label": "Amazon"
             },
             {
               "value": "TikTok",
@@ -98,6 +110,18 @@
               "label": "新手妈妈"
             },
             {
+              "value": "家庭用户",
+              "label": "家庭用户"
+            },
+            {
+              "value": "时尚达人",
+              "label": "时尚达人"
+            },
+            {
+              "value": "科技爱好者",
+              "label": "科技爱好者"
+            },
+            {
               "value": "学生群体",
               "label": "学生群体"
             },
@@ -137,6 +161,14 @@
             {
               "value": "跨境电商、干净排版、英文卖点",
               "label": "跨境电商"
+            },
+            {
+              "value": "国潮复古、中式元素、经典配色",
+              "label": "国潮复古"
+            },
+            {
+              "value": "活泼童趣、明亮色彩、可爱插画感",
+              "label": "活泼童趣"
             }
           ]
         },
@@ -184,6 +216,69 @@
           "prompt": "生成电商主图：首屏主视觉。画面比例 1:1，突出第一眼点击欲望和核心购买理由，适合{{field \"platform\"}}列表或首屏。文案语言：{{field \"copy_language\"}}。受众：{{field \"audience\"}}。商品信息：\n{{field \"product_brief\"}}\n卖点提炼：\n{{stepText \"brief\"}}\n{{with field \"visual_style\"}}视觉风格：{{.}}\n{{end}}",
           "count": "1",
           "size": "{{commerceSize (field \"image_resolution\") \"main\"}}",
+          "use_references": true
+        },
+        {
+          "id": "scene_main",
+          "kind": "image",
+          "title": "主图 · 场景展示",
+          "prompt": "生成电商主图：场景展示。画面比例 1:1，将商品自然放入真实使用场景，突出适用环境、生活方式和购买联想，适合{{field \"platform\"}}商品主图。文案语言：{{field \"copy_language\"}}。受众：{{field \"audience\"}}。商品信息：\n{{field \"product_brief\"}}\n卖点提炼：\n{{stepText \"brief\"}}\n{{with field \"visual_style\"}}视觉风格：{{.}}\n{{end}}",
+          "count": "1",
+          "size": "{{commerceSize (field \"image_resolution\") \"main\"}}",
+          "use_references": true
+        },
+        {
+          "id": "detail_closeup_main",
+          "kind": "image",
+          "title": "主图 · 细节特写",
+          "prompt": "生成电商主图：细节特写。画面比例 1:1，用清晰近景突出商品材质、纹理、结构、工艺或关键部位，让用户快速感知品质和差异点。平台：{{field \"platform\"}}。文案语言：{{field \"copy_language\"}}。受众：{{field \"audience\"}}。商品信息：\n{{field \"product_brief\"}}\n卖点提炼：\n{{stepText \"brief\"}}\n{{with field \"visual_style\"}}视觉风格：{{.}}\n{{end}}",
+          "count": "1",
+          "size": "{{commerceSize (field \"image_resolution\") \"main\"}}",
+          "use_references": true
+        },
+        {
+          "id": "core_selling_point_main",
+          "kind": "image",
+          "title": "主图 · 核心卖点",
+          "prompt": "生成电商主图：核心卖点。画面比例 1:1，围绕最重要的购买理由组织画面和短文案，突出商品差异、结果收益和点击转化。平台：{{field \"platform\"}}。文案语言：{{field \"copy_language\"}}。受众：{{field \"audience\"}}。商品信息：\n{{field \"product_brief\"}}\n卖点提炼：\n{{stepText \"brief\"}}\n{{with field \"visual_style\"}}视觉风格：{{.}}\n{{end}}",
+          "count": "1",
+          "size": "{{commerceSize (field \"image_resolution\") \"main\"}}",
+          "use_references": true
+        },
+        {
+          "id": "selling_points_overview",
+          "kind": "image",
+          "title": "详情图 · 卖点总览",
+          "prompt": "生成电商详情图：卖点总览。画面比例 3:4，用清晰分区汇总 3-5 个核心卖点，建立商品价值认知，信息层级明确。平台：{{field \"platform\"}}。文案语言：{{field \"copy_language\"}}。受众：{{field \"audience\"}}。商品信息：\n{{field \"product_brief\"}}\n卖点提炼：\n{{stepText \"brief\"}}\n{{with field \"visual_style\"}}视觉风格：{{.}}\n{{end}}",
+          "count": "1",
+          "size": "{{commerceSize (field \"image_resolution\") \"detail\"}}",
+          "use_references": true
+        },
+        {
+          "id": "use_scene_detail",
+          "kind": "image",
+          "title": "详情图 · 使用场景",
+          "prompt": "生成电商详情图：使用场景。画面比例 3:4，展示商品在典型场景中的使用方式、适用人群和场景收益，让用户代入真实需求。平台：{{field \"platform\"}}。文案语言：{{field \"copy_language\"}}。受众：{{field \"audience\"}}。商品信息：\n{{field \"product_brief\"}}\n卖点提炼：\n{{stepText \"brief\"}}\n{{with field \"visual_style\"}}视觉风格：{{.}}\n{{end}}",
+          "count": "1",
+          "size": "{{commerceSize (field \"image_resolution\") \"detail\"}}",
+          "use_references": true
+        },
+        {
+          "id": "pain_point_detail",
+          "kind": "image",
+          "title": "详情图 · 痛点挖掘",
+          "prompt": "生成电商详情图：痛点挖掘。画面比例 3:4，从用户常见困扰、旧方案不足或购买顾虑切入，再自然引出商品解决方案，表达真实、克制、有转化导向。平台：{{field \"platform\"}}。文案语言：{{field \"copy_language\"}}。受众：{{field \"audience\"}}。商品信息：\n{{field \"product_brief\"}}\n卖点提炼：\n{{stepText \"brief\"}}\n{{with field \"visual_style\"}}视觉风格：{{.}}\n{{end}}",
+          "count": "1",
+          "size": "{{commerceSize (field \"image_resolution\") \"detail\"}}",
+          "use_references": true
+        },
+        {
+          "id": "promotion_detail",
+          "kind": "image",
+          "title": "详情图 · 活动促销",
+          "prompt": "生成电商详情图：活动促销。画面比例 3:4，突出限时优惠、组合权益、赠品、折扣或下单理由，营造明确行动感，同时保持平台视觉规范。平台：{{field \"platform\"}}。文案语言：{{field \"copy_language\"}}。受众：{{field \"audience\"}}。商品信息：\n{{field \"product_brief\"}}\n卖点提炼：\n{{stepText \"brief\"}}\n{{with field \"visual_style\"}}视觉风格：{{.}}\n{{end}}",
+          "count": "1",
+          "size": "{{commerceSize (field \"image_resolution\") \"detail\"}}",
           "use_references": true
         },
         {

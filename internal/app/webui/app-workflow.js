@@ -156,6 +156,7 @@
       if (text.includes("微信")) return "imgs/微信小店.png";
       if (text.includes("拼多多")) return "imgs/拼多多.png";
       if (text.includes("小红书")) return "imgs/小红书.png";
+      if (text.includes("快手")) return "imgs/快手.png";
       if (text.toLowerCase().includes("amazon") || text.includes("亚马逊")) return "imgs/亚马逊.png";
       return "";
     }
