@@ -156,42 +156,42 @@
             {
               "value": "高级感、干净背景、商业摄影",
               "label": "高级商业摄影",
-              "example": "imgs/workflow-style-premium.png"
+              "example": "imgs/workflow-style-premium.jpg"
             },
             {
               "value": "极简白底、清晰产品轮廓",
               "label": "极简白底",
-              "example": "imgs/workflow-style-minimal-white.png"
+              "example": "imgs/workflow-style-minimal-white.jpg"
             },
             {
               "value": "年轻潮流、强对比色、社媒感",
               "label": "年轻潮流",
-              "example": "imgs/workflow-style-youth-trend.png"
+              "example": "imgs/workflow-style-youth-trend.jpg"
             },
             {
               "value": "科技感、冷色调、精密质感",
               "label": "科技感",
-              "example": "imgs/workflow-style-tech.png"
+              "example": "imgs/workflow-style-tech.jpg"
             },
             {
               "value": "温暖生活方式、自然光、真实场景",
               "label": "生活方式",
-              "example": "imgs/workflow-style-lifestyle.png"
+              "example": "imgs/workflow-style-lifestyle.jpg"
             },
             {
               "value": "跨境电商、干净排版、英文卖点",
               "label": "跨境电商",
-              "example": "imgs/workflow-style-cross-border.png"
+              "example": "imgs/workflow-style-cross-border.jpg"
             },
             {
               "value": "国潮复古、中式元素、经典配色",
               "label": "国潮复古",
-              "example": "imgs/workflow-style-chinese-retro.png"
+              "example": "imgs/workflow-style-chinese-retro.jpg"
             },
             {
               "value": "活泼童趣、明亮色彩、可爱插画感",
               "label": "活泼童趣",
-              "example": "imgs/workflow-style-playful-kids.png"
+              "example": "imgs/workflow-style-playful-kids.jpg"
             }
           ]
         },
@@ -232,7 +232,7 @@
           "count": "1",
           "size": "{{commerceSize (field \"image_resolution\") \"main\"}}",
           "use_references": true,
-          "example": "imgs/workflow-main-white-bg.png"
+          "example": "imgs/workflow-main-white-bg.jpg"
         },
         {
           "id": "hero_main",
@@ -243,7 +243,7 @@
           "count": "1",
           "size": "{{commerceSize (field \"image_resolution\") \"main\"}}",
           "use_references": true,
-          "example": "imgs/workflow-main-hero.png"
+          "example": "imgs/workflow-main-hero.jpg"
         },
         {
           "id": "scene_main",
@@ -254,7 +254,7 @@
           "count": "1",
           "size": "{{commerceSize (field \"image_resolution\") \"main\"}}",
           "use_references": true,
-          "example": "imgs/workflow-main-scene.png"
+          "example": "imgs/workflow-main-scene.jpg"
         },
         {
           "id": "detail_closeup_main",
@@ -265,7 +265,7 @@
           "count": "1",
           "size": "{{commerceSize (field \"image_resolution\") \"main\"}}",
           "use_references": true,
-          "example": "imgs/workflow-main-closeup.png"
+          "example": "imgs/workflow-main-closeup.jpg"
         },
         {
           "id": "core_selling_point_main",
@@ -276,7 +276,7 @@
           "count": "1",
           "size": "{{commerceSize (field \"image_resolution\") \"main\"}}",
           "use_references": true,
-          "example": "imgs/workflow-main-selling-point.png"
+          "example": "imgs/workflow-main-selling-point.jpg"
         },
         {
           "id": "selling_points_overview",
@@ -287,7 +287,7 @@
           "count": "1",
           "size": "{{commerceSize (field \"image_resolution\") \"detail\"}}",
           "use_references": true,
-          "example": "imgs/workflow-detail-selling-points-overview.png"
+          "example": "imgs/workflow-detail-selling-points-overview.jpg"
         },
         {
           "id": "use_scene_detail",
@@ -298,7 +298,7 @@
           "count": "1",
           "size": "{{commerceSize (field \"image_resolution\") \"detail\"}}",
           "use_references": true,
-          "example": "imgs/workflow-detail-use-scene.png"
+          "example": "imgs/workflow-detail-use-scene.jpg"
         },
         {
           "id": "pain_point_detail",
@@ -309,7 +309,7 @@
           "count": "1",
           "size": "{{commerceSize (field \"image_resolution\") \"detail\"}}",
           "use_references": true,
-          "example": "imgs/workflow-detail-pain-point.png"
+          "example": "imgs/workflow-detail-pain-point.jpg"
         },
         {
           "id": "promotion_detail",
@@ -320,7 +320,7 @@
           "count": "1",
           "size": "{{commerceSize (field \"image_resolution\") \"detail\"}}",
           "use_references": true,
-          "example": "imgs/workflow-detail-promotion.png"
+          "example": "imgs/workflow-detail-promotion.jpg"
         },
         {
           "id": "multi_angle",
@@ -331,7 +331,7 @@
           "count": "1",
           "size": "{{commerceSize (field \"image_resolution\") \"detail\"}}",
           "use_references": true,
-          "example": "imgs/workflow-detail-multi-angle.png"
+          "example": "imgs/workflow-detail-multi-angle.jpg"
         },
         {
           "id": "specs",
@@ -342,7 +342,7 @@
           "count": "1",
           "size": "{{commerceSize (field \"image_resolution\") \"detail\"}}",
           "use_references": true,
-          "example": "imgs/workflow-detail-specs.png"
+          "example": "imgs/workflow-detail-specs.jpg"
         },
         {
           "id": "effect_compare",
@@ -353,7 +353,7 @@
           "count": "1",
           "size": "{{commerceSize (field \"image_resolution\") \"detail\"}}",
           "use_references": true,
-          "example": "imgs/workflow-detail-effect-compare.png"
+          "example": "imgs/workflow-detail-effect-compare.jpg"
         },
         {
           "id": "craft",
@@ -364,7 +364,7 @@
           "count": "1",
           "size": "{{commerceSize (field \"image_resolution\") \"detail\"}}",
           "use_references": true,
-          "example": "imgs/workflow-detail-craft.png"
+          "example": "imgs/workflow-detail-craft.jpg"
         },
         {
           "id": "accessories",
@@ -375,7 +375,7 @@
           "count": "1",
           "size": "{{commerceSize (field \"image_resolution\") \"detail\"}}",
           "use_references": true,
-          "example": "imgs/workflow-detail-accessories.png"
+          "example": "imgs/workflow-detail-accessories.jpg"
         },
         {
           "id": "series",
@@ -386,7 +386,7 @@
           "count": "1",
           "size": "{{commerceSize (field \"image_resolution\") \"detail\"}}",
           "use_references": true,
-          "example": "imgs/workflow-detail-series.png"
+          "example": "imgs/workflow-detail-series.jpg"
         },
         {
           "id": "package",
@@ -397,7 +397,7 @@
           "count": "1",
           "size": "{{commerceSize (field \"image_resolution\") \"detail\"}}",
           "use_references": true,
-          "example": "imgs/workflow-detail-package.png"
+          "example": "imgs/workflow-detail-package.jpg"
         },
         {
           "id": "ingredients",
@@ -408,7 +408,7 @@
           "count": "1",
           "size": "{{commerceSize (field \"image_resolution\") \"detail\"}}",
           "use_references": true,
-          "example": "imgs/workflow-detail-ingredients.png"
+          "example": "imgs/workflow-detail-ingredients.jpg"
         },
         {
           "id": "service",
@@ -419,7 +419,7 @@
           "count": "1",
           "size": "{{commerceSize (field \"image_resolution\") \"detail\"}}",
           "use_references": true,
-          "example": "imgs/workflow-detail-service.png"
+          "example": "imgs/workflow-detail-service.jpg"
         },
         {
           "id": "usage_advice",
@@ -430,7 +430,7 @@
           "count": "1",
           "size": "{{commerceSize (field \"image_resolution\") \"detail\"}}",
           "use_references": true,
-          "example": "imgs/workflow-detail-usage-advice.png"
+          "example": "imgs/workflow-detail-usage-advice.jpg"
         },
         {
           "id": "brand_story",
@@ -441,7 +441,7 @@
           "count": "1",
           "size": "{{commerceSize (field \"image_resolution\") \"detail\"}}",
           "use_references": true,
-          "example": "imgs/workflow-detail-brand-story.png"
+          "example": "imgs/workflow-detail-brand-story.jpg"
         },
         {
           "id": "buyer_show",
@@ -452,7 +452,7 @@
           "count": "1",
           "size": "{{commerceSize (field \"image_resolution\") \"detail\"}}",
           "use_references": true,
-          "example": "imgs/workflow-detail-buyer-show.png"
+          "example": "imgs/workflow-detail-buyer-show.jpg"
         }
       ]
     },
@@ -512,7 +512,7 @@
           "prompt": "根据以下商品信息和文案生成图文带货配图，要求真实、清晰、适合社媒传播。商品信息：\n{{field \"product_brief\"}}\n文案：\n{{stepText \"copy\"}}\n{{with field \"visual_style\"}}视觉风格：{{.}}\n{{end}}",
           "count": "{{field \"image_count\"}}",
           "use_references": true,
-          "example": "imgs/workflow-main-scene.png"
+          "example": "imgs/workflow-main-scene.jpg"
         }
       ]
     }

@@ -441,7 +441,7 @@
       '<div class="workflow-section-head"><span class="workflow-step-index">3</span><div><strong>出图类型</strong><span>已选择的主图和详情图会按顺序生成。</span></div></div>' +
       '<div class="workflow-template-summary" data-workflow-template-summary></div>' +
       '<button class="btn small workflow-template-add" type="button" data-workflow-template-open>' +
-      iconHTML("plus") + '<span>添加更多</span></button>' +
+      iconHTML("plus") + '<span>选择图片</span></button>' +
       '</section>' +
       '<div class="modal-backdrop workflow-template-modal-backdrop" data-workflow-template-modal hidden>' +
       '<div class="workflow-template-modal" role="dialog" aria-modal="true" aria-labelledby="workflowTemplateTitle">' +
