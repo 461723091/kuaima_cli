@@ -226,6 +226,8 @@ async function saveHistory(result, extra = {}) {
     window.KuaimaWorkflow && typeof window.KuaimaWorkflow.currentValues === "function"
     ? window.KuaimaWorkflow.currentValues()
     : {};
+  const resultParams = result && result.params && typeof result.params === "object" ? result.params : {};
+  const mergedWorkflowParams = Object.assign({}, workflowParams, resultParams);
   const item = {
     id: String(Date.now()),
     created_at: new Date().toISOString(),
@@ -236,7 +238,7 @@ async function saveHistory(result, extra = {}) {
       typeof window.KuaimaWorkflow.currentWorkflowLabel === "function"
       ? window.KuaimaWorkflow.currentWorkflowLabel(workflowId)
       : workflowId),
-    workflow_params: result.params || workflowParams,
+    workflow_params: mergedWorkflowParams,
     image_model: form.elements.image_model.value,
     image_count: form.elements.image_count.value,
     image_quality: form.elements.image_quality.value,
@@ -300,6 +302,29 @@ function formatTimingSummary(item) {
   return parts.join(" · ");
 }
 
+function workflowParamSummary(params) {
+  const entries = Object.entries(params && typeof params === "object" ? params : {})
+    .filter((entry) => String(entry[1] == null ? "" : entry[1]).trim() !== "");
+  if (entries.length === 0) {
+    return "";
+  }
+  const labels = {
+    product_brief: "商品",
+    platform: "平台",
+    copy_language: "语言",
+    audience: "受众",
+    visual_style: "风格",
+    image_resolution: "清晰度",
+    templates: "出图",
+    workflow_templates: "出图",
+  };
+  return entries.slice(0, 6).map(([key, value]) => {
+    const text = String(value == null ? "" : value).trim();
+    const display = text.length > 34 ? text.slice(0, 34) + "..." : text;
+    return '<span class="history-param-chip"><b>' + esc(labels[key] || key) + '</b>' + esc(display) + '</span>';
+  }).join("");
+}
+
 function renderResultTiming(timing) {
   const label = $("#resultTiming");
   if (!label) {
@@ -336,6 +361,7 @@ async function renderHistory() {
     esc(item.image_size || "-") + ' · ' + esc(qualityLabel(item.image_quality)) +
     ' · 参考图 ' + esc(item.reference_count || 0) + ' 张' +
     (formatTimingSummary(item) ? ' · ' + esc(formatTimingSummary(item)) : '') + '</div>' +
+    (workflowParamSummary(item.workflow_params) ? '<div class="history-params">' + workflowParamSummary(item.workflow_params) + '</div>' : '') +
     (item.error ? '<div class="history-error">' + esc(item.error) + '</div>' : '') +
     '<div class="history-images">' + (item.references || []).map((ref, index) => ({ ref, index })).filter((entry) => entry.ref && entry.ref.url).map((entry) => {
       const ref = entry.ref;
@@ -428,8 +454,7 @@ function renderGalleryImages(images) {
     '<div class="gallery-item"><button class="gallery-preview" type="button" data-preview-image="' + esc(url) +
     '"><img src="' + esc(url) +
     '" alt="生成结果"><span class="image-size-label" data-image-size>读取尺寸...</span></button>' +
-    '<button class="gallery-use" type="button" data-history-action="use-image" data-image-url="' +
-    esc(url) + '">' + iconHTML("image-plus") + '<span>作为参考图</span></button></div>'
+    '</div>'
   )).join("");
 }
 

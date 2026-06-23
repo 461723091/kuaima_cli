@@ -5,6 +5,8 @@
     cache: readWorkflowCache(),
     activeStepId: "",
     pendingReview: null,
+    runStartedAt: 0,
+    progressTimer: 0,
   };
 
   function readWorkflowCache() {
@@ -46,6 +48,10 @@
 
   function workflowTemplatePicker() {
     return $("#workflowTemplatePicker");
+  }
+
+  function workflowRunOptions() {
+    return $("#workflowRunOptions");
   }
 
   function promptTextGroup() {
@@ -384,6 +390,71 @@
     return false;
   }
 
+  function workflowAutoRunEnabled() {
+    const input = $("#workflowAutoRun");
+    return Boolean(input && input.checked);
+  }
+
+  function selectedWorkflowSteps(def, options = {}) {
+    const selectedTemplates = new Set(currentWorkflowTemplateIDs());
+    const includeImages = options.includeImages !== false;
+    return (def && Array.isArray(def.steps) ? def.steps : []).filter((step) => {
+      const kind = String(step.kind || "").toLowerCase();
+      if (kind === "response") {
+        return true;
+      }
+      if (kind === "image" && includeImages) {
+        return selectedTemplates.has(String(step.id || ""));
+      }
+      return false;
+    });
+  }
+
+  function workflowProgressTotal(def, mode) {
+    return selectedWorkflowSteps(def, { includeImages: String(mode || "") !== "draft" }).length;
+  }
+
+  function formatWorkflowDuration(value) {
+    if (typeof formatDuration === "function") {
+      return formatDuration(value);
+    }
+    const duration = Number(value);
+    if (!Number.isFinite(duration) || duration < 0) {
+      return "-";
+    }
+    return duration < 1000 ? Math.max(1, Math.round(duration)) + "ms" : (duration / 1000).toFixed(1).replace(/\.0$/, "") + "s";
+  }
+
+  function stepDurationMs(step) {
+    const started = Number(step && step.started_at_ms);
+    if (!Number.isFinite(started) || started <= 0) {
+      return null;
+    }
+    const ended = Number(step.ended_at_ms);
+    const current = Number.isFinite(ended) && ended >= started ? ended : performance.now();
+    return Math.max(0, current - started);
+  }
+
+  function renderWorkflowRunOptions(def) {
+    const container = workflowRunOptions();
+    if (!container) {
+      return;
+    }
+    if (!def || String(def.id || "") === "single" || !workflowNeedsReview(def)) {
+      container.hidden = true;
+      container.innerHTML = "";
+      return;
+    }
+    const checked = state.cache.skipReview === true ? " checked" : "";
+    container.hidden = false;
+    container.innerHTML =
+      '<label class="workflow-run-toggle">' +
+      '<input id="workflowAutoRun" type="checkbox"' + checked + '>' +
+      '<span class="workflow-run-toggle-box">' + iconHTML("fast-forward") + '</span>' +
+      '<span><strong>无需确认一键运行</strong><small>文案步骤完成后自动继续生成图片</small></span>' +
+      '</label>';
+  }
+
   function workflowDefaultTemplateIDs(def) {
     return workflowImageSteps(def).map((step) => String(step.id || "").trim()).filter(Boolean);
   }
@@ -516,6 +587,7 @@
     const def = workflowDef(id);
     renderWorkflowFields(def || { id: "single" });
     renderWorkflowTemplates(def || { id: "single" });
+    renderWorkflowRunOptions(def || { id: "single" });
     const promptGroup = promptTextGroup();
     const promptTextarea = $("#genForm") && $("#genForm").elements && $("#genForm").elements.prompt;
     if (promptGroup) {
@@ -569,6 +641,10 @@
       return;
     }
     input.value = String(id || "single");
+    if (String(input.value || "") !== "single" && values && typeof values === "object") {
+      state.cache[input.value] = Object.assign({}, state.cache[input.value] || {}, values);
+      saveWorkflowCache();
+    }
     const def = workflowDef(input.value);
     renderWorkflowTabs();
     renderWorkflowFields(def || { id: "single" });
@@ -602,13 +678,29 @@
       return;
     }
     container.hidden = false;
-    container.innerHTML = steps.map((step) => {
+    const total = Math.max(Number(result && result.progress_total) || steps.length, steps.length, 1);
+    const completed = steps.filter((step) => step.status === "done").length;
+    const activeIndex = steps.findIndex((step) => step.status === "running");
+    const current = Math.min(total, Math.max(completed + (activeIndex >= 0 ? 1 : 0), steps.length ? 1 : 0));
+    const percent = Math.max(0, Math.min(100, Math.round((current / total) * 100)));
+    const progressHTML = '<div class="workflow-progress" role="progressbar" aria-valuemin="0" aria-valuemax="' + esc(total) +
+      '" aria-valuenow="' + esc(current) + '">' +
+      '<div class="workflow-progress-head"><strong>工作流进度</strong><span>' + esc(current) + ' / ' + esc(total) + '</span></div>' +
+      '<div class="workflow-progress-track"><span style="width:' + esc(percent) + '%"></span></div>' +
+      '</div>';
+    container.innerHTML = progressHTML + steps.map((step) => {
       const images = Array.isArray(step.images) ? step.images : [];
       const text = String(step.text || "").trim();
-      return '<section class="workflow-step">' +
+      const status = String(step.status || "done");
+      const duration = stepDurationMs(step);
+      return '<section class="workflow-step ' + esc(status) + '">' +
         '<div class="workflow-step-head">' +
-        '<strong>' + esc(step.title || step.id || "步骤") + "</strong>" +
-        '<span class="workflow-step-kind">' + esc(step.kind || "") + "</span>" +
+        '<div><strong>' + esc(step.title || step.id || "步骤") + "</strong>" +
+        '<span class="workflow-step-sub">' + esc(step.kind || "") + '</span></div>' +
+        '<div class="workflow-step-meta">' +
+        '<span class="workflow-step-kind">' + esc(status === "running" ? "进行中" : status === "done" ? "完成" : status) + "</span>" +
+        (duration == null ? "" : '<span class="workflow-step-duration">' + esc(formatWorkflowDuration(duration)) + '</span>') +
+        '</div>' +
         "</div>" +
         (text ? '<pre class="workflow-step-text">' + esc(text) + "</pre>" : "") +
         (images.length ? '<div class="workflow-step-images">' + images.map((url) => (
@@ -686,7 +778,8 @@
 
   async function generateWorkflowStream(form, signal, options = {}) {
     const workflowId = currentWorkflowId();
-    const result = { workflow_id: workflowId, workflow_name: workflowLabel(workflowId), prompt: "", params: {}, steps: [], images: [], saved: [], text: "", timing: null, needs_review: false };
+    const def = workflowDef(workflowId);
+    const result = { workflow_id: workflowId, workflow_name: workflowLabel(workflowId), prompt: "", params: {}, steps: [], images: [], saved: [], text: "", timing: null, needs_review: false, progress_total: workflowProgressTotal(def, options.mode) };
     const startedAt = performance.now();
     let firstResponseAt = 0;
     let activeStep = null;
@@ -695,10 +788,25 @@
         firstResponseAt = performance.now();
       }
     };
+    const finishActiveStep = () => {
+      if (activeStep && activeStep.status === "running") {
+        activeStep.status = "done";
+        activeStep.ended_at_ms = performance.now();
+      }
+    };
 
     setResultsVisible(true);
     workflowSteps().hidden = false;
     workflowSteps().innerHTML = '<div class="generation-placeholder"><span class="spinner"></span><span>正在执行工作流...</span></div>';
+    state.runStartedAt = startedAt;
+    if (state.progressTimer) {
+      window.clearInterval(state.progressTimer);
+    }
+    state.progressTimer = window.setInterval(() => {
+      if (result.steps.length > 0) {
+        renderWorkflowSteps(result);
+      }
+    }, 1000);
     const review = workflowReview();
     if (review) {
       review.hidden = true;
@@ -732,6 +840,7 @@
       },
       step(payload) {
         markFirstResponse();
+        finishActiveStep();
         activeStep = {
           id: payload.id || "",
           kind: payload.kind || "",
@@ -739,6 +848,9 @@
           text: "",
           images: [],
           saved: [],
+          status: "running",
+          started_at_ms: performance.now(),
+          ended_at_ms: null,
         };
         result.steps.push(activeStep);
         renderWorkflowSteps(result);
@@ -777,15 +889,27 @@
       },
       done(payload) {
         markFirstResponse();
+        finishActiveStep();
         result.workflow_id = payload.workflow_id || result.workflow_id;
         result.workflow_name = payload.workflow_name || result.workflow_name;
         result.prompt = payload.prompt || "";
-        result.params = payload.params || {};
-        result.steps = Array.isArray(payload.steps) ? payload.steps : result.steps;
+        result.params = Object.assign({}, currentWorkflowValues(), payload.params || {});
+        if (Array.isArray(payload.steps)) {
+          const previousById = new Map(result.steps.map((step) => [String(step.id || ""), step]));
+          result.steps = payload.steps.map((step) => {
+            const previous = previousById.get(String(step.id || ""));
+            return Object.assign({}, step, {
+              status: "done",
+              started_at_ms: previous && previous.started_at_ms || step.started_at_ms || null,
+              ended_at_ms: previous && previous.ended_at_ms || step.ended_at_ms || performance.now(),
+            });
+          });
+        }
         result.images = Array.isArray(payload.images) ? payload.images : result.images;
         result.saved = Array.isArray(payload.saved) ? payload.saved : result.saved;
         result.text = payload.text || result.text;
         result.needs_review = Boolean(payload.needs_review);
+        result.progress_total = Math.max(result.progress_total || 0, result.steps.length);
         renderWorkflowSteps(result);
         if (result.needs_review) {
           $("#gallery").classList.add("empty");
@@ -801,10 +925,16 @@
     });
 
     const finishedAt = performance.now();
+    finishActiveStep();
+    if (state.progressTimer) {
+      window.clearInterval(state.progressTimer);
+      state.progressTimer = 0;
+    }
     result.timing = {
       response_ms: Math.round((firstResponseAt || finishedAt) - startedAt),
       total_ms: Math.round(finishedAt - startedAt),
     };
+    renderWorkflowSteps(result);
     renderResultTiming(result.timing);
     return result;
   }
@@ -838,6 +968,10 @@
       loadBalance();
       return result;
     } catch (error) {
+      if (state.progressTimer) {
+        window.clearInterval(state.progressTimer);
+        state.progressTimer = 0;
+      }
       const canceled = error && error.name === "AbortError";
       const steps = workflowSteps();
       if (steps && steps.querySelector(".generation-placeholder")) {
@@ -857,6 +991,10 @@
       handleOperationError(error, $("#genStatus"));
       return null;
     } finally {
+      if (state.progressTimer) {
+        window.clearInterval(state.progressTimer);
+        state.progressTimer = 0;
+      }
       activeGenerationController = null;
       cancelButton.hidden = true;
       if (submitButton) {
@@ -1005,6 +1143,17 @@
         persistCurrentValues();
       });
     }
+    const runOptions = workflowRunOptions();
+    if (runOptions) {
+      runOptions.addEventListener("change", (event) => {
+        const input = event.target.closest("#workflowAutoRun");
+        if (!input) {
+          return;
+        }
+        state.cache.skipReview = Boolean(input.checked);
+        saveWorkflowCache();
+      });
+    }
     const review = workflowReview();
     if (review) {
       review.addEventListener("click", async (event) => {
@@ -1032,7 +1181,7 @@
         saveSettings();
         persistCurrentValues();
         const def = workflowDef(currentWorkflowId());
-        const mode = workflowNeedsReview(def) ? "draft" : "final";
+        const mode = workflowNeedsReview(def) && !workflowAutoRunEnabled() ? "draft" : "final";
         await runWorkflowSubmission(form, { mode });
       }, true);
     }
