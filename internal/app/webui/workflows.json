@@ -105,7 +105,7 @@
           "key": "audience",
           "label": "受众目标",
           "type": "combo",
-          "default": "年轻女性",
+          "default": "",
           "placeholder": "选择或输入受众",
           "options": [
             {
@@ -137,6 +137,10 @@
               "label": "科技爱好者"
             },
             {
+              "value": "一人公司OPC",
+              "label": "一人公司OPC"
+            },
+            {
               "value": "学生群体",
               "label": "学生群体"
             },
@@ -150,7 +154,7 @@
           "key": "visual_style",
           "label": "视觉风格",
           "type": "combo",
-          "default": "高级感、干净背景、商业摄影",
+          "default": "",
           "placeholder": "选择或输入视觉风格",
           "options": [
             {

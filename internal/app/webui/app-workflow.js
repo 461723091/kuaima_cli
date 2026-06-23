@@ -685,7 +685,8 @@
   }
 
   async function generateWorkflowStream(form, signal, options = {}) {
-    const result = { workflow_id: currentWorkflowId(), workflow_name: workflowLabel(currentWorkflowId()), prompt: "", params: {}, steps: [], images: [], saved: [], text: "", timing: null, needs_review: false };
+    const workflowId = currentWorkflowId();
+    const result = { workflow_id: workflowId, workflow_name: workflowLabel(workflowId), prompt: "", params: {}, steps: [], images: [], saved: [], text: "", timing: null, needs_review: false };
     const startedAt = performance.now();
     let firstResponseAt = 0;
     let activeStep = null;
@@ -708,6 +709,11 @@
     renderResultTiming(null);
 
     const formData = await buildGenerateFormData(form);
+    formData.set("workflow_id", workflowId);
+    const templates = currentWorkflowTemplateIDs();
+    if (templates.length > 0) {
+      formData.set("workflow_templates", templates.join(","));
+    }
     const mode = String(options.mode || "").trim();
     if (mode) {
       formData.set("workflow_mode", mode);
@@ -833,6 +839,12 @@
       return result;
     } catch (error) {
       const canceled = error && error.name === "AbortError";
+      const steps = workflowSteps();
+      if (steps && steps.querySelector(".generation-placeholder")) {
+        steps.hidden = false;
+        steps.innerHTML = '<div class="' + (canceled ? "status" : "status error") + '">' +
+          esc(canceled ? "已取消工作流" : "工作流失败：" + error.message) + '</div>';
+      }
       if ($("#gallery").querySelector(".generation-placeholder")) {
         renderGalleryMessage(canceled ? "已取消工作流" : "工作流失败：" + error.message, canceled ? "status" : "status error");
       }

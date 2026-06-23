@@ -118,22 +118,32 @@ func (c *client) createImageEditMultipartStream(ctx context.Context, req imageEd
 		rawStream.WriteString(line)
 		rawStream.WriteByte('\n')
 		if !strings.HasPrefix(line, "data:") {
-			continue
+			//兼容一下json格式
+			if strings.HasPrefix(line, "{") {
+				for scanner.Scan() {
+					line2 := scanner.Text()
+					rawStream.WriteString(line2)
+					rawStream.WriteByte('\n')
+					line += line2
+				}
+			} else {
+				continue
+			}
 		}
 		data := strings.TrimSpace(strings.TrimPrefix(line, "data:"))
 		if data == "" || data == "[DONE]" {
 			continue
 		}
 		var event struct {
-			Type    string `json:"type"`
-			B64JSON string `json:"b64_json"`
-			URL     string `json:"url"`
+			Type    string `json:"type,omitempty"`
+			B64JSON string `json:"b64_json,omitempty"`
+			URL     string `json:"url,omitempty"`
 			Data    []struct {
-				B64JSON  string `json:"b64_json"`
-				URL      string `json:"url"`
-				ImageURL string `json:"image_url"`
+				B64JSON  string `json:"b64_json,omitempty"`
+				URL      string `json:"url,omitempty"`
+				ImageURL string `json:"image_url,omitempty"`
 			} `json:"data"`
-			Error *apiError `json:"error"`
+			Error *apiError `json:"error,omitempty"`
 		}
 		if err := json.Unmarshal([]byte(data), &event); err != nil {
 			continue
@@ -383,23 +393,33 @@ func (c *client) createImageRequestStream(ctx context.Context, path string, req 
 		rawStream.WriteString(line)
 		rawStream.WriteByte('\n')
 		if !strings.HasPrefix(line, "data:") {
-			continue
+			//兼容一下json格式
+			if strings.HasPrefix(line, "{") {
+				for scanner.Scan() {
+					line2 := scanner.Text()
+					rawStream.WriteString(line2)
+					rawStream.WriteByte('\n')
+					line += line2
+				}
+			} else {
+				continue
+			}
 		}
 		data := strings.TrimSpace(strings.TrimPrefix(line, "data:"))
 		if data == "" || data == "[DONE]" {
 			continue
 		}
 		var event struct {
-			Type            string    `json:"type"`
-			B64JSON         string    `json:"b64_json"`
-			PartialImageB64 string    `json:"partial_image_b64"`
-			URL             string    `json:"url"`
-			ImageURL        string    `json:"image_url"`
-			Error           *apiError `json:"error"`
+			Type            string    `json:"type,omitempty"`
+			B64JSON         string    `json:"b64_json,omitempty"`
+			PartialImageB64 string    `json:"partial_image_b64,omitempty"`
+			URL             string    `json:"url,omitempty"`
+			ImageURL        string    `json:"image_url,omitempty"`
+			Error           *apiError `json:"error,omitempty"`
 			Data            []struct {
-				B64JSON  string `json:"b64_json"`
-				URL      string `json:"url"`
-				ImageURL string `json:"image_url"`
+				B64JSON  string `json:"b64_json,omitempty"`
+				URL      string `json:"url,omitempty"`
+				ImageURL string `json:"image_url,omitempty"`
 			} `json:"data"`
 		}
 		if err := json.Unmarshal([]byte(data), &event); err != nil {
@@ -435,9 +455,9 @@ func (c *client) createImageRequestStream(ctx context.Context, path string, req 
 }
 
 func imageStreamEventCandidates(b64JSON, partialImageB64, url, imageURL string, data []struct {
-	B64JSON  string `json:"b64_json"`
-	URL      string `json:"url"`
-	ImageURL string `json:"image_url"`
+	B64JSON  string `json:"b64_json,omitempty"`
+	URL      string `json:"url,omitempty"`
+	ImageURL string `json:"image_url,omitempty"`
 }) []imageCandidate {
 	var candidates []imageCandidate
 	if strings.TrimSpace(partialImageB64) != "" {
