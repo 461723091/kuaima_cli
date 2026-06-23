@@ -20,6 +20,7 @@ type workflowDefinition struct {
 	ID          string                   `json:"id"`
 	Name        string                   `json:"name"`
 	Description string                   `json:"description"`
+	Icon        string                   `json:"icon,omitempty"`
 	Inputs      []workflowInputField     `json:"inputs,omitempty"`
 	Steps       []workflowStepDefinition `json:"steps,omitempty"`
 }
@@ -38,8 +39,10 @@ type workflowInputField struct {
 }
 
 type workflowFieldOption struct {
-	Value string `json:"value"`
-	Label string `json:"label"`
+	Value   string `json:"value"`
+	Label   string `json:"label"`
+	Icon    string `json:"icon,omitempty"`
+	Example string `json:"example,omitempty"`
 }
 
 type workflowStepDefinition struct {
@@ -47,6 +50,8 @@ type workflowStepDefinition struct {
 	Kind              string `json:"kind"`
 	Title             string `json:"title"`
 	Prompt            string `json:"prompt"`
+	TemplateType      string `json:"template_type,omitempty"`
+	Example           string `json:"example,omitempty"`
 	TextModel         string `json:"text_model,omitempty"`
 	ImageModel        string `json:"image_model,omitempty"`
 	Endpoint          string `json:"endpoint,omitempty"`

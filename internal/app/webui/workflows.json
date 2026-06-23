@@ -3,6 +3,7 @@
     {
       "id": "product-pack",
       "name": "电商套图",
+      "icon": "shopping-bag",
       "description": "上传产品参考图，配置平台、语言、受众和视觉风格，勾选需要的主图或详情图模板。",
       "inputs": [
         {
@@ -21,39 +22,48 @@
           "options": [
             {
               "value": "淘宝",
-              "label": "淘宝"
+              "label": "淘宝",
+              "icon": "imgs/淘宝.png"
             },
             {
               "value": "天猫",
-              "label": "天猫"
+              "label": "天猫",
+              "icon": "imgs/天猫.png"
             },
             {
               "value": "抖音",
-              "label": "抖音"
+              "label": "抖音",
+              "icon": "imgs/抖音.png"
             },
             {
               "value": "微信小店",
-              "label": "微信小店"
+              "label": "微信小店",
+              "icon": "imgs/微信小店.png"
             },
             {
               "value": "拼多多",
-              "label": "拼多多"
+              "label": "拼多多",
+              "icon": "imgs/拼多多.png"
             },
             {
               "value": "小红书",
-              "label": "小红书"
+              "label": "小红书",
+              "icon": "imgs/小红书.png"
             },
             {
               "value": "快手",
-              "label": "快手"
+              "label": "快手",
+              "icon": "imgs/快手.png"
             },
             {
               "value": "Amazon",
-              "label": "Amazon"
+              "label": "Amazon",
+              "icon": "imgs/亚马逊.png"
             },
             {
               "value": "TikTok",
-              "label": "TikTok"
+              "label": "TikTok",
+              "icon": "imgs/抖音.png"
             }
           ]
         },
@@ -66,23 +76,28 @@
           "options": [
             {
               "value": "简体中文",
-              "label": "简体中文"
+              "label": "简体中文",
+              "icon": "imgs/cn.png"
             },
             {
               "value": "英文",
-              "label": "英文"
+              "label": "英文",
+              "icon": "imgs/us.png"
             },
             {
               "value": "繁体中文",
-              "label": "繁体中文"
+              "label": "繁体中文",
+              "icon": "imgs/hk.png"
             },
             {
               "value": "日文",
-              "label": "日文"
+              "label": "日文",
+              "icon": "imgs/jp.png"
             },
             {
               "value": "韩文",
-              "label": "韩文"
+              "label": "韩文",
+              "icon": "imgs/kr.png"
             }
           ]
         },
@@ -140,35 +155,43 @@
           "options": [
             {
               "value": "高级感、干净背景、商业摄影",
-              "label": "高级商业摄影"
+              "label": "高级商业摄影",
+              "example": "imgs/workflow-style-premium.png"
             },
             {
               "value": "极简白底、清晰产品轮廓",
-              "label": "极简白底"
+              "label": "极简白底",
+              "example": "imgs/workflow-style-minimal-white.png"
             },
             {
               "value": "年轻潮流、强对比色、社媒感",
-              "label": "年轻潮流"
+              "label": "年轻潮流",
+              "example": "imgs/workflow-style-youth-trend.png"
             },
             {
               "value": "科技感、冷色调、精密质感",
-              "label": "科技感"
+              "label": "科技感",
+              "example": "imgs/workflow-style-tech.png"
             },
             {
               "value": "温暖生活方式、自然光、真实场景",
-              "label": "生活方式"
+              "label": "生活方式",
+              "example": "imgs/workflow-style-lifestyle.png"
             },
             {
               "value": "跨境电商、干净排版、英文卖点",
-              "label": "跨境电商"
+              "label": "跨境电商",
+              "example": "imgs/workflow-style-cross-border.png"
             },
             {
               "value": "国潮复古、中式元素、经典配色",
-              "label": "国潮复古"
+              "label": "国潮复古",
+              "example": "imgs/workflow-style-chinese-retro.png"
             },
             {
               "value": "活泼童趣、明亮色彩、可爱插画感",
-              "label": "活泼童趣"
+              "label": "活泼童趣",
+              "example": "imgs/workflow-style-playful-kids.png"
             }
           ]
         },
@@ -203,197 +226,240 @@
         {
           "id": "white_bg_main",
           "kind": "image",
+          "template_type": "main",
           "title": "主图 · 产品白底图",
           "prompt": "生成电商主图：产品白底图。画面比例 1:1，产品居中，占画面主体，背景纯净，边缘清晰，适合{{field \"platform\"}}商品主图。文案语言：{{field \"copy_language\"}}。受众：{{field \"audience\"}}。商品信息：\n{{field \"product_brief\"}}\n卖点提炼：\n{{stepText \"brief\"}}\n{{with field \"visual_style\"}}视觉风格：{{.}}\n{{end}}",
           "count": "1",
           "size": "{{commerceSize (field \"image_resolution\") \"main\"}}",
-          "use_references": true
+          "use_references": true,
+          "example": "imgs/workflow-main-white-bg.png"
         },
         {
           "id": "hero_main",
           "kind": "image",
+          "template_type": "main",
           "title": "主图 · 首屏主视觉",
           "prompt": "生成电商主图：首屏主视觉。画面比例 1:1，突出第一眼点击欲望和核心购买理由，适合{{field \"platform\"}}列表或首屏。文案语言：{{field \"copy_language\"}}。受众：{{field \"audience\"}}。商品信息：\n{{field \"product_brief\"}}\n卖点提炼：\n{{stepText \"brief\"}}\n{{with field \"visual_style\"}}视觉风格：{{.}}\n{{end}}",
           "count": "1",
           "size": "{{commerceSize (field \"image_resolution\") \"main\"}}",
-          "use_references": true
+          "use_references": true,
+          "example": "imgs/workflow-main-hero.png"
         },
         {
           "id": "scene_main",
           "kind": "image",
+          "template_type": "main",
           "title": "主图 · 场景展示",
           "prompt": "生成电商主图：场景展示。画面比例 1:1，将商品自然放入真实使用场景，突出适用环境、生活方式和购买联想，适合{{field \"platform\"}}商品主图。文案语言：{{field \"copy_language\"}}。受众：{{field \"audience\"}}。商品信息：\n{{field \"product_brief\"}}\n卖点提炼：\n{{stepText \"brief\"}}\n{{with field \"visual_style\"}}视觉风格：{{.}}\n{{end}}",
           "count": "1",
           "size": "{{commerceSize (field \"image_resolution\") \"main\"}}",
-          "use_references": true
+          "use_references": true,
+          "example": "imgs/workflow-main-scene.png"
         },
         {
           "id": "detail_closeup_main",
           "kind": "image",
+          "template_type": "main",
           "title": "主图 · 细节特写",
           "prompt": "生成电商主图：细节特写。画面比例 1:1，用清晰近景突出商品材质、纹理、结构、工艺或关键部位，让用户快速感知品质和差异点。平台：{{field \"platform\"}}。文案语言：{{field \"copy_language\"}}。受众：{{field \"audience\"}}。商品信息：\n{{field \"product_brief\"}}\n卖点提炼：\n{{stepText \"brief\"}}\n{{with field \"visual_style\"}}视觉风格：{{.}}\n{{end}}",
           "count": "1",
           "size": "{{commerceSize (field \"image_resolution\") \"main\"}}",
-          "use_references": true
+          "use_references": true,
+          "example": "imgs/workflow-main-closeup.png"
         },
         {
           "id": "core_selling_point_main",
           "kind": "image",
+          "template_type": "main",
           "title": "主图 · 核心卖点",
           "prompt": "生成电商主图：核心卖点。画面比例 1:1，围绕最重要的购买理由组织画面和短文案，突出商品差异、结果收益和点击转化。平台：{{field \"platform\"}}。文案语言：{{field \"copy_language\"}}。受众：{{field \"audience\"}}。商品信息：\n{{field \"product_brief\"}}\n卖点提炼：\n{{stepText \"brief\"}}\n{{with field \"visual_style\"}}视觉风格：{{.}}\n{{end}}",
           "count": "1",
           "size": "{{commerceSize (field \"image_resolution\") \"main\"}}",
-          "use_references": true
+          "use_references": true,
+          "example": "imgs/workflow-main-selling-point.png"
         },
         {
           "id": "selling_points_overview",
           "kind": "image",
+          "template_type": "detail",
           "title": "详情图 · 卖点总览",
           "prompt": "生成电商详情图：卖点总览。画面比例 3:4，用清晰分区汇总 3-5 个核心卖点，建立商品价值认知，信息层级明确。平台：{{field \"platform\"}}。文案语言：{{field \"copy_language\"}}。受众：{{field \"audience\"}}。商品信息：\n{{field \"product_brief\"}}\n卖点提炼：\n{{stepText \"brief\"}}\n{{with field \"visual_style\"}}视觉风格：{{.}}\n{{end}}",
           "count": "1",
           "size": "{{commerceSize (field \"image_resolution\") \"detail\"}}",
-          "use_references": true
+          "use_references": true,
+          "example": "imgs/workflow-detail-selling-points-overview.png"
         },
         {
           "id": "use_scene_detail",
           "kind": "image",
+          "template_type": "detail",
           "title": "详情图 · 使用场景",
           "prompt": "生成电商详情图：使用场景。画面比例 3:4，展示商品在典型场景中的使用方式、适用人群和场景收益，让用户代入真实需求。平台：{{field \"platform\"}}。文案语言：{{field \"copy_language\"}}。受众：{{field \"audience\"}}。商品信息：\n{{field \"product_brief\"}}\n卖点提炼：\n{{stepText \"brief\"}}\n{{with field \"visual_style\"}}视觉风格：{{.}}\n{{end}}",
           "count": "1",
           "size": "{{commerceSize (field \"image_resolution\") \"detail\"}}",
-          "use_references": true
+          "use_references": true,
+          "example": "imgs/workflow-detail-use-scene.png"
         },
         {
           "id": "pain_point_detail",
           "kind": "image",
+          "template_type": "detail",
           "title": "详情图 · 痛点挖掘",
           "prompt": "生成电商详情图：痛点挖掘。画面比例 3:4，从用户常见困扰、旧方案不足或购买顾虑切入，再自然引出商品解决方案，表达真实、克制、有转化导向。平台：{{field \"platform\"}}。文案语言：{{field \"copy_language\"}}。受众：{{field \"audience\"}}。商品信息：\n{{field \"product_brief\"}}\n卖点提炼：\n{{stepText \"brief\"}}\n{{with field \"visual_style\"}}视觉风格：{{.}}\n{{end}}",
           "count": "1",
           "size": "{{commerceSize (field \"image_resolution\") \"detail\"}}",
-          "use_references": true
+          "use_references": true,
+          "example": "imgs/workflow-detail-pain-point.png"
         },
         {
           "id": "promotion_detail",
           "kind": "image",
+          "template_type": "detail",
           "title": "详情图 · 活动促销",
           "prompt": "生成电商详情图：活动促销。画面比例 3:4，突出限时优惠、组合权益、赠品、折扣或下单理由，营造明确行动感，同时保持平台视觉规范。平台：{{field \"platform\"}}。文案语言：{{field \"copy_language\"}}。受众：{{field \"audience\"}}。商品信息：\n{{field \"product_brief\"}}\n卖点提炼：\n{{stepText \"brief\"}}\n{{with field \"visual_style\"}}视觉风格：{{.}}\n{{end}}",
           "count": "1",
           "size": "{{commerceSize (field \"image_resolution\") \"detail\"}}",
-          "use_references": true
+          "use_references": true,
+          "example": "imgs/workflow-detail-promotion.png"
         },
         {
           "id": "multi_angle",
           "kind": "image",
+          "template_type": "detail",
           "title": "详情图 · 多角度展示",
           "prompt": "生成电商详情图：多角度展示。画面比例 3:4，用清晰分区展示产品正面、侧面、背面或局部角度，强调真实结构和质感。平台：{{field \"platform\"}}。文案语言：{{field \"copy_language\"}}。受众：{{field \"audience\"}}。商品信息：\n{{field \"product_brief\"}}\n卖点提炼：\n{{stepText \"brief\"}}\n{{with field \"visual_style\"}}视觉风格：{{.}}\n{{end}}",
           "count": "1",
           "size": "{{commerceSize (field \"image_resolution\") \"detail\"}}",
-          "use_references": true
+          "use_references": true,
+          "example": "imgs/workflow-detail-multi-angle.png"
         },
         {
           "id": "specs",
           "kind": "image",
+          "template_type": "detail",
           "title": "详情图 · 规格参数",
           "prompt": "生成电商详情图：规格参数。画面比例 3:4，排版清晰，展示尺寸、材质、容量、型号或关键参数，信息层级明确。平台：{{field \"platform\"}}。文案语言：{{field \"copy_language\"}}。商品信息：\n{{field \"product_brief\"}}\n卖点提炼：\n{{stepText \"brief\"}}\n{{with field \"visual_style\"}}视觉风格：{{.}}\n{{end}}",
           "count": "1",
           "size": "{{commerceSize (field \"image_resolution\") \"detail\"}}",
-          "use_references": true
+          "use_references": true,
+          "example": "imgs/workflow-detail-specs.png"
         },
         {
           "id": "effect_compare",
           "kind": "image",
+          "template_type": "detail",
           "title": "详情图 · 效果对比",
           "prompt": "生成电商详情图：效果对比。画面比例 3:4，用对比结构呈现使用前后、普通方案和本商品方案的差异，转化导向明确。平台：{{field \"platform\"}}。文案语言：{{field \"copy_language\"}}。受众：{{field \"audience\"}}。商品信息：\n{{field \"product_brief\"}}\n卖点提炼：\n{{stepText \"brief\"}}\n{{with field \"visual_style\"}}视觉风格：{{.}}\n{{end}}",
           "count": "1",
           "size": "{{commerceSize (field \"image_resolution\") \"detail\"}}",
-          "use_references": true
+          "use_references": true,
+          "example": "imgs/workflow-detail-effect-compare.png"
         },
         {
           "id": "craft",
           "kind": "image",
+          "template_type": "detail",
           "title": "详情图 · 工艺制作图",
           "prompt": "生成电商详情图：工艺制作图。画面比例 3:4，展示材质、工艺、制作流程或细节放大，强调品质可信度。平台：{{field \"platform\"}}。文案语言：{{field \"copy_language\"}}。商品信息：\n{{field \"product_brief\"}}\n卖点提炼：\n{{stepText \"brief\"}}\n{{with field \"visual_style\"}}视觉风格：{{.}}\n{{end}}",
           "count": "1",
           "size": "{{commerceSize (field \"image_resolution\") \"detail\"}}",
-          "use_references": true
+          "use_references": true,
+          "example": "imgs/workflow-detail-craft.png"
         },
         {
           "id": "accessories",
           "kind": "image",
+          "template_type": "detail",
           "title": "详情图 · 配件赠品",
           "prompt": "生成电商详情图：配件赠品。画面比例 3:4，清楚展示包装内含物、配件、赠品和数量关系，画面整洁可信。平台：{{field \"platform\"}}。文案语言：{{field \"copy_language\"}}。商品信息：\n{{field \"product_brief\"}}\n卖点提炼：\n{{stepText \"brief\"}}\n{{with field \"visual_style\"}}视觉风格：{{.}}\n{{end}}",
           "count": "1",
           "size": "{{commerceSize (field \"image_resolution\") \"detail\"}}",
-          "use_references": true
+          "use_references": true,
+          "example": "imgs/workflow-detail-accessories.png"
         },
         {
           "id": "series",
           "kind": "image",
+          "template_type": "detail",
           "title": "详情图 · 系列展示图",
           "prompt": "生成电商详情图：系列展示图。画面比例 3:4，展示多规格、多颜色、多款式或系列组合，统一视觉秩序。平台：{{field \"platform\"}}。文案语言：{{field \"copy_language\"}}。商品信息：\n{{field \"product_brief\"}}\n卖点提炼：\n{{stepText \"brief\"}}\n{{with field \"visual_style\"}}视觉风格：{{.}}\n{{end}}",
           "count": "1",
           "size": "{{commerceSize (field \"image_resolution\") \"detail\"}}",
-          "use_references": true
+          "use_references": true,
+          "example": "imgs/workflow-detail-series.png"
         },
         {
           "id": "package",
           "kind": "image",
+          "template_type": "detail",
           "title": "详情图 · 包装展示图",
           "prompt": "生成电商详情图：包装展示图。画面比例 3:4，展示外包装、开箱内容、包装质感和送礼属性。平台：{{field \"platform\"}}。文案语言：{{field \"copy_language\"}}。商品信息：\n{{field \"product_brief\"}}\n卖点提炼：\n{{stepText \"brief\"}}\n{{with field \"visual_style\"}}视觉风格：{{.}}\n{{end}}",
           "count": "1",
           "size": "{{commerceSize (field \"image_resolution\") \"detail\"}}",
-          "use_references": true
+          "use_references": true,
+          "example": "imgs/workflow-detail-package.png"
         },
         {
           "id": "ingredients",
           "kind": "image",
+          "template_type": "detail",
           "title": "详情图 · 商品成分图",
           "prompt": "生成电商详情图：商品成分图。画面比例 3:4，适合展示成分、材质构成、配方或核心模块，表达专业、清晰、可信。平台：{{field \"platform\"}}。文案语言：{{field \"copy_language\"}}。商品信息：\n{{field \"product_brief\"}}\n卖点提炼：\n{{stepText \"brief\"}}\n{{with field \"visual_style\"}}视觉风格：{{.}}\n{{end}}",
           "count": "1",
           "size": "{{commerceSize (field \"image_resolution\") \"detail\"}}",
-          "use_references": true
+          "use_references": true,
+          "example": "imgs/workflow-detail-ingredients.png"
         },
         {
           "id": "service",
           "kind": "image",
+          "template_type": "detail",
           "title": "详情图 · 售后保障图",
           "prompt": "生成电商详情图：售后保障图。画面比例 3:4，呈现质保、退换、客服、配送或服务承诺，风格可靠克制。平台：{{field \"platform\"}}。文案语言：{{field \"copy_language\"}}。商品信息：\n{{field \"product_brief\"}}\n卖点提炼：\n{{stepText \"brief\"}}\n{{with field \"visual_style\"}}视觉风格：{{.}}\n{{end}}",
           "count": "1",
           "size": "{{commerceSize (field \"image_resolution\") \"detail\"}}",
-          "use_references": true
+          "use_references": true,
+          "example": "imgs/workflow-detail-service.png"
         },
         {
           "id": "usage_advice",
           "kind": "image",
+          "template_type": "detail",
           "title": "详情图 · 使用建议图",
           "prompt": "生成电商详情图：使用建议图。画面比例 3:4，展示使用步骤、适用场景、注意事项或搭配建议，让用户快速理解怎么用。平台：{{field \"platform\"}}。文案语言：{{field \"copy_language\"}}。受众：{{field \"audience\"}}。商品信息：\n{{field \"product_brief\"}}\n卖点提炼：\n{{stepText \"brief\"}}\n{{with field \"visual_style\"}}视觉风格：{{.}}\n{{end}}",
           "count": "1",
           "size": "{{commerceSize (field \"image_resolution\") \"detail\"}}",
-          "use_references": true
+          "use_references": true,
+          "example": "imgs/workflow-detail-usage-advice.png"
         },
         {
           "id": "brand_story",
           "kind": "image",
+          "template_type": "detail",
           "title": "详情图 · 品牌故事图",
           "prompt": "生成电商详情图：品牌故事图。画面比例 3:4，表达品牌理念、产地、研发背景或品质主张，避免空泛，用视觉建立信任。平台：{{field \"platform\"}}。文案语言：{{field \"copy_language\"}}。商品信息：\n{{field \"product_brief\"}}\n卖点提炼：\n{{stepText \"brief\"}}\n{{with field \"visual_style\"}}视觉风格：{{.}}\n{{end}}",
           "count": "1",
           "size": "{{commerceSize (field \"image_resolution\") \"detail\"}}",
-          "use_references": true
+          "use_references": true,
+          "example": "imgs/workflow-detail-brand-story.png"
         },
         {
           "id": "buyer_show",
           "kind": "image",
+          "template_type": "detail",
           "title": "详情图 · 买家秀图",
           "prompt": "生成电商详情图：买家秀图。画面比例 3:4，模拟真实买家使用或展示商品的自然场景，真实、可信、有生活感，符合{{field \"audience\"}}审美。平台：{{field \"platform\"}}。文案语言：{{field \"copy_language\"}}。商品信息：\n{{field \"product_brief\"}}\n卖点提炼：\n{{stepText \"brief\"}}\n{{with field \"visual_style\"}}视觉风格：{{.}}\n{{end}}",
           "count": "1",
           "size": "{{commerceSize (field \"image_resolution\") \"detail\"}}",
-          "use_references": true
+          "use_references": true,
+          "example": "imgs/workflow-detail-buyer-show.png"
         }
       ]
     },
     {
       "id": "social-commerce",
       "name": "图文带货",
+      "icon": "message-square-text",
       "description": "生成带货文案和配图，适合小红书、抖音图文和投放种草。",
       "inputs": [
         {
@@ -441,10 +507,12 @@
         {
           "id": "images",
           "kind": "image",
+          "template_type": "main",
           "title": "生成配图",
           "prompt": "根据以下商品信息和文案生成图文带货配图，要求真实、清晰、适合社媒传播。商品信息：\n{{field \"product_brief\"}}\n文案：\n{{stepText \"copy\"}}\n{{with field \"visual_style\"}}视觉风格：{{.}}\n{{end}}",
           "count": "{{field \"image_count\"}}",
-          "use_references": true
+          "use_references": true,
+          "example": "imgs/workflow-main-scene.png"
         }
       ]
     }
