@@ -51,6 +51,11 @@ function renderSubscriptions(subscriptions) {
 }
 
 function renderBalance(usage) {
+  window.KuaimaAccount = Object.assign({}, window.KuaimaAccount || {}, {
+    usage,
+    group: String(usage && usage.group || "default").toLowerCase(),
+  });
+  window.dispatchEvent(new CustomEvent("kuaima:account", { detail: window.KuaimaAccount }));
   const subscriptions = usage.subscriptions || [];
   const active = activeSubscription(subscriptions);
   $("#balanceTopLabel").textContent = active ? "当前套餐" : "可用token";
@@ -72,6 +77,14 @@ function renderBalance(usage) {
   $("#usageProgressAvailableLabel").textContent = "可用 " + availablePercent.toFixed(0) + "%";
   $("#usageProgressUsedLabel").textContent = "已用 " + usedPercent.toFixed(0) + "%";
 }
+
+window.KuaimaBilling = Object.assign({}, window.KuaimaBilling || {}, {
+  openPlans() {
+    setBillingOpen(true);
+    setRechargeTab("plan");
+    loadRechargeInfo();
+  },
+});
 
 async function loadBalance() {
   try {

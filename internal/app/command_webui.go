@@ -618,8 +618,11 @@ func (s *webUIServer) handleGenerateWithImageEndpoint(ctx context.Context, c *cl
 	return &combined, nil
 }
 
-func (s *webUIServer) handleGenerateWithImageEndpointStream(ctx context.Context, c *client, opts imageOptions, imageModel, prompt string, refs []imageRef, mask *imageRef, stream *webUIEventStream, onImage func(imageCandidate) error) (*responsePayload, error) {
+func (s *webUIServer) handleGenerateWithImageEndpointStream(ctx context.Context, c *client, opts imageOptions, imageModel, prompt string, refs []imageRef, mask *imageRef, stream *webUIEventStream, onImage func(imageCandidate) error, maxConcurrency ...int) (*responsePayload, error) {
 	runCount := opts.responseRunCount()
+	if workflowConcurrencyLimit(maxConcurrency...) > 1 && runCount > 1 {
+		return s.handleGenerateWithImageEndpointConcurrent(ctx, c, opts, imageModel, prompt, refs, mask, stream, onImage, workflowConcurrencyLimit(maxConcurrency...))
+	}
 	var combined responsePayload
 	var texts []string
 	for i := 0; i < runCount; i++ {
@@ -653,7 +656,7 @@ func (s *webUIServer) handleGenerateWithImageEndpointStream(ctx context.Context,
 	return &combined, nil
 }
 
-func (s *webUIServer) handleGenerateWithResponsesStream(ctx context.Context, c *client, opts imageOptions, imageModel, prompt string, refs []imageRef, mask *imageRef, stream *webUIEventStream, onImage func(imageCandidate) error) (*responsePayload, error) {
+func (s *webUIServer) handleGenerateWithResponsesStream(ctx context.Context, c *client, opts imageOptions, imageModel, prompt string, refs []imageRef, mask *imageRef, stream *webUIEventStream, onImage func(imageCandidate) error, maxConcurrency ...int) (*responsePayload, error) {
 	tool := opts.responseTool()
 	imageModel = strings.TrimSpace(imageModel)
 	addAutoString(tool, "model", &imageModel)
@@ -665,6 +668,9 @@ func (s *webUIServer) handleGenerateWithResponsesStream(ctx context.Context, c *
 		Reasoning: defaultImageReasoning,
 	}
 	runCount := opts.responseRunCount()
+	if workflowConcurrencyLimit(maxConcurrency...) > 1 && runCount > 1 {
+		return s.handleGenerateWithResponsesConcurrent(ctx, c, req, runCount, stream, onImage, workflowConcurrencyLimit(maxConcurrency...))
+	}
 	var combined responsePayload
 	var texts []string
 	for i := 0; i < runCount; i++ {
@@ -687,7 +693,7 @@ func (s *webUIServer) handleGenerateWithResponsesStream(ctx context.Context, c *
 	return &combined, nil
 }
 
-func (s *webUIServer) handleGenerateWithResponses(ctx context.Context, c *client, opts imageOptions, imageModel, prompt string, refs []imageRef, mask *imageRef, saveDir string) ([]string, string, error) {
+func (s *webUIServer) handleGenerateWithResponses(ctx context.Context, c *client, opts imageOptions, imageModel, prompt string, refs []imageRef, mask *imageRef, saveDir string, maxConcurrency ...int) ([]string, string, error) {
 	tool := opts.responseTool()
 	imageModel = strings.TrimSpace(imageModel)
 	addAutoString(tool, "model", &imageModel)
@@ -699,6 +705,17 @@ func (s *webUIServer) handleGenerateWithResponses(ctx context.Context, c *client
 		Reasoning: defaultImageReasoning,
 	}
 	runCount := opts.responseRunCount()
+	if workflowConcurrencyLimit(maxConcurrency...) > 1 && runCount > 1 {
+		resp, err := s.handleGenerateWithResponsesConcurrent(ctx, c, req, runCount, nil, nil, workflowConcurrencyLimit(maxConcurrency...))
+		if err != nil {
+			return nil, "", err
+		}
+		saved, err := saveImagesFromResponse(ctx, c.httpClient, resp, saveDir)
+		if err != nil {
+			return saved, strings.TrimSpace(resp.OutputText), err
+		}
+		return saved, strings.TrimSpace(resp.OutputText), nil
+	}
 	var saved []string
 	var texts []string
 	for i := 0; i < runCount; i++ {
@@ -716,6 +733,108 @@ func (s *webUIServer) handleGenerateWithResponses(ctx context.Context, c *client
 		}
 	}
 	return saved, strings.Join(texts, "\n\n"), nil
+}
+
+func (s *webUIServer) handleGenerateWithImageEndpointConcurrent(ctx context.Context, c *client, opts imageOptions, imageModel, prompt string, refs []imageRef, mask *imageRef, stream *webUIEventStream, onImage func(imageCandidate) error, maxConcurrency int) (*responsePayload, error) {
+	runCount := opts.responseRunCount()
+	return runConcurrentImageResponses(ctx, runCount, maxConcurrency, stream, func(ctx context.Context) (*responsePayload, error) {
+		if len(refs) == 0 {
+			req := opts.generationRequest(imageModel, prompt)
+			req.N = 1
+			return c.createImageGeneration(ctx, req)
+		}
+		req := opts.editRequest(imageModel, prompt, refs, mask)
+		req.N = 1
+		req.FileFormat = s.fileFormat
+		return c.createImageEdit(ctx, req)
+	}, onImage)
+}
+
+func (s *webUIServer) handleGenerateWithResponsesConcurrent(ctx context.Context, c *client, req responseRequest, runCount int, stream *webUIEventStream, onImage func(imageCandidate) error, maxConcurrency int) (*responsePayload, error) {
+	return runConcurrentImageResponses(ctx, runCount, maxConcurrency, stream, func(ctx context.Context) (*responsePayload, error) {
+		return c.createResponse(ctx, req)
+	}, onImage)
+}
+
+func runConcurrentImageResponses(ctx context.Context, runCount, maxConcurrency int, stream *webUIEventStream, run func(context.Context) (*responsePayload, error), onImage func(imageCandidate) error) (*responsePayload, error) {
+	if maxConcurrency < 1 {
+		maxConcurrency = 1
+	}
+	if maxConcurrency > runCount {
+		maxConcurrency = runCount
+	}
+	type item struct {
+		resp *responsePayload
+		err  error
+	}
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	jobs := make(chan int)
+	results := make(chan item, runCount)
+	var wg sync.WaitGroup
+	for i := 0; i < maxConcurrency; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for range jobs {
+				resp, err := run(ctx)
+				if err != nil {
+					cancel()
+				}
+				results <- item{resp: resp, err: err}
+			}
+		}()
+	}
+	go func() {
+		defer close(jobs)
+		for i := 0; i < runCount; i++ {
+			select {
+			case <-ctx.Done():
+				return
+			case jobs <- i:
+			}
+		}
+	}()
+	go func() {
+		wg.Wait()
+		close(results)
+	}()
+
+	var combined responsePayload
+	var texts []string
+	completed := 0
+	for item := range results {
+		completed++
+		if stream != nil && runCount > 1 {
+			stream.send("status", map[string]string{"message": fmt.Sprintf("已生成 %d/%d 张...", completed, runCount)})
+		}
+		if item.err != nil {
+			return &combined, item.err
+		}
+		if item.resp == nil {
+			continue
+		}
+		combined.Output = append(combined.Output, item.resp.Output...)
+		if text := strings.TrimSpace(item.resp.OutputText); text != "" {
+			texts = append(texts, text)
+		}
+		if onImage != nil {
+			for _, candidate := range imageCandidates(item.resp) {
+				if err := onImage(candidate); err != nil {
+					return &combined, err
+				}
+			}
+		}
+	}
+	combined.OutputText = strings.Join(texts, "\n\n")
+	return &combined, nil
+}
+
+func workflowConcurrencyLimit(values ...int) int {
+	if len(values) == 0 || values[0] < 1 {
+		return 1
+	}
+	return values[0]
 }
 
 func addResponseImageMask(tool map[string]any, mask *imageRef) {
@@ -1226,11 +1345,29 @@ func formatWebUsage(usage *tokenUsage) map[string]any {
 	}
 	return map[string]any{
 		"name":                 usage.Name,
+		"group":                strings.ToLower(strings.TrimSpace(usage.Group)),
 		"total_available":      usage.TotalAvailable,
 		"total_available_text": formatQuotaAmount(usage.TotalAvailable),
 		"total_used":           usage.TotalUsed,
 		"total_used_text":      formatQuotaAmount(usage.TotalUsed),
 		"subscriptions":        subs,
+	}
+}
+
+func (s *webUIServer) workflowMaxConcurrency(ctx context.Context, c *client) int {
+	group := ""
+	if c != nil {
+		if usage, err := c.getTokenUsage(ctx); err == nil && usage != nil {
+			group = usage.Group
+		}
+	}
+	switch strings.ToLower(strings.TrimSpace(group)) {
+	case "svip":
+		return 10
+	case "vip":
+		return 3
+	default:
+		return 1
 	}
 }
 
@@ -1283,6 +1420,7 @@ func writeError(w http.ResponseWriter, status int, message string) {
 type webUIEventStream struct {
 	w       http.ResponseWriter
 	flusher http.Flusher
+	mu      sync.Mutex
 }
 
 func newWebUIEventStream(w http.ResponseWriter) *webUIEventStream {
@@ -1299,6 +1437,8 @@ func (s *webUIEventStream) send(event string, value any) {
 	if s == nil {
 		return
 	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	data, err := json.Marshal(value)
 	if err != nil {
 		data = []byte(`{"error":"failed to encode stream event"}`)

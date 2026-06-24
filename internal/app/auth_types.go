@@ -11,6 +11,7 @@ type userLoginResponse struct {
 type tokenUsage struct {
 	Object         string              `json:"object"`
 	Name           string              `json:"name"`
+	Group          string              `json:"group"` //用户身份 default, vip, svip
 	Subscriptions  []tokenSubscription `json:"subscriptions"`
 	TotalGranted   int64               `json:"total_granted"`
 	TotalUsed      int64               `json:"total_used"`

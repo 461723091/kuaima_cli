@@ -5,6 +5,8 @@
     cache: readWorkflowCache(),
     activeStepId: "",
     pendingReview: null,
+    lastResult: null,
+    accountGroup: "default",
     runStartedAt: 0,
     progressTimer: 0,
   };
@@ -440,19 +442,66 @@
     if (!container) {
       return;
     }
-    if (!def || String(def.id || "") === "single" || !workflowNeedsReview(def)) {
+    if (!def || String(def.id || "") === "single") {
       container.hidden = true;
       container.innerHTML = "";
       return;
     }
+    const needsReview = workflowNeedsReview(def);
     const checked = state.cache.skipReview === true ? " checked" : "";
+    const group = workflowAccountGroup();
+    const concurrency = workflowConcurrencyForGroup(group);
+    const selectedCount = currentWorkflowTemplateIDs().length || workflowDefaultTemplateIDs(def).length;
+    const next = workflowNextPlan(group);
     container.hidden = false;
     container.innerHTML =
-      '<label class="workflow-run-toggle">' +
+      '<div class="workflow-speed-panel">' +
+      '<div class="workflow-speed-main">' +
+      '<span class="workflow-speed-icon">' + iconHTML("zap") + '</span>' +
+      '<div><strong>' + esc(workflowGroupLabel(group)) + ' · 同时生成 ' + esc(concurrency) + ' 张</strong>' +
+      '<small>本次选择 ' + esc(selectedCount) + ' 张，' + esc(workflowSpeedHint(group, selectedCount)) + '</small></div>' +
+      '</div>' +
+      (next ? '<button class="btn small primary" type="button" data-workflow-upgrade>' +
+        iconHTML("badge-plus") + '<span>升级到' + esc(next.label) + '</span></button>' : "") +
+      '</div>' +
+      (needsReview ? '<label class="workflow-run-toggle">' +
       '<input id="workflowAutoRun" type="checkbox"' + checked + '>' +
       '<span class="workflow-run-toggle-box">' + iconHTML("fast-forward") + '</span>' +
       '<span><strong>无需确认一键运行</strong><small>文案步骤完成后自动继续生成图片</small></span>' +
-      '</label>';
+      '</label>' : "");
+  }
+
+  function workflowAccountGroup() {
+    const value = String(state.accountGroup || (window.KuaimaAccount && window.KuaimaAccount.group) || "default").toLowerCase();
+    return value === "svip" || value === "vip" ? value : "default";
+  }
+
+  function workflowConcurrencyForGroup(group) {
+    return group === "svip" ? 10 : group === "vip" ? 3 : 1;
+  }
+
+  function workflowGroupLabel(group) {
+    return group === "svip" ? "SVIP" : group === "vip" ? "VIP" : "普通用户";
+  }
+
+  function workflowNextPlan(group) {
+    if (group === "svip") {
+      return null;
+    }
+    return group === "vip" ? { group: "svip", label: "SVIP" } : { group: "vip", label: "VIP" };
+  }
+
+  function workflowSpeedHint(group, selectedCount) {
+    const current = workflowConcurrencyForGroup(group);
+    const vip = Math.min(3, Math.max(1, selectedCount));
+    const svip = Math.min(10, Math.max(1, selectedCount));
+    if (group === "svip") {
+      return selectedCount > current ? "将分批并发完成" : "可一次并发完成";
+    }
+    if (group === "vip") {
+      return "SVIP 可同时生成 " + svip + " 张";
+    }
+    return "VIP 可同时生成 " + vip + " 张，SVIP 可同时生成 " + svip + " 张";
   }
 
   function workflowDefaultTemplateIDs(def) {
@@ -492,6 +541,7 @@
         }
       });
       renderWorkflowTemplateSummary(def, finalValues);
+      renderWorkflowRunOptions(def);
     }
   }
 
@@ -693,11 +743,14 @@
       const text = String(step.text || "").trim();
       const status = String(step.status || "done");
       const duration = stepDurationMs(step);
+      const canRerun = status === "done" && String(step.id || "").trim();
       return '<section class="workflow-step ' + esc(status) + '">' +
         '<div class="workflow-step-head">' +
         '<div><strong>' + esc(step.title || step.id || "步骤") + "</strong>" +
         '<span class="workflow-step-sub">' + esc(step.kind || "") + '</span></div>' +
         '<div class="workflow-step-meta">' +
+        (canRerun ? '<button class="btn small workflow-step-rerun" type="button" title="重跑此步骤" data-workflow-rerun-step="' +
+          esc(step.id || "") + '">' + iconHTML("refresh-cw") + '<span>重跑</span></button>' : "") +
         '<span class="workflow-step-kind">' + esc(status === "running" ? "进行中" : status === "done" ? "完成" : status) + "</span>" +
         (duration == null ? "" : '<span class="workflow-step-duration">' + esc(formatWorkflowDuration(duration)) + '</span>') +
         '</div>' +
@@ -779,10 +832,11 @@
   async function generateWorkflowStream(form, signal, options = {}) {
     const workflowId = currentWorkflowId();
     const def = workflowDef(workflowId);
-    const result = { workflow_id: workflowId, workflow_name: workflowLabel(workflowId), prompt: "", params: {}, steps: [], images: [], saved: [], text: "", timing: null, needs_review: false, progress_total: workflowProgressTotal(def, options.mode) };
+    const result = { workflow_id: workflowId, workflow_name: workflowLabel(workflowId), prompt: "", params: {}, output_dir: "", steps: [], images: [], saved: [], text: "", timing: null, needs_review: false, progress_total: workflowProgressTotal(def, options.mode) };
     const startedAt = performance.now();
     let firstResponseAt = 0;
     let activeStep = null;
+    const stepsById = new Map();
     const markFirstResponse = () => {
       if (!firstResponseAt) {
         firstResponseAt = performance.now();
@@ -792,6 +846,17 @@
       if (activeStep && activeStep.status === "running") {
         activeStep.status = "done";
         activeStep.ended_at_ms = performance.now();
+      }
+    };
+    const finishStepById = (id) => {
+      const key = String(id || "").trim();
+      const step = key ? stepsById.get(key) : activeStep;
+      if (step && step.status === "running") {
+        step.status = "done";
+        step.ended_at_ms = performance.now();
+      }
+      if (activeStep === step) {
+        activeStep = null;
       }
     };
 
@@ -830,6 +895,14 @@
     if (stepTexts) {
       formData.set("workflow_step_texts", JSON.stringify(stepTexts));
     }
+    const stepId = String(options.stepId || "").trim();
+    if (stepId) {
+      formData.set("workflow_step_id", stepId);
+    }
+    const outputDir = String(options.outputDir || "").trim();
+    if (outputDir) {
+      formData.set("workflow_output_dir", outputDir);
+    }
     await apiStream("/api/workflow/run?stream=1", {
       method: "POST",
       body: formData,
@@ -840,9 +913,10 @@
       },
       step(payload) {
         markFirstResponse();
-        finishActiveStep();
-        activeStep = {
-          id: payload.id || "",
+        const id = String(payload.id || "");
+        const existing = id ? stepsById.get(id) : null;
+        activeStep = existing || {
+          id,
           kind: payload.kind || "",
           title: payload.title || "",
           text: "",
@@ -852,7 +926,23 @@
           started_at_ms: performance.now(),
           ended_at_ms: null,
         };
-        result.steps.push(activeStep);
+        activeStep.kind = payload.kind || activeStep.kind || "";
+        activeStep.title = payload.title || activeStep.title || "";
+        activeStep.status = "running";
+        if (!activeStep.started_at_ms) {
+          activeStep.started_at_ms = performance.now();
+        }
+        if (id) {
+          stepsById.set(id, activeStep);
+        }
+        if (!existing) {
+          result.steps.push(activeStep);
+        }
+        renderWorkflowSteps(result);
+      },
+      step_done(payload) {
+        markFirstResponse();
+        finishStepById(payload.id);
         renderWorkflowSteps(result);
       },
       text(payload) {
@@ -894,6 +984,7 @@
         result.workflow_name = payload.workflow_name || result.workflow_name;
         result.prompt = payload.prompt || "";
         result.params = Object.assign({}, currentWorkflowValues(), payload.params || {});
+        result.output_dir = payload.output_dir || result.output_dir || "";
         if (Array.isArray(payload.steps)) {
           const previousById = new Map(result.steps.map((step) => [String(step.id || ""), step]));
           result.steps = payload.steps.map((step) => {
@@ -910,6 +1001,7 @@
         result.text = payload.text || result.text;
         result.needs_review = Boolean(payload.needs_review);
         result.progress_total = Math.max(result.progress_total || 0, result.steps.length);
+        state.lastResult = result;
         renderWorkflowSteps(result);
         if (result.needs_review) {
           $("#gallery").classList.add("empty");
@@ -936,6 +1028,7 @@
     };
     renderWorkflowSteps(result);
     renderResultTiming(result.timing);
+    state.lastResult = result;
     return result;
   }
 
@@ -956,11 +1049,13 @@
       const result = await generateWorkflowStream(form, activeGenerationController.signal, options);
       if (result.needs_review) {
         state.pendingReview = result;
+        state.lastResult = result;
         $("#genStatus").textContent = "文案已生成，请确认后继续";
         $("#genStatus").className = "status gen-status";
         return result;
       }
       state.pendingReview = null;
+      state.lastResult = result;
       const historyError = await saveHistorySafely(result);
       $("#genStatus").textContent = "已保存" + result.saved.length + " 张" +
         (historyError ? "，历史保存失败：" + historyError : "");
@@ -1019,6 +1114,100 @@
       mode: "final",
       stepTexts,
     });
+  }
+
+  function workflowStepTextsFromResult(result, excludeStepId = "") {
+    const values = {};
+    const excluded = String(excludeStepId || "").trim();
+    const steps = Array.isArray(result && result.steps) ? result.steps : [];
+    steps.forEach((step) => {
+      const id = String(step.id || "").trim();
+      const text = String(step.text || "").trim();
+      if (id && id !== excluded && text) {
+        values[id] = text;
+      }
+    });
+    Object.assign(values, currentWorkflowReviewTexts());
+    if (excluded) {
+      delete values[excluded];
+    }
+    return values;
+  }
+
+  async function rerunWorkflowStep(stepId) {
+    stepId = String(stepId || "").trim();
+    const form = $("#genForm");
+    const previous = state.lastResult;
+    if (!form || !previous || !stepId) {
+      return;
+    }
+    const originalSteps = Array.isArray(previous.steps) ? previous.steps : [];
+    const stepIndex = originalSteps.findIndex((step) => String(step.id || "") === stepId);
+    if (stepIndex < 0) {
+      return;
+    }
+    updateSize();
+    syncImageInput();
+    saveSettings();
+    persistCurrentValues();
+    const button = workflowSteps() && workflowSteps().querySelector('[data-workflow-rerun-step="' + CSS.escape(stepId) + '"]');
+    if (button) {
+      button.disabled = true;
+      button.innerHTML = '<span class="spinner small"></span><span>重跑...</span>';
+    }
+    $("#genStatus").textContent = "正在重跑步骤...";
+    $("#genStatus").className = "status gen-status loading";
+    activeGenerationController = new AbortController();
+    try {
+      const rerun = await generateWorkflowStream(form, activeGenerationController.signal, {
+        mode: "final",
+        stepId,
+        outputDir: previous.output_dir || "",
+        stepTexts: workflowStepTextsFromResult(previous, stepId),
+      });
+      if (!rerun || !Array.isArray(rerun.steps) || rerun.steps.length === 0) {
+        return;
+      }
+      const nextSteps = originalSteps.slice();
+      const oldStep = originalSteps[stepIndex] || {};
+      const newStep = rerun.steps[0] || {};
+      const isImageStep = String(oldStep.kind || newStep.kind || "").toLowerCase() === "image";
+      const mergedStep = Object.assign({}, oldStep, newStep, { status: "done" });
+      if (isImageStep) {
+        mergedStep.images = Array.from(new Set([].concat(oldStep.images || [], newStep.images || [])));
+        mergedStep.saved = Array.from(new Set([].concat(oldStep.saved || [], newStep.saved || [])));
+      }
+      nextSteps[stepIndex] = mergedStep;
+      const merged = Object.assign({}, previous, {
+        steps: nextSteps,
+        images: nextSteps.flatMap((step) => Array.isArray(step.images) ? step.images : []),
+        saved: nextSteps.flatMap((step) => Array.isArray(step.saved) ? step.saved : []),
+        text: nextSteps.map((step) => String(step.text || "").trim()).filter(Boolean).join("\n\n"),
+        output_dir: rerun.output_dir || previous.output_dir || "",
+        needs_review: false,
+        timing: rerun.timing || previous.timing,
+      });
+      state.lastResult = merged;
+      state.pendingReview = null;
+      renderWorkflowSteps(merged);
+      renderGalleryImages(merged.images);
+      renderWorkflowReview(merged);
+      renderResultTiming(merged.timing);
+      const historyError = await saveHistorySafely(merged);
+      $("#genStatus").textContent = "步骤已重跑，已保存" + merged.saved.length + " 张" +
+        (historyError ? "，历史保存失败：" + historyError : "");
+      $("#genStatus").className = "status gen-status";
+      loadBalance();
+    } catch (error) {
+      handleOperationError(error, $("#genStatus"));
+    } finally {
+      activeGenerationController = null;
+      const cancelButton = $("#cancelGenerate");
+      if (cancelButton) {
+        cancelButton.hidden = true;
+      }
+      renderWorkflowSteps(state.lastResult || previous);
+    }
   }
 
   function restoreWorkflow(workflowId, values) {
@@ -1153,7 +1342,22 @@
         state.cache.skipReview = Boolean(input.checked);
         saveWorkflowCache();
       });
+      runOptions.addEventListener("click", (event) => {
+        const button = event.target.closest("[data-workflow-upgrade]");
+        if (!button) {
+          return;
+        }
+        event.preventDefault();
+        if (window.KuaimaBilling && typeof window.KuaimaBilling.openPlans === "function") {
+          window.KuaimaBilling.openPlans();
+        }
+      });
     }
+    window.addEventListener("kuaima:account", (event) => {
+      const group = event && event.detail && event.detail.group;
+      state.accountGroup = String(group || "default").toLowerCase();
+      renderWorkflowRunOptions(workflowDef(currentWorkflowId()) || { id: "single" });
+    });
     const review = workflowReview();
     if (review) {
       review.addEventListener("click", async (event) => {
@@ -1165,6 +1369,17 @@
           event.preventDefault();
           await continueWorkflowReview();
         }
+      });
+    }
+    const steps = workflowSteps();
+    if (steps) {
+      steps.addEventListener("click", async (event) => {
+        const button = event.target.closest("[data-workflow-rerun-step]");
+        if (!button) {
+          return;
+        }
+        event.preventDefault();
+        await rerunWorkflowStep(button.dataset.workflowRerunStep || "");
       });
     }
     const form = $("#genForm");

@@ -1,9 +1,16 @@
 package app
 
 import (
+	"context"
+	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
+	"path/filepath"
+	"strings"
+	"sync/atomic"
 	"testing"
+	"time"
 )
 
 func TestWorkflowNeedsReview(t *testing.T) {
@@ -63,6 +70,148 @@ func TestWorkflowTemplateStepTextOverride(t *testing.T) {
 	fn := workflowTemplateFuncMap(data)["stepText"].(func(string) string)
 	if got := fn("brief"); got != "edited copy" {
 		t.Fatalf("unexpected step text: %q", got)
+	}
+}
+
+func TestWorkflowOnlyStep(t *testing.T) {
+	steps := []workflowStepDefinition{
+		{ID: "brief", Kind: "response"},
+		{ID: "main", Kind: "image"},
+	}
+	got := workflowOnlyStep(steps, "MAIN")
+	if len(got) != 1 || got[0].ID != "main" {
+		t.Fatalf("unexpected filtered steps: %#v", got)
+	}
+	if got := workflowOnlyStep(steps, "missing"); len(got) != 0 {
+		t.Fatalf("expected no steps, got %#v", got)
+	}
+}
+
+func TestWorkflowRunSaveDirCreatesUniqueSubdirectories(t *testing.T) {
+	base := t.TempDir()
+	first, err := workflowRunSaveDir(base, "Product Pack", "")
+	if err != nil {
+		t.Fatalf("create first dir: %v", err)
+	}
+	second, err := workflowRunSaveDir(base, "Product Pack", "")
+	if err != nil {
+		t.Fatalf("create second dir: %v", err)
+	}
+	if first == second {
+		t.Fatalf("expected unique dirs, got %q", first)
+	}
+	if filepath.Dir(first) != base || filepath.Dir(second) != base {
+		t.Fatalf("expected dirs under %q, got %q and %q", base, first, second)
+	}
+	if !strings.Contains(filepath.Base(first), "product-pack") {
+		t.Fatalf("expected sanitized workflow id in %q", first)
+	}
+	if _, err := os.Stat(first); err != nil {
+		t.Fatalf("first dir not created: %v", err)
+	}
+	if _, err := os.Stat(second); err != nil {
+		t.Fatalf("second dir not created: %v", err)
+	}
+
+	reused, err := workflowRunSaveDir(base, "Product Pack", first)
+	if err != nil {
+		t.Fatalf("reuse dir: %v", err)
+	}
+	if reused != first {
+		t.Fatalf("expected reused dir %q, got %q", first, reused)
+	}
+	if _, err := workflowRunSaveDir(base, "Product Pack", filepath.Dir(base)); err == nil {
+		t.Fatal("expected outside directory to be rejected")
+	}
+}
+
+func TestWorkflowTextFileContentIncludesGeneratedAndOverrideText(t *testing.T) {
+	content := workflowTextFileContent(workflowRuntimeInput{
+		StepTexts: map[string]string{"copy": "edited copy"},
+	}, workflowRunResult{
+		WorkflowName: "Product Pack",
+		Prompt:       "brief",
+		Steps: []workflowStepResult{
+			{ID: "brief", Title: "Brief", Text: "generated brief"},
+			{ID: "image", Title: "Image"},
+		},
+	})
+	for _, want := range []string{"# Product Pack", "原始提示：", "brief", "## Brief", "generated brief", "## copy", "edited copy"} {
+		if !strings.Contains(content, want) {
+			t.Fatalf("expected %q in content:\n%s", want, content)
+		}
+	}
+}
+
+func TestWorkflowConcurrencyLimit(t *testing.T) {
+	if got := workflowConcurrencyLimit(); got != 1 {
+		t.Fatalf("default concurrency = %d", got)
+	}
+	if got := workflowConcurrencyLimit(0); got != 1 {
+		t.Fatalf("zero concurrency = %d", got)
+	}
+	if got := workflowConcurrencyLimit(3); got != 3 {
+		t.Fatalf("vip concurrency = %d", got)
+	}
+}
+
+func TestRunWorkflowRunsImageStepsConcurrently(t *testing.T) {
+	var active int32
+	var maxActive int32
+	var calls int32
+	apiServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/images/generations" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		current := atomic.AddInt32(&active, 1)
+		for {
+			seen := atomic.LoadInt32(&maxActive)
+			if current <= seen || atomic.CompareAndSwapInt32(&maxActive, seen, current) {
+				break
+			}
+		}
+		atomic.AddInt32(&calls, 1)
+		time.Sleep(50 * time.Millisecond)
+		atomic.AddInt32(&active, -1)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"resp_1","output":[{"type":"image_generation_call","status":"completed","result":"ZmFrZQ=="}],"output_text":""}`))
+	}))
+	defer apiServer.Close()
+
+	c := &client{
+		baseURL:    apiServer.URL,
+		apiKey:     "secret-token",
+		httpClient: apiServer.Client(),
+	}
+	ui := &webUIServer{fileFormat: fileFormatBase64}
+	count := 1
+	saveDir := t.TempDir()
+	result, err := ui.runWorkflow(context.Background(), c, workflowDefinition{
+		ID:   "concurrent",
+		Name: "Concurrent",
+		Steps: []workflowStepDefinition{
+			{ID: "one", Kind: "image", Title: "One", Prompt: "one", Endpoint: "image", Count: "1"},
+			{ID: "two", Kind: "image", Title: "Two", Prompt: "two", Endpoint: "image", Count: "1"},
+		},
+	}, workflowRuntimeInput{
+		BaseOptions:    imageOptions{count: &count},
+		ImageModel:     "test-image-model",
+		Endpoint:       "image",
+		SaveDir:        saveDir,
+		PublicSaveDir:  saveDir,
+		MaxConcurrency: 2,
+	}, nil)
+	if err != nil {
+		t.Fatalf("run workflow: %v", err)
+	}
+	if atomic.LoadInt32(&calls) < 2 {
+		t.Fatalf("expected at least 2 image requests, got %d", calls)
+	}
+	if atomic.LoadInt32(&maxActive) < 2 {
+		t.Fatalf("expected concurrent image requests, max active was %d", maxActive)
+	}
+	if len(result.Steps) != 2 || len(result.Images) != 2 {
+		t.Fatalf("unexpected workflow result: %#v", result)
 	}
 }
 

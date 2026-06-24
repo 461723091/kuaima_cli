@@ -6,10 +6,13 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
 	"text/template"
+	"time"
 )
 
 type workflowCatalogResponse struct {
@@ -81,6 +84,7 @@ type workflowRunResult struct {
 	WorkflowName string               `json:"workflow_name"`
 	Prompt       string               `json:"prompt"`
 	Params       map[string]string    `json:"params,omitempty"`
+	OutputDir    string               `json:"output_dir,omitempty"`
 	NeedsReview  bool                 `json:"needs_review,omitempty"`
 	Text         string               `json:"text,omitempty"`
 	Images       []string             `json:"images,omitempty"`
@@ -89,18 +93,21 @@ type workflowRunResult struct {
 }
 
 type workflowRuntimeInput struct {
-	Prompt        string
-	Params        map[string]string
-	SelectedSteps map[string]bool
-	StepTexts     map[string]string
-	Mode          string
-	References    []imageRef
-	Mask          *imageRef
-	BaseOptions   imageOptions
-	ImageModel    string
-	TextModel     string
-	Endpoint      string
-	SaveDir       string
+	Prompt         string
+	Params         map[string]string
+	SelectedSteps  map[string]bool
+	StepTexts      map[string]string
+	Mode           string
+	References     []imageRef
+	Mask           *imageRef
+	BaseOptions    imageOptions
+	ImageModel     string
+	TextModel      string
+	Endpoint       string
+	SaveDir        string
+	PublicSaveDir  string
+	StepID         string
+	MaxConcurrency int
 }
 
 type workflowTemplateData struct {
@@ -196,6 +203,8 @@ func (s *webUIServer) handleWorkflowRun(w http.ResponseWriter, r *http.Request) 
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	stepID := strings.TrimSpace(r.FormValue("workflow_step_id"))
+	outputDir := strings.TrimSpace(r.FormValue("workflow_output_dir"))
 	mode := strings.ToLower(strings.TrimSpace(r.FormValue("workflow_mode")))
 	baseOpts, err := s.imageOptionsFromForm(r)
 	if err != nil {
@@ -240,6 +249,12 @@ func (s *webUIServer) handleWorkflowRun(w http.ResponseWriter, r *http.Request) 
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	runSaveDir, err := workflowRunSaveDir(saveDir, workflow.ID, outputDir)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	maxConcurrency := s.workflowMaxConcurrency(r.Context(), c)
 	ctx := r.Context()
 	wantStream := strings.EqualFold(strings.TrimSpace(r.URL.Query().Get("stream")), "1") ||
 		strings.EqualFold(strings.TrimSpace(r.URL.Query().Get("stream")), "true") ||
@@ -249,18 +264,21 @@ func (s *webUIServer) handleWorkflowRun(w http.ResponseWriter, r *http.Request) 
 		stream := newWebUIEventStream(w)
 		selectedSteps := workflowSelectedStepsFromForm(r, workflow)
 		result, err := s.runWorkflow(ctx, c, workflow, workflowRuntimeInput{
-			Prompt:        prompt,
-			Params:        params,
-			SelectedSteps: selectedSteps,
-			StepTexts:     stepTexts,
-			Mode:          mode,
-			References:    refs,
-			Mask:          mask,
-			BaseOptions:   baseOpts,
-			ImageModel:    s.clientOpts.imageGenerationModel(),
-			TextModel:     strings.TrimSpace(*s.clientOpts.model),
-			Endpoint:      webUIImageEndpoint(r),
-			SaveDir:       saveDir,
+			Prompt:         prompt,
+			Params:         params,
+			SelectedSteps:  selectedSteps,
+			StepTexts:      stepTexts,
+			Mode:           mode,
+			References:     refs,
+			Mask:           mask,
+			BaseOptions:    baseOpts,
+			ImageModel:     s.clientOpts.imageGenerationModel(),
+			TextModel:      strings.TrimSpace(*s.clientOpts.model),
+			Endpoint:       webUIImageEndpoint(r),
+			SaveDir:        runSaveDir,
+			PublicSaveDir:  saveDir,
+			StepID:         stepID,
+			MaxConcurrency: maxConcurrency,
 		}, stream)
 		if err != nil {
 			stream.send("error", map[string]string{"error": err.Error()})
@@ -272,18 +290,21 @@ func (s *webUIServer) handleWorkflowRun(w http.ResponseWriter, r *http.Request) 
 
 	selectedSteps := workflowSelectedStepsFromForm(r, workflow)
 	result, err := s.runWorkflow(ctx, c, workflow, workflowRuntimeInput{
-		Prompt:        prompt,
-		Params:        params,
-		SelectedSteps: selectedSteps,
-		StepTexts:     stepTexts,
-		Mode:          mode,
-		References:    refs,
-		Mask:          mask,
-		BaseOptions:   baseOpts,
-		ImageModel:    s.clientOpts.imageGenerationModel(),
-		TextModel:     strings.TrimSpace(*s.clientOpts.model),
-		Endpoint:      webUIImageEndpoint(r),
-		SaveDir:       saveDir,
+		Prompt:         prompt,
+		Params:         params,
+		SelectedSteps:  selectedSteps,
+		StepTexts:      stepTexts,
+		Mode:           mode,
+		References:     refs,
+		Mask:           mask,
+		BaseOptions:    baseOpts,
+		ImageModel:     s.clientOpts.imageGenerationModel(),
+		TextModel:      strings.TrimSpace(*s.clientOpts.model),
+		Endpoint:       webUIImageEndpoint(r),
+		SaveDir:        runSaveDir,
+		PublicSaveDir:  saveDir,
+		StepID:         stepID,
+		MaxConcurrency: maxConcurrency,
 	}, nil)
 	if err != nil {
 		writeError(w, http.StatusBadGateway, err.Error())
@@ -294,6 +315,12 @@ func (s *webUIServer) handleWorkflowRun(w http.ResponseWriter, r *http.Request) 
 
 func (s *webUIServer) runWorkflow(ctx context.Context, c *client, workflow workflowDefinition, input workflowRuntimeInput, stream *webUIEventStream) (workflowRunResult, error) {
 	execSteps := workflowExecutableSteps(workflow, input.SelectedSteps)
+	if strings.TrimSpace(input.StepID) != "" {
+		execSteps = workflowOnlyStep(execSteps, input.StepID)
+		if len(execSteps) == 0 {
+			return workflowRunResult{}, fmt.Errorf("unknown workflow step: %s", input.StepID)
+		}
+	}
 	mode := strings.ToLower(strings.TrimSpace(input.Mode))
 	draft := mode == "draft"
 	if mode == "" && len(input.StepTexts) == 0 && workflowNeedsReview(workflow) {
@@ -304,7 +331,12 @@ func (s *webUIServer) runWorkflow(ctx context.Context, c *client, workflow workf
 		WorkflowName: workflow.Name,
 		Prompt:       input.Prompt,
 		Params:       input.Params,
+		OutputDir:    input.SaveDir,
 		Steps:        make([]workflowStepResult, 0, len(execSteps)),
+	}
+	publicSaveDir := strings.TrimSpace(input.PublicSaveDir)
+	if publicSaveDir == "" {
+		publicSaveDir = input.SaveDir
 	}
 	stepIndex := make(map[string]workflowStepResult, len(execSteps))
 	var textParts []string
@@ -313,7 +345,30 @@ func (s *webUIServer) runWorkflow(ctx context.Context, c *client, workflow workf
 		saver = newResponseImageSaver(ctx, c.httpClient, input.SaveDir)
 	}
 
-	for i, step := range execSteps {
+	for i := 0; i < len(execSteps); i++ {
+		step := execSteps[i]
+		kind := strings.ToLower(strings.TrimSpace(step.Kind))
+		if kind == "image" && !draft {
+			end := i + 1
+			for end < len(execSteps) && strings.EqualFold(strings.TrimSpace(execSteps[end].Kind), "image") {
+				end++
+			}
+			stepResults, err := s.runWorkflowImageBatch(ctx, c, input, stream, saver, publicSaveDir, execSteps[i:end], i, len(execSteps), stepIndex)
+			if err != nil {
+				return result, err
+			}
+			for _, stepResult := range stepResults {
+				if stepResult.Text != "" {
+					textParts = append(textParts, stepResult.Text)
+				}
+				result.Steps = append(result.Steps, stepResult)
+				stepIndex[stepResult.ID] = stepResult
+				result.Saved = append(result.Saved, stepResult.Saved...)
+				result.Images = append(result.Images, stepResult.Images...)
+			}
+			i = end - 1
+			continue
+		}
 		if stream != nil {
 			stream.send("status", map[string]string{
 				"message": fmt.Sprintf("正在执行 %d/%d：%s", i+1, len(execSteps), step.Title),
@@ -346,7 +401,7 @@ func (s *webUIServer) runWorkflow(ctx context.Context, c *client, workflow workf
 			Prompt: stepPrompt,
 		}
 
-		switch strings.ToLower(strings.TrimSpace(step.Kind)) {
+		switch kind {
 		case "response":
 			if override, ok := input.StepTexts[step.ID]; ok && !draft {
 				stepResult.Text = strings.TrimSpace(override)
@@ -377,6 +432,9 @@ func (s *webUIServer) runWorkflow(ctx context.Context, c *client, workflow workf
 				return result, err
 			}
 			stepResult.Text = strings.TrimSpace(resp.text())
+			if stream != nil {
+				stream.send("step_done", map[string]string{"id": step.ID})
+			}
 			if stepResult.Text != "" {
 				textParts = append(textParts, stepResult.Text)
 			}
@@ -390,6 +448,9 @@ func (s *webUIServer) runWorkflow(ctx context.Context, c *client, workflow workf
 				result.Text = strings.Join(textParts, "\n\n")
 				result.Images = uniqueStrings(result.Images)
 				result.Saved = uniqueStrings(result.Saved)
+				if err := writeWorkflowTextFile(input.SaveDir, workflowTextFileContent(input, result)); err != nil {
+					return result, err
+				}
 				return result, nil
 			}
 			stepOpts, err := workflowStepImageOptions(input.BaseOptions, step, data)
@@ -416,7 +477,7 @@ func (s *webUIServer) runWorkflow(ctx context.Context, c *client, workflow workf
 						return nil
 					}
 					saved = append(saved, path)
-					urls := s.publicImageURLs([]string{path}, input.SaveDir)
+					urls := s.publicImageURLs([]string{path}, publicSaveDir)
 					stepResult.Saved = append(stepResult.Saved, path)
 					stepResult.Images = append(stepResult.Images, urls...)
 					result.Saved = append(result.Saved, path)
@@ -429,13 +490,13 @@ func (s *webUIServer) runWorkflow(ctx context.Context, c *client, workflow workf
 				var runErr error
 				if endpoint == "response" {
 					var resp *responsePayload
-					resp, runErr = s.handleGenerateWithResponsesStream(ctx, c, stepOpts, imageModelOrDefault(step.ImageModel, input.ImageModel), stepPrompt, pickRefs(useRefs, input.References), pickMask(step.UseMask, input.Mask), stream, onImage)
+					resp, runErr = s.handleGenerateWithResponsesStream(ctx, c, stepOpts, imageModelOrDefault(step.ImageModel, input.ImageModel), stepPrompt, pickRefs(useRefs, input.References), pickMask(step.UseMask, input.Mask), stream, onImage, input.MaxConcurrency)
 					if runErr == nil && resp != nil {
 						text = strings.TrimSpace(resp.OutputText)
 					}
 				} else {
 					var resp *responsePayload
-					resp, runErr = s.handleGenerateWithImageEndpointStream(ctx, c, stepOpts, imageModelOrDefault(step.ImageModel, input.ImageModel), stepPrompt, pickRefs(useRefs, input.References), pickMask(step.UseMask, input.Mask), stream, onImage)
+					resp, runErr = s.handleGenerateWithImageEndpointStream(ctx, c, stepOpts, imageModelOrDefault(step.ImageModel, input.ImageModel), stepPrompt, pickRefs(useRefs, input.References), pickMask(step.UseMask, input.Mask), stream, onImage, input.MaxConcurrency)
 					if runErr == nil && resp != nil {
 						text = strings.TrimSpace(resp.OutputText)
 					}
@@ -446,7 +507,7 @@ func (s *webUIServer) runWorkflow(ctx context.Context, c *client, workflow workf
 			} else {
 				var runErr error
 				if endpoint == "response" {
-					saved, text, runErr = s.handleGenerateWithResponses(ctx, c, stepOpts, imageModelOrDefault(step.ImageModel, input.ImageModel), stepPrompt, pickRefs(useRefs, input.References), pickMask(step.UseMask, input.Mask), input.SaveDir)
+					saved, text, runErr = s.handleGenerateWithResponses(ctx, c, stepOpts, imageModelOrDefault(step.ImageModel, input.ImageModel), stepPrompt, pickRefs(useRefs, input.References), pickMask(step.UseMask, input.Mask), input.SaveDir, input.MaxConcurrency)
 				} else {
 					var resp *responsePayload
 					resp, runErr = s.handleGenerateWithImageEndpoint(ctx, c, stepOpts, imageModelOrDefault(step.ImageModel, input.ImageModel), stepPrompt, pickRefs(useRefs, input.References), pickMask(step.UseMask, input.Mask))
@@ -461,9 +522,9 @@ func (s *webUIServer) runWorkflow(ctx context.Context, c *client, workflow workf
 					return result, runErr
 				}
 				stepResult.Saved = append(stepResult.Saved, saved...)
-				stepResult.Images = append(stepResult.Images, s.publicImageURLs(saved, input.SaveDir)...)
+				stepResult.Images = append(stepResult.Images, s.publicImageURLs(saved, publicSaveDir)...)
 				result.Saved = append(result.Saved, saved...)
-				result.Images = append(result.Images, s.publicImageURLs(saved, input.SaveDir)...)
+				result.Images = append(result.Images, s.publicImageURLs(saved, publicSaveDir)...)
 			}
 			stepResult.Text = text
 			if text != "" {
@@ -481,7 +542,297 @@ func (s *webUIServer) runWorkflow(ctx context.Context, c *client, workflow workf
 	result.Text = strings.Join(textParts, "\n\n")
 	result.Images = uniqueStrings(result.Images)
 	result.Saved = uniqueStrings(result.Saved)
+	if err := writeWorkflowTextFile(input.SaveDir, workflowTextFileContent(input, result)); err != nil {
+		return result, err
+	}
 	return result, nil
+}
+
+func workflowRunSaveDir(baseDir, workflowID, existingDir string) (string, error) {
+	baseDir = strings.TrimSpace(baseDir)
+	if baseDir == "" {
+		return "", errors.New("output directory is required")
+	}
+	baseAbs, err := filepath.Abs(baseDir)
+	if err != nil {
+		return "", err
+	}
+	if strings.TrimSpace(existingDir) != "" {
+		existingAbs, err := filepath.Abs(strings.TrimSpace(existingDir))
+		if err != nil {
+			return "", err
+		}
+		rel, err := filepath.Rel(baseAbs, existingAbs)
+		if err != nil || rel == "." || strings.HasPrefix(rel, "..") || filepath.IsAbs(rel) {
+			return "", errors.New("workflow output directory must be inside the configured output directory")
+		}
+		if err := os.MkdirAll(existingAbs, 0755); err != nil {
+			return "", err
+		}
+		return existingAbs, nil
+	}
+	id := sanitizeWorkflowPathPart(workflowID)
+	if id == "" {
+		id = "workflow"
+	}
+	name := fmt.Sprintf("%s-%s", time.Now().Format("20060102-150405"), id)
+	dir := filepath.Join(baseAbs, name)
+	for i := 0; ; i++ {
+		candidate := dir
+		if i > 0 {
+			candidate = fmt.Sprintf("%s-%02d", dir, i)
+		}
+		if err := os.Mkdir(candidate, 0755); err == nil {
+			return candidate, nil
+		} else if errors.Is(err, os.ErrExist) {
+			continue
+		} else {
+			return "", err
+		}
+	}
+}
+
+type workflowImageJob struct {
+	offset     int
+	step       workflowStepDefinition
+	stepResult workflowStepResult
+	opts       imageOptions
+	endpoint   string
+	useRefs    bool
+}
+
+func (s *webUIServer) runWorkflowImageBatch(ctx context.Context, c *client, input workflowRuntimeInput, stream *webUIEventStream, saver *responseImageSaver, publicSaveDir string, steps []workflowStepDefinition, startIndex, total int, stepIndex map[string]workflowStepResult) ([]workflowStepResult, error) {
+	if len(steps) == 0 {
+		return nil, nil
+	}
+	jobs := make([]workflowImageJob, 0, len(steps))
+	for offset, step := range steps {
+		data := workflowTemplateData{
+			Prompt:    input.Prompt,
+			Params:    input.Params,
+			Steps:     stepIndex,
+			Overrides: input.StepTexts,
+			StepIndex: startIndex + offset + 1,
+			StepCount: total,
+		}
+		stepPrompt, err := renderWorkflowTemplate(step.Prompt, data)
+		if err != nil {
+			return nil, err
+		}
+		stepOpts, err := workflowStepImageOptions(input.BaseOptions, step, data)
+		if err != nil {
+			return nil, err
+		}
+		endpoint := strings.TrimSpace(step.Endpoint)
+		if endpoint == "" {
+			endpoint = input.Endpoint
+		}
+		jobs = append(jobs, workflowImageJob{
+			offset: offset,
+			step:   step,
+			stepResult: workflowStepResult{
+				ID:     step.ID,
+				Kind:   step.Kind,
+				Title:  step.Title,
+				Prompt: stepPrompt,
+			},
+			opts:     stepOpts,
+			endpoint: endpoint,
+			useRefs:  step.UseReferences && len(input.References) > 0,
+		})
+	}
+
+	limit := workflowConcurrencyLimit(input.MaxConcurrency)
+	if limit > len(jobs) {
+		limit = len(jobs)
+	}
+	innerConcurrency := input.MaxConcurrency
+	if len(jobs) > 1 {
+		innerConcurrency = 1
+	}
+	results := make([]workflowStepResult, len(jobs))
+	var wg sync.WaitGroup
+	sem := make(chan struct{}, limit)
+	var errMu sync.Mutex
+	var firstErr error
+	var saveMu sync.Mutex
+
+	for _, job := range jobs {
+		job := job
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
+			if stream != nil {
+				stream.send("status", map[string]string{
+					"message": fmt.Sprintf("正在生成 %d/%d：%s", startIndex+job.offset+1, total, job.step.Title),
+				})
+				stream.send("step", map[string]any{
+					"id":    job.step.ID,
+					"title": job.step.Title,
+					"kind":  job.step.Kind,
+					"index": startIndex + job.offset + 1,
+					"count": total,
+				})
+			}
+			stepResult := job.stepResult
+			refs := pickRefs(job.useRefs, input.References)
+			mask := pickMask(job.step.UseMask, input.Mask)
+			onImage := func(candidate imageCandidate) error {
+				if saver == nil {
+					return nil
+				}
+				saveMu.Lock()
+				path, err := saver.saveCandidate(candidate)
+				saveMu.Unlock()
+				if err != nil {
+					return err
+				}
+				if path == "" {
+					return nil
+				}
+				urls := s.publicImageURLs([]string{path}, publicSaveDir)
+				stepResult.Saved = append(stepResult.Saved, path)
+				stepResult.Images = append(stepResult.Images, urls...)
+				if stream != nil && len(urls) > 0 {
+					stream.send("image", map[string]string{"step_id": job.step.ID, "url": urls[0]})
+				}
+				return nil
+			}
+
+			var text string
+			var runErr error
+			if stream != nil {
+				var resp *responsePayload
+				if job.endpoint == "response" {
+					resp, runErr = s.handleGenerateWithResponsesStream(ctx, c, job.opts, imageModelOrDefault(job.step.ImageModel, input.ImageModel), stepResult.Prompt, refs, mask, stream, onImage, innerConcurrency)
+				} else {
+					resp, runErr = s.handleGenerateWithImageEndpointStream(ctx, c, job.opts, imageModelOrDefault(job.step.ImageModel, input.ImageModel), stepResult.Prompt, refs, mask, stream, onImage, innerConcurrency)
+				}
+				if runErr == nil && resp != nil {
+					text = strings.TrimSpace(resp.OutputText)
+				}
+			} else {
+				var saved []string
+				if job.endpoint == "response" {
+					saved, text, runErr = s.handleGenerateWithResponses(ctx, c, job.opts, imageModelOrDefault(job.step.ImageModel, input.ImageModel), stepResult.Prompt, refs, mask, input.SaveDir, innerConcurrency)
+				} else {
+					var resp *responsePayload
+					resp, runErr = s.handleGenerateWithImageEndpoint(ctx, c, job.opts, imageModelOrDefault(job.step.ImageModel, input.ImageModel), stepResult.Prompt, refs, mask)
+					if runErr == nil {
+						saveMu.Lock()
+						saved, runErr = saveImagesFromResponse(ctx, c.httpClient, resp, input.SaveDir)
+						saveMu.Unlock()
+					}
+					if runErr == nil && resp != nil {
+						text = strings.TrimSpace(resp.OutputText)
+					}
+				}
+				if runErr == nil {
+					stepResult.Saved = append(stepResult.Saved, saved...)
+					stepResult.Images = append(stepResult.Images, s.publicImageURLs(saved, publicSaveDir)...)
+				}
+			}
+			if runErr != nil {
+				errMu.Lock()
+				if firstErr == nil {
+					firstErr = runErr
+				}
+				errMu.Unlock()
+				if stream != nil {
+					stream.send("step_done", map[string]string{"id": job.step.ID})
+				}
+				return
+			}
+			stepResult.Text = text
+			results[job.offset] = stepResult
+			if stream != nil {
+				stream.send("step_done", map[string]string{"id": job.step.ID})
+			}
+		}()
+	}
+	wg.Wait()
+	if firstErr != nil {
+		return nil, firstErr
+	}
+	return results, nil
+}
+
+func sanitizeWorkflowPathPart(value string) string {
+	value = strings.ToLower(strings.TrimSpace(value))
+	var b strings.Builder
+	for _, r := range value {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '-' || r == '_' {
+			b.WriteRune(r)
+		} else if r == ' ' || r == '.' {
+			b.WriteByte('-')
+		}
+	}
+	return strings.Trim(b.String(), "-_")
+}
+
+func workflowTextFileContent(input workflowRuntimeInput, result workflowRunResult) string {
+	lines := []string{}
+	if strings.TrimSpace(result.WorkflowName) != "" {
+		lines = append(lines, "# "+strings.TrimSpace(result.WorkflowName))
+	}
+	if strings.TrimSpace(result.Prompt) != "" {
+		lines = append(lines, "原始提示：", strings.TrimSpace(result.Prompt), "")
+	}
+	seen := map[string]bool{}
+	for _, step := range result.Steps {
+		id := strings.TrimSpace(step.ID)
+		text := strings.TrimSpace(step.Text)
+		if text == "" {
+			continue
+		}
+		if id != "" {
+			seen[id] = true
+		}
+		title := strings.TrimSpace(step.Title)
+		if title == "" {
+			title = id
+		}
+		if title != "" {
+			lines = append(lines, "## "+title)
+		}
+		lines = append(lines, text, "")
+	}
+	for id, text := range input.StepTexts {
+		id = strings.TrimSpace(id)
+		text = strings.TrimSpace(text)
+		if id == "" || text == "" || seen[id] {
+			continue
+		}
+		lines = append(lines, "## "+id, text, "")
+	}
+	return strings.TrimSpace(strings.Join(lines, "\n")) + "\n"
+}
+
+func writeWorkflowTextFile(dir, content string) error {
+	dir = strings.TrimSpace(dir)
+	content = strings.TrimSpace(content)
+	if dir == "" || content == "" {
+		return nil
+	}
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return err
+	}
+	return os.WriteFile(filepath.Join(dir, "workflow-text.txt"), []byte(content+"\n"), 0644)
+}
+
+func workflowOnlyStep(steps []workflowStepDefinition, stepID string) []workflowStepDefinition {
+	stepID = strings.TrimSpace(stepID)
+	if stepID == "" {
+		return steps
+	}
+	for _, step := range steps {
+		if strings.EqualFold(strings.TrimSpace(step.ID), stepID) {
+			return []workflowStepDefinition{step}
+		}
+	}
+	return nil
 }
 
 func workflowParamsFromForm(r *http.Request, workflow workflowDefinition) (map[string]string, error) {

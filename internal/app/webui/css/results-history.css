@@ -86,6 +86,12 @@
   align-items: center;
   gap: 6px;
   flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.workflow-step-rerun {
+  min-height: 26px;
+  padding: 4px 8px;
 }
 
 .workflow-step-kind {

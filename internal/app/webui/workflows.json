@@ -154,7 +154,7 @@
           "key": "visual_style",
           "label": "视觉风格",
           "type": "combo",
-          "default": "",
+          "default": "高级感、干净背景、商业摄影",
           "placeholder": "选择或输入视觉风格",
           "options": [
             {
@@ -225,7 +225,7 @@
           "id": "brief",
           "kind": "response",
           "title": "提炼卖点",
-          "prompt": "根据商品信息为电商套图提炼核心卖点、目标受众、平台表达重点和文案关键词。平台：{{field \"platform\"}}。文案语言：{{field \"copy_language\"}}。受众目标：{{field \"audience\"}}。商品信息：\n{{field \"product_brief\"}}\n{{with field \"visual_style\"}}视觉风格：{{.}}\n{{end}}"
+          "prompt": "根据商品信息为电商套图提炼核心卖点、目标受众、平台表达重点和文案关键词，只返回结果就好，不要其他多余信息。平台：{{field \"platform\"}}。文案语言：{{field \"copy_language\"}}。受众目标：{{field \"audience\"}}。商品信息：\n{{field \"product_brief\"}}\n{{with field \"visual_style\"}}视觉风格：{{.}}\n{{end}}"
         },
         {
           "id": "white_bg_main",
