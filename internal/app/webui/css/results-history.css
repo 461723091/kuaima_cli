@@ -1,19 +1,19 @@
 .gallery {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
-  gap: 14px;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 10px;
 }
 
 .workflow-steps {
   display: grid;
-  gap: 12px;
-  margin-bottom: 16px;
+  gap: 10px;
+  margin-bottom: 12px;
 }
 
 .workflow-progress {
   display: grid;
-  gap: 8px;
-  padding: 12px;
+  gap: 7px;
+  padding: 10px;
   border: 1px solid rgba(82, 103, 132, 0.16);
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.62);
@@ -49,7 +49,7 @@
 }
 
 .workflow-step {
-  padding: 12px;
+  padding: 10px;
   border: 1px solid rgba(82, 103, 132, 0.18);
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.58);
@@ -64,9 +64,9 @@
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 10px;
+  gap: 8px;
   flex-wrap: wrap;
-  margin-bottom: 8px;
+  margin-bottom: 6px;
 }
 
 .workflow-step-head strong {
@@ -124,9 +124,9 @@
 
 .workflow-step-images {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
-  gap: 8px;
-  margin-top: 10px;
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  gap: 7px;
+  margin-top: 8px;
 }
 
 .workflow-step-image {
@@ -146,9 +146,9 @@
 
 .workflow-review {
   display: grid;
-  gap: 12px;
-  margin-top: 14px;
-  padding: 12px;
+  gap: 10px;
+  margin-top: 10px;
+  padding: 10px;
   border: 1px solid rgba(82, 103, 132, 0.18);
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.72);
@@ -179,7 +179,7 @@
 }
 
 .workflow-review-item textarea {
-  min-height: 96px;
+  min-height: 80px;
   resize: vertical;
 }
 
@@ -358,7 +358,7 @@
 
 .result-timing {
   margin-top: -2px;
-  margin-bottom: 12px;
+  margin-bottom: 8px;
   color: var(--muted);
   font-size: 12px;
   font-weight: 760;
@@ -366,13 +366,13 @@
 
 .history-panel {
   display: grid;
-  gap: 12px;
+  gap: 10px;
 }
 
 .history-empty {
   display: grid;
   place-items: center;
-  min-height: 180px;
+  min-height: 120px;
   border: 1px dashed rgba(82, 103, 132, 0.26);
   border-radius: 8px;
   color: var(--muted);
@@ -380,7 +380,7 @@
 }
 
 .history-item {
-  padding: 14px;
+  padding: 10px;
   border: 1px solid rgba(82, 103, 132, 0.18);
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.64);
@@ -394,7 +394,7 @@
 .history-head {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  gap: 12px;
+  gap: 8px;
   align-items: start;
 }
 
@@ -424,7 +424,7 @@
 }
 
 .history-meta {
-  margin-top: 8px;
+  margin-top: 6px;
   color: var(--muted);
   font-size: 12px;
 }
@@ -433,7 +433,7 @@
   display: flex;
   gap: 6px;
   flex-wrap: wrap;
-  margin-top: 10px;
+  margin-top: 8px;
 }
 
 .history-param-chip {
@@ -470,9 +470,9 @@
 
 .history-images {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(112px, 1fr));
-  gap: 8px;
-  margin-top: 12px;
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  gap: 7px;
+  margin-top: 8px;
 }
 
 .history-image-card {
@@ -482,7 +482,7 @@
 
 .history-image-preview {
   position: relative;
-  min-height: 96px;
+  min-height: 78px;
   overflow: hidden;
   border: 1px solid rgba(82, 103, 132, 0.18);
   border-radius: 8px;
@@ -502,7 +502,7 @@
 
 .history-image-preview img {
   width: 100%;
-  height: 96px;
+  height: 78px;
   display: block;
   object-fit: cover;
 }

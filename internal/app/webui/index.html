@@ -18,6 +18,18 @@
       <span id="appVersion" class="app-version"></span>
       <span class="brand-name">快马 AI WebUI</span>
     </div>
+    <div class="topbar-workbench">
+      <div class="workbench-title">
+        <span><i data-lucide="sparkles" aria-hidden="true"></i></span>
+        <strong>图像生成工作台</strong>
+        <small id="workflowDescription" class="workflow-description">图片生成</small>
+      </div>
+      <div class="workbench-tabs">
+        <input id="workflowId" name="workflow_id" type="hidden" value="single">
+        <input id="workflowTemplates" name="workflow_templates" type="hidden" value="">
+        <div id="workflowTabs" class="workflow-tabs" role="tablist" aria-label="工作流切换"></div>
+      </div>
+    </div>
     <div class="billing-menu">
       <button id="toggleBillingTop" class="wallet-pill" type="button" aria-expanded="false">
         <i data-lucide="wallet-cards" aria-hidden="true"></i>
@@ -95,22 +107,6 @@
   </header>
 
   <main class="workspace">
-    <section class="hero-panel">
-      <div class="hero-copy">
-        <p class="eyebrow">Image Studio</p>
-        <div class="hero-title-row">
-          <span class="hero-symbol"><i data-lucide="sparkles" aria-hidden="true"></i></span>
-          <h1>图像生成工作台</h1>
-        </div>
-        <div id="workflowDescription" class="workflow-description"></div>
-      </div>
-      <div class="hero-tools">
-        <input id="workflowId" name="workflow_id" type="hidden" value="single">
-        <input id="workflowTemplates" name="workflow_templates" type="hidden" value="">
-        <div id="workflowTabs" class="workflow-tabs" role="tablist" aria-label="工作流切换"></div>
-      </div>
-    </section>
-
     <section id="generatePane" class="mode-pane" data-mode-pane="generate">
       <div class="layout">
         <aside id="historySidebar" class="panel history-sidebar">

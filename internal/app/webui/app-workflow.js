@@ -833,6 +833,7 @@
     const workflowId = currentWorkflowId();
     const def = workflowDef(workflowId);
     const result = { workflow_id: workflowId, workflow_name: workflowLabel(workflowId), prompt: "", params: {}, output_dir: "", steps: [], images: [], saved: [], text: "", timing: null, needs_review: false, progress_total: workflowProgressTotal(def, options.mode) };
+    const preserveResults = options.preserveResults === true;
     const startedAt = performance.now();
     let firstResponseAt = 0;
     let activeStep = null;
@@ -861,25 +862,29 @@
     };
 
     setResultsVisible(true);
-    workflowSteps().hidden = false;
-    workflowSteps().innerHTML = '<div class="generation-placeholder"><span class="spinner"></span><span>正在执行工作流...</span></div>';
+    if (!preserveResults) {
+      workflowSteps().hidden = false;
+      workflowSteps().innerHTML = '<div class="generation-placeholder"><span class="spinner"></span><span>正在执行工作流...</span></div>';
+    }
     state.runStartedAt = startedAt;
     if (state.progressTimer) {
       window.clearInterval(state.progressTimer);
     }
-    state.progressTimer = window.setInterval(() => {
-      if (result.steps.length > 0) {
-        renderWorkflowSteps(result);
+    if (!preserveResults) {
+      state.progressTimer = window.setInterval(() => {
+        if (result.steps.length > 0) {
+          renderWorkflowSteps(result);
+        }
+      }, 1000);
+      const review = workflowReview();
+      if (review) {
+        review.hidden = true;
+        review.innerHTML = "";
       }
-    }, 1000);
-    const review = workflowReview();
-    if (review) {
-      review.hidden = true;
-      review.innerHTML = "";
+      $("#gallery").classList.remove("empty");
+      $("#gallery").innerHTML = '<div class="generation-placeholder"><span class="spinner"></span><span>正在等待步骤输出...</span></div>';
+      renderResultTiming(null);
     }
-    $("#gallery").classList.remove("empty");
-    $("#gallery").innerHTML = '<div class="generation-placeholder"><span class="spinner"></span><span>正在等待步骤输出...</span></div>';
-    renderResultTiming(null);
 
     const formData = await buildGenerateFormData(form);
     formData.set("workflow_id", workflowId);
@@ -938,12 +943,16 @@
         if (!existing) {
           result.steps.push(activeStep);
         }
-        renderWorkflowSteps(result);
+        if (!preserveResults) {
+          renderWorkflowSteps(result);
+        }
       },
       step_done(payload) {
         markFirstResponse();
         finishStepById(payload.id);
-        renderWorkflowSteps(result);
+        if (!preserveResults) {
+          renderWorkflowSteps(result);
+        }
       },
       text(payload) {
         markFirstResponse();
@@ -956,7 +965,9 @@
         } else {
           result.text += text;
         }
-        renderWorkflowSteps(result);
+        if (!preserveResults) {
+          renderWorkflowSteps(result);
+        }
       },
       image(payload) {
         markFirstResponse();
@@ -974,8 +985,10 @@
             target.images.push(url);
           }
         }
-        renderWorkflowSteps(result);
-        renderGalleryImages(result.images);
+        if (!preserveResults) {
+          renderWorkflowSteps(result);
+          renderGalleryImages(result.images);
+        }
       },
       done(payload) {
         markFirstResponse();
@@ -1002,14 +1015,16 @@
         result.needs_review = Boolean(payload.needs_review);
         result.progress_total = Math.max(result.progress_total || 0, result.steps.length);
         state.lastResult = result;
-        renderWorkflowSteps(result);
-        if (result.needs_review) {
-          $("#gallery").classList.add("empty");
-          $("#gallery").innerHTML = '<div class="status">文案已生成，请确认后继续</div>';
-        } else {
-          renderGalleryImages(result.images);
+        if (!preserveResults) {
+          renderWorkflowSteps(result);
+          if (result.needs_review) {
+            $("#gallery").classList.add("empty");
+            $("#gallery").innerHTML = '<div class="status">文案已生成，请确认后继续</div>';
+          } else {
+            renderGalleryImages(result.images);
+          }
+          renderWorkflowReview(result);
         }
-        renderWorkflowReview(result);
       },
       error(payload) {
         throw new Error(payload.error || "工作流运行失败");
@@ -1026,8 +1041,10 @@
       response_ms: Math.round((firstResponseAt || finishedAt) - startedAt),
       total_ms: Math.round(finishedAt - startedAt),
     };
-    renderWorkflowSteps(result);
-    renderResultTiming(result.timing);
+    if (!preserveResults) {
+      renderWorkflowSteps(result);
+      renderResultTiming(result.timing);
+    }
     state.lastResult = result;
     return result;
   }
@@ -1164,6 +1181,7 @@
         stepId,
         outputDir: previous.output_dir || "",
         stepTexts: workflowStepTextsFromResult(previous, stepId),
+        preserveResults: true,
       });
       if (!rerun || !Array.isArray(rerun.steps) || rerun.steps.length === 0) {
         return;

@@ -3,6 +3,20 @@
     grid-template-columns: 58px minmax(320px, 420px) 1fr;
   }
 
+  .topbar {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .billing-menu {
+    grid-column: 2;
+    justify-self: end;
+  }
+
+  .topbar-workbench {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+
   .history-sidebar:not(.collapsed) {
     grid-column: 1 / -1;
     position: static;
@@ -14,11 +28,28 @@
 
   .topbar {
     align-items: flex-start;
-    flex-direction: column;
+    grid-template-columns: 1fr;
   }
 
   .hero-panel {
     grid-template-columns: 1fr;
+  }
+
+  .topbar-workbench {
+    grid-column: 1;
+    grid-row: auto;
+    width: 100%;
+    grid-template-columns: 1fr;
+  }
+
+  .billing-menu {
+    grid-column: 1;
+    justify-self: stretch;
+  }
+
+  .wallet-pill {
+    width: 100%;
+    justify-content: space-between;
   }
 
   .topbar {
@@ -27,7 +58,7 @@
 
   .workspace {
     width: min(100% - 28px, 1480px);
-    padding-top: 16px;
+    padding-top: 12px;
   }
 
   .layout {
@@ -40,6 +71,11 @@
     width: auto;
     max-height: none;
     padding: 18px;
+  }
+
+  .generator,
+  .results {
+    max-height: none;
   }
 
   .history-sidebar.collapsed .panel-head>div {

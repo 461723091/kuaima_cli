@@ -1,7 +1,7 @@
 .workspace {
-  width: min(1480px, calc(100% - 44px));
+  width: min(1500px, calc(100% - 28px));
   margin: 0 auto;
-  padding: 26px 0 34px;
+  padding: 12px 0 18px;
 }
 
 .hero-panel {
@@ -88,7 +88,7 @@
 
 #generatePane,
 #agentPane {
-  margin-top: 18px;
+  margin-top: 0;
 }
 
 .agent-pane {
@@ -259,13 +259,13 @@ h2 {
 
 .layout {
   display: grid;
-  grid-template-columns: minmax(260px, 340px) minmax(340px, 430px) minmax(360px, 1fr);
-  gap: 18px;
+  grid-template-columns: minmax(240px, 310px) minmax(320px, 400px) minmax(360px, 1fr);
+  gap: 12px;
   align-items: start;
 }
 
 .layout:has(.history-sidebar.collapsed) {
-  grid-template-columns: 58px minmax(340px, 430px) minmax(360px, 1fr);
+  grid-template-columns: 54px minmax(320px, 400px) minmax(360px, 1fr);
 }
 
 .panel {
@@ -280,19 +280,25 @@ h2 {
 .results,
 .history-sidebar,
 .wallet {
-  padding: 18px;
+  padding: 12px;
+}
+
+.generator,
+.results {
+  max-height: calc(100vh - 84px);
+  overflow: auto;
 }
 
 .history-sidebar {
   position: sticky;
-  top: 94px;
-  max-height: calc(100vh - 120px);
+  top: 72px;
+  max-height: calc(100vh - 84px);
   overflow: auto;
 }
 
 .history-sidebar.collapsed {
-  width: 58px;
-  padding: 12px 10px;
+  width: 54px;
+  padding: 10px 8px;
   overflow: hidden;
 }
 
@@ -313,11 +319,11 @@ h2 {
 .panel-head {
   justify-content: space-between;
   gap: 14px;
-  margin-bottom: 16px;
+  margin-bottom: 10px;
 }
 
 .field {
-  margin-bottom: 14px;
+  margin-bottom: 10px;
 }
 
 .workflow-field {
