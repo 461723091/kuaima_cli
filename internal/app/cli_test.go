@@ -90,6 +90,9 @@ func TestImageCommandSharedFlagsParse(t *testing.T) {
 	if imageOpts.mask == nil || *imageOpts.mask != "https://example.com/mask.png" {
 		t.Fatalf("unexpected image mask: %#v", imageOpts.mask)
 	}
+	if imageOpts.upscale == nil || !*imageOpts.upscale {
+		t.Fatalf("expected image upscale to default on, got %#v", imageOpts.upscale)
+	}
 	if err := imageOpts.validate(); err != nil {
 		t.Fatal(err)
 	}

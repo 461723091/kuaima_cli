@@ -26,6 +26,7 @@ func TestConfigDefaultsHaveLowestUserPriority(t *testing.T) {
 		ImageBackground:        stringPtr("opaque"),
 		ImageModeration:        stringPtr("low"),
 		ImageAction:            stringPtr("edit"),
+		ImageUpscale:           boolPtr(false),
 		BaseURL:                stringPtr("https://config.example.com"),
 		OssURL:                 stringPtr("https://oss-config.example.com"),
 		APIKey:                 stringPtr("config-key"),
@@ -50,7 +51,7 @@ func TestConfigDefaultsHaveLowestUserPriority(t *testing.T) {
 	if *opts.imageModel != "env-image-model" {
 		t.Fatalf("expected env image model, got %q", *opts.imageModel)
 	}
-	if *imageOpts.size != "1024x1024" || *imageOpts.quality != "medium" || *imageOpts.count != 2 || *imageOpts.outputFormat != "jpeg" || *imageOpts.outputCompression != 75 || *imageOpts.background != "opaque" || *imageOpts.moderation != "low" || *imageOpts.action != "edit" {
+	if *imageOpts.size != "1024x1024" || *imageOpts.quality != "medium" || *imageOpts.count != 2 || *imageOpts.outputFormat != "jpeg" || *imageOpts.outputCompression != 75 || *imageOpts.background != "opaque" || *imageOpts.moderation != "low" || *imageOpts.action != "edit" || imageOpts.upscale == nil || *imageOpts.upscale {
 		t.Fatalf("unexpected image options: %#v", imageOpts)
 	}
 	if *opts.baseURL != "https://cli.example.com" {
@@ -122,6 +123,7 @@ func TestPersistConfigFlagsUpdatesOnlyExplicitPersistentFlags(t *testing.T) {
 		"-image-background", "transparent",
 		"-image-moderation", "low",
 		"-image-action", "edit",
+		"-image-upscale=false",
 		"-stream=false",
 		"-file-format", fileFormatURL,
 		"-save-images", "",
@@ -150,6 +152,9 @@ func TestPersistConfigFlagsUpdatesOnlyExplicitPersistentFlags(t *testing.T) {
 	}
 	if got["image_size"] != "1536x1024" || got["image_quality"] != "high" || got["image_count"] != float64(4) || got["image_output_format"] != "webp" || got["image_output_compression"] != float64(60) || got["image_background"] != "transparent" || got["image_moderation"] != "low" || got["image_action"] != "edit" {
 		t.Fatalf("unexpected persisted image options: %#v", got)
+	}
+	if got["image_upscale"] != false {
+		t.Fatalf("expected image_upscale=false, got %#v", got["image_upscale"])
 	}
 	if got["base_url"] != "https://old.example.com" {
 		t.Fatalf("expected existing base_url to be preserved, got %#v", got["base_url"])

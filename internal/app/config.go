@@ -33,6 +33,7 @@ type appConfig struct {
 	ImageBackground        *string `json:"image_background,omitempty"`
 	ImageModeration        *string `json:"image_moderation,omitempty"`
 	ImageAction            *string `json:"image_action,omitempty"`
+	ImageUpscale           *bool   `json:"image_upscale,omitempty"`
 	BaseURL                *string `json:"base_url,omitempty"`
 	OssURL                 *string `json:"oss_url,omitempty"`
 	APIKey                 *string `json:"api_key,omitempty"`
@@ -130,6 +131,7 @@ func appConfigJSONFields() []string {
 		"image_background",
 		"image_moderation",
 		"image_action",
+		"image_upscale",
 		"base_url",
 		"oss_url",
 		"api_key",
@@ -323,6 +325,11 @@ func persistConfigFlags(fs *flag.FlagSet, cfg appConfig) error {
 		case "image-action":
 			cfg.ImageAction = stringPtr(f.Value.String())
 			changed = true
+		case "image-upscale":
+			if value, err := strconv.ParseBool(f.Value.String()); err == nil {
+				cfg.ImageUpscale = boolPtr(value)
+				changed = true
+			}
 		case "base-url":
 			cfg.BaseURL = stringPtr(f.Value.String())
 			changed = true

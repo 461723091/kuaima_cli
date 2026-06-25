@@ -83,7 +83,7 @@ func runAsk(args []string) error {
 	}
 	for i := 0; i < runCount; i++ {
 		var resp *responsePayload
-		imageSaver := newResponseImageSaver(context.Background(), c.httpClient, *saveDir)
+		imageSaver := newResponseImageSaver(context.Background(), c.httpClient, *saveDir, *imageOpts.upscale, stringValue(imageOpts.size))
 		if *opts.stream {
 			resp, err = c.createResponseStreamWithImages(context.Background(), req, os.Stdout, func(candidate imageCandidate) error {
 				return saveStreamImage(imageSaver, candidate)

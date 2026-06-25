@@ -53,6 +53,7 @@ type imageOptions struct {
 	background        *string
 	moderation        *string
 	action            *string
+	upscale           *bool
 	mask              *string
 }
 
@@ -104,6 +105,7 @@ func addImageFlags(fs *flag.FlagSet, cfg appConfig) imageOptions {
 		background:        fs.String("image-background", configNonEmptyString(cfg.ImageBackground, "auto"), "background: auto, transparent, or opaque"),
 		moderation:        fs.String("image-moderation", configString(cfg.ImageModeration, ""), "image moderation setting, for example auto or low"),
 		action:            fs.String("image-action", configNonEmptyString(cfg.ImageAction, "auto"), "Responses image tool action: auto, generate, or edit"),
+		upscale:           fs.Bool("image-upscale", configBool(cfg.ImageUpscale, true), "save images at the target size when they are smaller; keeps aspect ratio"),
 		mask:              fs.String("image-mask", "", "mask image path, data URL, or image URL for Images Edit"),
 	}
 }

@@ -53,6 +53,7 @@ func usage(w io.Writer) {
 	fmt.Fprintln(w, "  -image-background BG    auto, transparent, or opaque")
 	fmt.Fprintln(w, "  -image-moderation MODE  auto or low")
 	fmt.Fprintln(w, "  -image-action ACTION    Responses image action: auto, generate, or edit")
+	fmt.Fprintln(w, "  -image-upscale          enlarge saved images to the target size when smaller")
 	fmt.Fprintln(w, "  -image-mask PATH_OR_URL Images Edit mask, used with image -file ...")
 	fmt.Fprintln(w, "  -base-url URL           default https://ai.szkmjb.com")
 	fmt.Fprintln(w, "  -system TEXT            optional system/developer instruction")

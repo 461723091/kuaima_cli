@@ -45,6 +45,7 @@ type webUIDefaults struct {
 	OutputCompression int    `json:"image_output_compression"`
 	Background        string `json:"image_background"`
 	Moderation        string `json:"image_moderation"`
+	ImageUpscale      bool   `json:"image_upscale"`
 }
 
 func runWebUI(args []string) error {
@@ -135,6 +136,7 @@ func runWebUIWithOptions(args []string, runtimeOpts webUIRuntimeOptions) error {
 			OutputCompression: intValue(imageOpts.outputCompression, -1),
 			Background:        stringValue(imageOpts.background),
 			Moderation:        stringValue(imageOpts.moderation),
+			ImageUpscale:      boolValue(imageOpts.upscale, true),
 		},
 		saveDir: absSaveDir,
 	}
@@ -406,7 +408,7 @@ func (s *webUIServer) handleGenerate(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadGateway, err.Error())
 		return
 	}
-	saved, err := saveImagesFromResponse(ctx, c.httpClient, resp, saveDir)
+	saved, err := saveImagesFromResponse(ctx, c.httpClient, resp, saveDir, boolValue(opts.upscale, s.defaults.ImageUpscale), stringValue(opts.size))
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -477,7 +479,7 @@ func (s *webUIServer) handleGenerateStream(w http.ResponseWriter, r *http.Reques
 		stream.send("error", map[string]string{"error": err.Error()})
 		return
 	}
-	saver := newResponseImageSaver(ctx, c.httpClient, saveDir)
+	saver := newResponseImageSaver(ctx, c.httpClient, saveDir, boolValue(opts.upscale, s.defaults.ImageUpscale), stringValue(opts.size))
 	var saved []string
 	saveAndSend := func(candidate imageCandidate) error {
 		path, err := saver.saveCandidate(candidate)
@@ -710,7 +712,7 @@ func (s *webUIServer) handleGenerateWithResponses(ctx context.Context, c *client
 		if err != nil {
 			return nil, "", err
 		}
-		saved, err := saveImagesFromResponse(ctx, c.httpClient, resp, saveDir)
+		saved, err := saveImagesFromResponse(ctx, c.httpClient, resp, saveDir, boolValue(opts.upscale, s.defaults.ImageUpscale), stringValue(opts.size))
 		if err != nil {
 			return saved, strings.TrimSpace(resp.OutputText), err
 		}
@@ -723,7 +725,7 @@ func (s *webUIServer) handleGenerateWithResponses(ctx context.Context, c *client
 		if err != nil {
 			return saved, strings.Join(texts, "\n\n"), err
 		}
-		more, err := saveImagesFromResponse(ctx, c.httpClient, resp, saveDir)
+		more, err := saveImagesFromResponse(ctx, c.httpClient, resp, saveDir, boolValue(opts.upscale, s.defaults.ImageUpscale), stringValue(opts.size))
 		if err != nil {
 			return saved, strings.Join(texts, "\n\n"), err
 		}
@@ -1161,6 +1163,14 @@ func (s *webUIServer) imageOptionsFromForm(r *http.Request) (imageOptions, error
 	background := strings.TrimSpace(r.FormValue("image_background"))
 	moderation := strings.TrimSpace(r.FormValue("image_moderation"))
 	action := "auto"
+	upscale := s.defaults.ImageUpscale
+	if value := strings.TrimSpace(r.FormValue("image_upscale")); value != "" {
+		parsed, err := strconv.ParseBool(value)
+		if err != nil {
+			return imageOptions{}, fmt.Errorf("invalid image_upscale: %w", err)
+		}
+		upscale = parsed
+	}
 	count, err := formInt(r, "image_count", s.defaults.ImageCount)
 	if err != nil {
 		return imageOptions{}, err
@@ -1178,6 +1188,7 @@ func (s *webUIServer) imageOptionsFromForm(r *http.Request) (imageOptions, error
 		background:        &background,
 		moderation:        &moderation,
 		action:            &action,
+		upscale:           &upscale,
 	}
 	return opts, opts.validate()
 }
@@ -1398,6 +1409,13 @@ func stringValue(value *string) string {
 }
 
 func intValue(value *int, fallback int) int {
+	if value == nil {
+		return fallback
+	}
+	return *value
+}
+
+func boolValue(value *bool, fallback bool) bool {
 	if value == nil {
 		return fallback
 	}

@@ -1,6 +1,10 @@
 package app
 
 import (
+	"bytes"
+	"image"
+	"image/color"
+	"image/png"
 	"os"
 	"path/filepath"
 	"testing"
@@ -101,11 +105,9 @@ func TestCollectInputAttachmentsClassifiesAtImageRef(t *testing.T) {
 }
 
 func tinyPNG() []byte {
-	return []byte{
-		0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
-		0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52,
-		0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,
-		0x08, 0x06, 0x00, 0x00, 0x00, 0x1f, 0x15, 0xc4,
-		0x89,
-	}
+	var buf bytes.Buffer
+	img := image.NewNRGBA(image.Rect(0, 0, 1, 1))
+	img.Set(0, 0, color.NRGBA{R: 255, G: 255, B: 255, A: 255})
+	_ = png.Encode(&buf, img)
+	return buf.Bytes()
 }

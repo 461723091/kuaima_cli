@@ -474,22 +474,61 @@ func TestWebUIHandleGenerateRepeatsImageEditRequestsForCount(t *testing.T) {
 }
 
 func TestWebUIHandleGenerateUsesOSSURLForUploadedImagesWhenFileFormatURL(t *testing.T) {
-	ossServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/go/oss/prepare_upload_local/" {
+	var ossServer *httptest.Server
+	ossServer = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/go/oss/prepare_upload_local/":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"errno":0,"file":{"file_url":"` + ossServer.URL + `/uploaded.png"}}`))
+		case "/uploaded.png":
+			w.Header().Set("Content-Type", "image/png")
+			_, _ = w.Write(tinyPNG())
+		default:
 			t.Fatalf("unexpected OSS path: %s", r.URL.Path)
 		}
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"errno":0,"file":{"file_url":"http://oss.example/uploaded.png"}}`))
 	}))
 	defer ossServer.Close()
 
-	var got imageEditRequest
 	apiServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/v1/images/edits" {
 			t.Fatalf("unexpected path: %s", r.URL.Path)
 		}
-		if err := json.NewDecoder(r.Body).Decode(&got); err != nil {
+		if !strings.HasPrefix(r.Header.Get("Content-Type"), "multipart/form-data;") {
+			t.Fatalf("unexpected content type: %q", r.Header.Get("Content-Type"))
+		}
+		mr, err := r.MultipartReader()
+		if err != nil {
 			t.Fatal(err)
+		}
+		fields := map[string]string{}
+		var imageData []byte
+		for {
+			part, err := mr.NextPart()
+			if err == io.EOF {
+				break
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			data, err := io.ReadAll(part)
+			if err != nil {
+				t.Fatal(err)
+			}
+			switch part.FormName() {
+			case "model", "prompt", "size", "quality", "background", "moderation":
+				fields[part.FormName()] = string(data)
+			case "image":
+				imageData = data
+			}
+		}
+		if fields["model"] != "test-model" {
+			t.Fatalf("unexpected model: %q", fields["model"])
+		}
+		if fields["prompt"] != "edit me" {
+			t.Fatalf("unexpected prompt: %q", fields["prompt"])
+		}
+		if len(imageData) == 0 {
+			t.Fatal("expected uploaded image data")
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"id":"resp_1","output":[{"type":"image_generation_call","status":"completed","result":"ZmFrZQ=="}],"output_text":""}`))
@@ -545,11 +584,8 @@ func TestWebUIHandleGenerateUsesOSSURLForUploadedImagesWhenFileFormatURL(t *test
 	if rr.Code != http.StatusOK {
 		t.Fatalf("unexpected status: %d body=%s", rr.Code, rr.Body.String())
 	}
-	if len(got.Images) != 1 {
-		t.Fatalf("unexpected images: %#v", got.Images)
-	}
-	if got.Images[0].ImageURL != "http://oss.example/uploaded.png" {
-		t.Fatalf("expected OSS URL, got %q", got.Images[0].ImageURL)
+	if entries, err := os.ReadDir(saveDir); err != nil || len(entries) != 1 {
+		t.Fatalf("expected 1 saved image in %s, entries=%v err=%v", saveDir, entries, err)
 	}
 }
 
@@ -562,13 +598,46 @@ func TestWebUIHandleGenerateFallsBackToBase64WhenUploadFails(t *testing.T) {
 	}))
 	defer ossServer.Close()
 
-	var got imageEditRequest
 	apiServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/v1/images/edits" {
 			t.Fatalf("unexpected path: %s", r.URL.Path)
 		}
-		if err := json.NewDecoder(r.Body).Decode(&got); err != nil {
+		if !strings.HasPrefix(r.Header.Get("Content-Type"), "multipart/form-data;") {
+			t.Fatalf("unexpected content type: %q", r.Header.Get("Content-Type"))
+		}
+		mr, err := r.MultipartReader()
+		if err != nil {
 			t.Fatal(err)
+		}
+		fields := map[string]string{}
+		var imageData []byte
+		for {
+			part, err := mr.NextPart()
+			if err == io.EOF {
+				break
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			data, err := io.ReadAll(part)
+			if err != nil {
+				t.Fatal(err)
+			}
+			switch part.FormName() {
+			case "model", "prompt":
+				fields[part.FormName()] = string(data)
+			case "image":
+				imageData = data
+			}
+		}
+		if fields["model"] != "test-model" {
+			t.Fatalf("unexpected model: %q", fields["model"])
+		}
+		if fields["prompt"] != "edit me" {
+			t.Fatalf("unexpected prompt: %q", fields["prompt"])
+		}
+		if string(imageData) != "fake" {
+			t.Fatalf("unexpected image data: %q", string(imageData))
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"id":"resp_1","output":[{"type":"image_generation_call","status":"completed","result":"ZmFrZQ=="}],"output_text":""}`))
@@ -624,11 +693,8 @@ func TestWebUIHandleGenerateFallsBackToBase64WhenUploadFails(t *testing.T) {
 	if rr.Code != http.StatusOK {
 		t.Fatalf("unexpected status: %d body=%s", rr.Code, rr.Body.String())
 	}
-	if len(got.Images) != 1 {
-		t.Fatalf("unexpected images: %#v", got.Images)
-	}
-	if len(got.Images[0].ImageURL) < 11 || got.Images[0].ImageURL[:11] != "data:image/" {
-		t.Fatalf("expected data url fallback, got %q", got.Images[0].ImageURL)
+	if entries, err := os.ReadDir(saveDir); err != nil || len(entries) != 1 {
+		t.Fatalf("expected 1 saved image in %s, entries=%v err=%v", saveDir, entries, err)
 	}
 }
 

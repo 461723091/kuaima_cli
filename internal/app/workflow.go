@@ -342,7 +342,7 @@ func (s *webUIServer) runWorkflow(ctx context.Context, c *client, workflow workf
 	var textParts []string
 	var saver *responseImageSaver
 	if stream != nil {
-		saver = newResponseImageSaver(ctx, c.httpClient, input.SaveDir)
+		saver = newResponseImageSaver(ctx, c.httpClient, input.SaveDir, boolValue(input.BaseOptions.upscale, true), stringValue(input.BaseOptions.size))
 	}
 
 	for i := 0; i < len(execSteps); i++ {
@@ -512,7 +512,7 @@ func (s *webUIServer) runWorkflow(ctx context.Context, c *client, workflow workf
 					var resp *responsePayload
 					resp, runErr = s.handleGenerateWithImageEndpoint(ctx, c, stepOpts, imageModelOrDefault(step.ImageModel, input.ImageModel), stepPrompt, pickRefs(useRefs, input.References), pickMask(step.UseMask, input.Mask))
 					if runErr == nil {
-						saved, runErr = saveImagesFromResponse(ctx, c.httpClient, resp, input.SaveDir)
+						saved, runErr = saveImagesFromResponse(ctx, c.httpClient, resp, input.SaveDir, boolValue(input.BaseOptions.upscale, true), stringValue(input.BaseOptions.size))
 					}
 					if runErr == nil && resp != nil {
 						text = strings.TrimSpace(resp.OutputText)
@@ -723,7 +723,7 @@ func (s *webUIServer) runWorkflowImageBatch(ctx context.Context, c *client, inpu
 					resp, runErr = s.handleGenerateWithImageEndpoint(ctx, jobClient, job.opts, imageModelOrDefault(job.step.ImageModel, input.ImageModel), stepResult.Prompt, refs, mask)
 					if runErr == nil {
 						saveMu.Lock()
-						saved, runErr = saveImagesFromResponse(ctx, jobClient.httpClient, resp, input.SaveDir)
+						saved, runErr = saveImagesFromResponse(ctx, jobClient.httpClient, resp, input.SaveDir, boolValue(input.BaseOptions.upscale, true), stringValue(input.BaseOptions.size))
 						saveMu.Unlock()
 					}
 					if runErr == nil && resp != nil {

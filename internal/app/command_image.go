@@ -44,7 +44,7 @@ func runImage(args []string) error {
 		return err
 	}
 	var resp *responsePayload
-	imageSaver := newResponseImageSaver(context.Background(), c.httpClient, *saveDir)
+	imageSaver := newResponseImageSaver(context.Background(), c.httpClient, *saveDir, *imageOpts.upscale, stringValue(imageOpts.size))
 	if len(images) == 0 {
 		req := imageOpts.generationRequest(opts.imageGenerationModel(), promptWithTextFiles(prompt, textFiles))
 		if *stream {
