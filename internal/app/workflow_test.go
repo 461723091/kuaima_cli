@@ -1,7 +1,12 @@
 package app
 
 import (
+	"bytes"
 	"context"
+	"encoding/base64"
+	"encoding/json"
+	"image"
+	"image/png"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -212,6 +217,79 @@ func TestRunWorkflowRunsImageStepsConcurrently(t *testing.T) {
 	}
 	if len(result.Steps) != 2 || len(result.Images) != 2 {
 		t.Fatalf("unexpected workflow result: %#v", result)
+	}
+}
+
+func TestRunWorkflowUsesStepSizeForUpscaling(t *testing.T) {
+	var imageReqSizes []string
+	img := image.NewRGBA(image.Rect(0, 0, 32, 32))
+	var buf bytes.Buffer
+	if err := png.Encode(&buf, img); err != nil {
+		t.Fatalf("encode png: %v", err)
+	}
+	encoded := base64.StdEncoding.EncodeToString(buf.Bytes())
+	apiServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/images/generations" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		var payload map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		if size, _ := payload["size"].(string); size != "" {
+			imageReqSizes = append(imageReqSizes, size)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"resp_1","output":[{"type":"image_generation_call","status":"completed","result":"` + encoded + `"}],"output_text":""}`))
+	}))
+	defer apiServer.Close()
+
+	c := &client{
+		baseURL:    apiServer.URL,
+		apiKey:     "secret-token",
+		httpClient: apiServer.Client(),
+	}
+	ui := &webUIServer{fileFormat: fileFormatBase64}
+	count := 1
+	saveDir := t.TempDir()
+
+	result, err := ui.runWorkflow(context.Background(), c, workflowDefinition{
+		ID:   "resolution",
+		Name: "Resolution",
+		Steps: []workflowStepDefinition{
+			{ID: "image", Kind: "image", Title: "Image", Prompt: "img", Endpoint: "image", Count: "1", Size: "1536x1024"},
+		},
+	}, workflowRuntimeInput{
+		BaseOptions:    imageOptions{count: &count, upscale: boolPtr(true), size: stringPtr("1024x1024")},
+		ImageModel:     "test-image-model",
+		Endpoint:       "image",
+		SaveDir:        saveDir,
+		PublicSaveDir:  saveDir,
+		MaxConcurrency: 1,
+	}, nil)
+	if err != nil {
+		t.Fatalf("run workflow: %v", err)
+	}
+	if len(imageReqSizes) != 1 || imageReqSizes[0] != "1536x1024" {
+		t.Fatalf("expected step size to be used, got %#v", imageReqSizes)
+	}
+	if len(result.Steps) != 1 {
+		t.Fatalf("unexpected workflow result: %#v", result)
+	}
+	if len(result.Saved) != 1 {
+		t.Fatalf("expected one saved image, got %#v", result.Saved)
+	}
+	f, err := os.Open(result.Saved[0])
+	if err != nil {
+		t.Fatalf("open saved image: %v", err)
+	}
+	defer f.Close()
+	dim, _, err := image.DecodeConfig(f)
+	if err != nil {
+		t.Fatalf("decode saved image config: %v", err)
+	}
+	if dim.Width != 1024 || dim.Height != 1024 {
+		t.Fatalf("expected saved image to upscale within the step target, got %dx%d", dim.Width, dim.Height)
 	}
 }
 

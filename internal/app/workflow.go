@@ -340,10 +340,6 @@ func (s *webUIServer) runWorkflow(ctx context.Context, c *client, workflow workf
 	}
 	stepIndex := make(map[string]workflowStepResult, len(execSteps))
 	var textParts []string
-	var saver *responseImageSaver
-	if stream != nil {
-		saver = newResponseImageSaver(ctx, c.httpClient, input.SaveDir, boolValue(input.BaseOptions.upscale, true), stringValue(input.BaseOptions.size))
-	}
 
 	for i := 0; i < len(execSteps); i++ {
 		step := execSteps[i]
@@ -353,7 +349,7 @@ func (s *webUIServer) runWorkflow(ctx context.Context, c *client, workflow workf
 			for end < len(execSteps) && strings.EqualFold(strings.TrimSpace(execSteps[end].Kind), "image") {
 				end++
 			}
-			stepResults, err := s.runWorkflowImageBatch(ctx, c, input, stream, saver, publicSaveDir, execSteps[i:end], i, len(execSteps), stepIndex)
+			stepResults, err := s.runWorkflowImageBatch(ctx, c, input, stream, publicSaveDir, execSteps[i:end], i, len(execSteps), stepIndex)
 			if err != nil {
 				return result, err
 			}
@@ -457,6 +453,7 @@ func (s *webUIServer) runWorkflow(ctx context.Context, c *client, workflow workf
 			if err != nil {
 				return result, err
 			}
+			stepSaver := newResponseImageSaver(ctx, c.httpClient, input.SaveDir, boolValue(input.BaseOptions.upscale, true), stringValue(stepOpts.size))
 			endpoint := strings.TrimSpace(step.Endpoint)
 			if endpoint == "" {
 				endpoint = input.Endpoint
@@ -466,10 +463,10 @@ func (s *webUIServer) runWorkflow(ctx context.Context, c *client, workflow workf
 			var text string
 			if stream != nil {
 				onImage := func(candidate imageCandidate) error {
-					if saver == nil {
+					if stepSaver == nil {
 						return nil
 					}
-					path, err := saver.saveCandidate(candidate)
+					path, err := stepSaver.saveCandidate(candidate)
 					if err != nil {
 						return err
 					}
@@ -512,7 +509,7 @@ func (s *webUIServer) runWorkflow(ctx context.Context, c *client, workflow workf
 					var resp *responsePayload
 					resp, runErr = s.handleGenerateWithImageEndpoint(ctx, c, stepOpts, imageModelOrDefault(step.ImageModel, input.ImageModel), stepPrompt, pickRefs(useRefs, input.References), pickMask(step.UseMask, input.Mask))
 					if runErr == nil {
-						saved, runErr = saveImagesFromResponse(ctx, c.httpClient, resp, input.SaveDir, boolValue(input.BaseOptions.upscale, true), stringValue(input.BaseOptions.size))
+						saved, runErr = saveImagesFromResponse(ctx, c.httpClient, resp, input.SaveDir, boolValue(input.BaseOptions.upscale, true), stringValue(stepOpts.size))
 					}
 					if runErr == nil && resp != nil {
 						text = strings.TrimSpace(resp.OutputText)
@@ -601,7 +598,7 @@ type workflowImageJob struct {
 	useRefs    bool
 }
 
-func (s *webUIServer) runWorkflowImageBatch(ctx context.Context, c *client, input workflowRuntimeInput, stream *webUIEventStream, saver *responseImageSaver, publicSaveDir string, steps []workflowStepDefinition, startIndex, total int, stepIndex map[string]workflowStepResult) ([]workflowStepResult, error) {
+func (s *webUIServer) runWorkflowImageBatch(ctx context.Context, c *client, input workflowRuntimeInput, stream *webUIEventStream, publicSaveDir string, steps []workflowStepDefinition, startIndex, total int, stepIndex map[string]workflowStepResult) ([]workflowStepResult, error) {
 	if len(steps) == 0 {
 		return nil, nil
 	}
@@ -677,18 +674,19 @@ func (s *webUIServer) runWorkflowImageBatch(ctx context.Context, c *client, inpu
 					"count": total,
 				})
 			}
-			stepResult := job.stepResult
-			refs := pickRefs(job.useRefs, input.References)
-			mask := pickMask(job.step.UseMask, input.Mask)
-			onImage := func(candidate imageCandidate) error {
-				if saver == nil {
-					return nil
-				}
-				saveMu.Lock()
-				path, err := saver.saveCandidate(candidate)
-				saveMu.Unlock()
-				if err != nil {
-					return err
+		stepResult := job.stepResult
+		stepSaver := newResponseImageSaver(ctx, jobClient.httpClient, input.SaveDir, boolValue(input.BaseOptions.upscale, true), stringValue(job.opts.size))
+		refs := pickRefs(job.useRefs, input.References)
+		mask := pickMask(job.step.UseMask, input.Mask)
+		onImage := func(candidate imageCandidate) error {
+			if stepSaver == nil {
+				return nil
+			}
+			saveMu.Lock()
+			path, err := stepSaver.saveCandidate(candidate)
+			saveMu.Unlock()
+			if err != nil {
+				return err
 				}
 				if path == "" {
 					return nil
@@ -723,7 +721,7 @@ func (s *webUIServer) runWorkflowImageBatch(ctx context.Context, c *client, inpu
 					resp, runErr = s.handleGenerateWithImageEndpoint(ctx, jobClient, job.opts, imageModelOrDefault(job.step.ImageModel, input.ImageModel), stepResult.Prompt, refs, mask)
 					if runErr == nil {
 						saveMu.Lock()
-						saved, runErr = saveImagesFromResponse(ctx, jobClient.httpClient, resp, input.SaveDir, boolValue(input.BaseOptions.upscale, true), stringValue(input.BaseOptions.size))
+						saved, runErr = saveImagesFromResponse(ctx, jobClient.httpClient, resp, input.SaveDir, boolValue(input.BaseOptions.upscale, true), stringValue(job.opts.size))
 						saveMu.Unlock()
 					}
 					if runErr == nil && resp != nil {
