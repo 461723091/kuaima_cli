@@ -72,6 +72,52 @@ func (c *client) Close() error {
 	return c.logCloser.Close()
 }
 
+func (c *client) withIndependentHTTPClient() *client {
+	if c == nil {
+		return nil
+	}
+	next := *c
+	next.logCloser = nil
+	next.httpClient = independentHTTPClient(c.httpClient)
+	return &next
+}
+
+func independentHTTPClient(base *http.Client) *http.Client {
+	if base == nil {
+		base = &http.Client{Timeout: 10 * time.Minute}
+	}
+	next := &http.Client{
+		CheckRedirect: base.CheckRedirect,
+		Jar:           base.Jar,
+		Timeout:       base.Timeout,
+	}
+	switch transport := base.Transport.(type) {
+	case *http.Transport:
+		cloned := transport.Clone()
+		cloned.DisableKeepAlives = true
+		next.Transport = cloned
+	case nil:
+		cloned := http.DefaultTransport.(*http.Transport).Clone()
+		cloned.DisableKeepAlives = true
+		next.Transport = cloned
+	default:
+		next.Transport = closeRequestRoundTripper{rt: transport}
+	}
+	return next
+}
+
+type closeRequestRoundTripper struct {
+	rt http.RoundTripper
+}
+
+func (t closeRequestRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+	next := req.Clone(req.Context())
+	next.Body = req.Body
+	next.GetBody = req.GetBody
+	next.Close = true
+	return t.rt.RoundTrip(next)
+}
+
 func (c *client) newRequest(ctx context.Context, body io.Reader) (*http.Request, error) {
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/v1/responses", body)
 	if err != nil {

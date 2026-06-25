@@ -664,6 +664,7 @@ func (s *webUIServer) runWorkflowImageBatch(ctx context.Context, c *client, inpu
 			defer wg.Done()
 			sem <- struct{}{}
 			defer func() { <-sem }()
+			jobClient := c.withIndependentHTTPClient()
 			if stream != nil {
 				stream.send("status", map[string]string{
 					"message": fmt.Sprintf("正在生成 %d/%d：%s", startIndex+job.offset+1, total, job.step.Title),
@@ -706,9 +707,9 @@ func (s *webUIServer) runWorkflowImageBatch(ctx context.Context, c *client, inpu
 			if stream != nil {
 				var resp *responsePayload
 				if job.endpoint == "response" {
-					resp, runErr = s.handleGenerateWithResponsesStream(ctx, c, job.opts, imageModelOrDefault(job.step.ImageModel, input.ImageModel), stepResult.Prompt, refs, mask, stream, onImage, innerConcurrency)
+					resp, runErr = s.handleGenerateWithResponsesStream(ctx, jobClient, job.opts, imageModelOrDefault(job.step.ImageModel, input.ImageModel), stepResult.Prompt, refs, mask, stream, onImage, innerConcurrency)
 				} else {
-					resp, runErr = s.handleGenerateWithImageEndpointStream(ctx, c, job.opts, imageModelOrDefault(job.step.ImageModel, input.ImageModel), stepResult.Prompt, refs, mask, stream, onImage, innerConcurrency)
+					resp, runErr = s.handleGenerateWithImageEndpointStream(ctx, jobClient, job.opts, imageModelOrDefault(job.step.ImageModel, input.ImageModel), stepResult.Prompt, refs, mask, stream, onImage, innerConcurrency)
 				}
 				if runErr == nil && resp != nil {
 					text = strings.TrimSpace(resp.OutputText)
@@ -716,13 +717,13 @@ func (s *webUIServer) runWorkflowImageBatch(ctx context.Context, c *client, inpu
 			} else {
 				var saved []string
 				if job.endpoint == "response" {
-					saved, text, runErr = s.handleGenerateWithResponses(ctx, c, job.opts, imageModelOrDefault(job.step.ImageModel, input.ImageModel), stepResult.Prompt, refs, mask, input.SaveDir, innerConcurrency)
+					saved, text, runErr = s.handleGenerateWithResponses(ctx, jobClient, job.opts, imageModelOrDefault(job.step.ImageModel, input.ImageModel), stepResult.Prompt, refs, mask, input.SaveDir, innerConcurrency)
 				} else {
 					var resp *responsePayload
-					resp, runErr = s.handleGenerateWithImageEndpoint(ctx, c, job.opts, imageModelOrDefault(job.step.ImageModel, input.ImageModel), stepResult.Prompt, refs, mask)
+					resp, runErr = s.handleGenerateWithImageEndpoint(ctx, jobClient, job.opts, imageModelOrDefault(job.step.ImageModel, input.ImageModel), stepResult.Prompt, refs, mask)
 					if runErr == nil {
 						saveMu.Lock()
-						saved, runErr = saveImagesFromResponse(ctx, c.httpClient, resp, input.SaveDir)
+						saved, runErr = saveImagesFromResponse(ctx, jobClient.httpClient, resp, input.SaveDir)
 						saveMu.Unlock()
 					}
 					if runErr == nil && resp != nil {
