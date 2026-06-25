@@ -92,49 +92,7 @@ textarea {
 .topbar-workbench {
   min-width: 0;
   display: grid;
-  grid-template-columns: minmax(170px, auto) minmax(0, 1fr);
-  align-items: center;
-  gap: 12px;
-}
-
-.workbench-title {
-  min-width: 0;
-  display: flex;
-  align-items: center;
   gap: 8px;
-}
-
-.workbench-title>span {
-  display: inline-grid;
-  place-items: center;
-  width: 28px;
-  height: 28px;
-  flex: 0 0 28px;
-  border-radius: 8px;
-  color: #fff;
-  background: linear-gradient(135deg, var(--accent), var(--accent-2));
-}
-
-.workbench-title [data-lucide] {
-  width: 16px;
-  height: 16px;
-}
-
-.workbench-title strong,
-.workbench-title small {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.workbench-title strong {
-  font-size: 15px;
-}
-
-.workbench-title small {
-  min-width: 0;
-  margin: 0;
-  max-width: 260px;
 }
 
 .workbench-tabs {

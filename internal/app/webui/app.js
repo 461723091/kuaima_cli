@@ -155,7 +155,7 @@
       previewList.classList.remove("drag-over");
       addImageURLAsReference(draggedHistoryImageURL).catch((error) => {
         $("#genStatus").textContent = error.message;
-        $("#genStatus").className = "status error";
+        $("#genStatus").className = "status gen-status error";
       });
       return;
     }
@@ -248,7 +248,7 @@
         }
       } catch (error) {
         $("#genStatus").textContent = error.message;
-        $("#genStatus").className = "status error";
+        $("#genStatus").className = "status gen-status error";
       }
       return;
     }
@@ -327,7 +327,7 @@
   setRechargeTab("amount");
   initConfig().catch((error) => {
     $("#genStatus").textContent = error.message;
-    $("#genStatus").className = "status error";
+    $("#genStatus").className = "status gen-status error";
   });
   requestPersistentHistoryStorage();
   cleanupHistoryImageData().then(renderHistory).catch((error) => {

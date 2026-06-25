@@ -360,6 +360,17 @@ function formatTimingSummary(item) {
   return parts.join(" · ");
 }
 
+function historyStatusLabel(status) {
+  const value = String(status || "").toLowerCase();
+  if (value === "partial") {
+    return "部分成功";
+  }
+  if (value === "failed") {
+    return "失败";
+  }
+  return "";
+}
+
 function workflowParamSummary(params) {
   const entries = Object.entries(params && typeof params === "object" ? params : {})
     .filter((entry) => String(entry[1] == null ? "" : entry[1]).trim() !== "");
@@ -405,9 +416,9 @@ async function renderHistory() {
     return;
   }
   panel.innerHTML = history.map((item) => (
-    '<article class="history-item ' + esc(item.status === "failed" ? "failed" : "") + '" data-history-id="' + esc(item.id) + '">' +
+    '<article class="history-item ' + esc(String(item.status || "").toLowerCase()) + '" data-history-id="' + esc(item.id) + '">' +
     '<div class="history-head"><div><strong>' + esc(formatHistoryTime(item.created_at)) +
-    (item.status === "failed" ? ' · 失败' : '') +
+    (historyStatusLabel(item.status) ? ' · ' + esc(historyStatusLabel(item.status)) : '') +
     '</strong><p>' + esc(item.prompt || "") + '</p></div>' +
     '<div class="history-actions">' +
     '<button class="btn small" type="button" data-history-action="restore" data-history-id="' + esc(item.id) +

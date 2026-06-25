@@ -40,10 +40,6 @@
     return $("#workflowTemplates");
   }
 
-  function workflowDescription() {
-    return $("#workflowDescription");
-  }
-
   function workflowFields() {
     return $("#workflowFields");
   }
@@ -91,7 +87,10 @@
 
   function workflowLabel(id) {
     if (String(id || "") === "single") {
-      return "图片生成";
+      return "自由生图";
+    }
+    if (String(id || "") === "agent") {
+      return "对话模式";
     }
     const def = workflowDef(id);
     return def ? def.name : String(id || "");
@@ -334,19 +333,21 @@
 
   function renderWorkflowFields(def) {
     const container = workflowFields();
-    const description = workflowDescription();
-    if (!container || !description) {
+    const status = $("#genStatus");
+    if (!container || !status) {
       return;
     }
     if (!def || String(def.id || "") === "single") {
       container.hidden = true;
       container.innerHTML = "";
-      description.textContent = "图片生成";
+      status.textContent = "自由生图";
+      status.className = "status gen-status";
       return;
     }
 
     const cached = state.cache[def.id] || {};
-    description.textContent = def.description || "";
+    status.textContent = def.description || def.name || workflowLabel(def.id);
+    status.className = "status gen-status";
     container.hidden = false;
     const inputs = def.inputs || [];
     if (String(def.id || "") === "product-pack") {
@@ -465,10 +466,10 @@
         iconHTML("badge-plus") + '<span>升级到' + esc(next.label) + '</span></button>' : "") +
       '</div>' +
       (needsReview ? '<label class="workflow-run-toggle">' +
-      '<input id="workflowAutoRun" type="checkbox"' + checked + '>' +
-      '<span class="workflow-run-toggle-box">' + iconHTML("fast-forward") + '</span>' +
-      '<span><strong>无需确认一键运行</strong><small>文案步骤完成后自动继续生成图片</small></span>' +
-      '</label>' : "");
+        '<input id="workflowAutoRun" type="checkbox"' + checked + '>' +
+        '<span class="workflow-run-toggle-box">' + iconHTML("fast-forward") + '</span>' +
+        '<span><strong>无需确认一键运行</strong><small>文案步骤完成后自动继续生成图片</small></span>' +
+        '</label>' : "");
   }
 
   function workflowAccountGroup() {
@@ -743,7 +744,7 @@
       const text = String(step.text || "").trim();
       const status = String(step.status || "done");
       const duration = stepDurationMs(step);
-      const canRerun = status === "done" && String(step.id || "").trim();
+      const canRerun = status === "done" && String(step.id || "").trim() && String(step.kind || "").toLowerCase() === "image";
       return '<section class="workflow-step ' + esc(status) + '">' +
         '<div class="workflow-step-head">' +
         '<div><strong>' + esc(step.title || step.id || "步骤") + "</strong>" +
@@ -833,6 +834,8 @@
     const workflowId = currentWorkflowId();
     const def = workflowDef(workflowId);
     const result = { workflow_id: workflowId, workflow_name: workflowLabel(workflowId), prompt: "", params: {}, output_dir: "", steps: [], images: [], saved: [], text: "", timing: null, needs_review: false, progress_total: workflowProgressTotal(def, options.mode) };
+    result.previousResult = state.lastResult || null;
+    state.lastResult = result;
     const preserveResults = options.preserveResults === true;
     const startedAt = performance.now();
     let firstResponseAt = 0;
@@ -843,21 +846,28 @@
         firstResponseAt = performance.now();
       }
     };
+    const completeStep = (step) => {
+      if (!step) {
+        return;
+      }
+      if (!step.started_at_ms) {
+        step.started_at_ms = performance.now();
+      }
+      if (!step.ended_at_ms) {
+        step.ended_at_ms = performance.now();
+      }
+      step.status = "done";
+    };
     const finishActiveStep = () => {
       if (activeStep && activeStep.status === "running") {
-        activeStep.status = "done";
-        activeStep.ended_at_ms = performance.now();
+        completeStep(activeStep);
       }
     };
     const finishStepById = (id) => {
       const key = String(id || "").trim();
       const step = key ? stepsById.get(key) : activeStep;
       if (step && step.status === "running") {
-        step.status = "done";
-        step.ended_at_ms = performance.now();
-      }
-      if (activeStep === step) {
-        activeStep = null;
+        completeStep(step);
       }
     };
 
@@ -984,6 +994,9 @@
           if (!target.images.includes(url)) {
             target.images.push(url);
           }
+          if (String(target.kind || "").toLowerCase() === "image") {
+            completeStep(target);
+          }
         }
         if (!preserveResults) {
           renderWorkflowSteps(result);
@@ -1099,7 +1112,17 @@
         $("#genStatus").className = "status gen-status";
         return null;
       }
-      await saveHistorySafely({ images: [] }, { status: "failed", error: error.message });
+      const lastResult = state.lastResult && (Array.isArray(state.lastResult.images) || Array.isArray(state.lastResult.saved))
+        ? state.lastResult
+        : null;
+      const hasPartialOutput = Boolean(lastResult && ((lastResult.images || []).length > 0 || (lastResult.saved || []).length > 0));
+      await saveHistorySafely(lastResult || { images: [] }, {
+        status: hasPartialOutput ? "partial" : "failed",
+        error: error.message,
+      });
+      if (!hasPartialOutput && state.lastResult && state.lastResult.previousResult) {
+        state.lastResult = state.lastResult.previousResult;
+      }
       handleOperationError(error, $("#genStatus"));
       return null;
     } finally {
@@ -1158,6 +1181,7 @@
     if (!form || !previous || !stepId) {
       return;
     }
+    let rerunApplied = false;
     const originalSteps = Array.isArray(previous.steps) ? previous.steps : [];
     const stepIndex = originalSteps.findIndex((step) => String(step.id || "") === stepId);
     if (stepIndex < 0) {
@@ -1216,6 +1240,7 @@
         (historyError ? "，历史保存失败：" + historyError : "");
       $("#genStatus").className = "status gen-status";
       loadBalance();
+      rerunApplied = true;
     } catch (error) {
       handleOperationError(error, $("#genStatus"));
     } finally {
@@ -1224,7 +1249,10 @@
       if (cancelButton) {
         cancelButton.hidden = true;
       }
-      renderWorkflowSteps(state.lastResult || previous);
+      if (!rerunApplied) {
+        state.lastResult = previous;
+      }
+      renderWorkflowSteps(rerunApplied ? (state.lastResult || previous) : previous);
     }
   }
 

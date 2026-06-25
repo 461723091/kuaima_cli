@@ -562,7 +562,7 @@ function looksLikeInsufficientBalance(message) {
 
 function handleOperationError(error, statusElement) {
   statusElement.textContent = error.message;
-  statusElement.className = "status error";
+  statusElement.className = "status gen-status error";
   if (looksLikeInsufficientBalance(error.message)) {
     setBillingOpen(true);
     setRechargeTab("plan");

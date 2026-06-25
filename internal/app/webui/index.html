@@ -19,11 +19,7 @@
       <span class="brand-name">快马 AI WebUI</span>
     </div>
     <div class="topbar-workbench">
-      <div class="workbench-title">
-        <span><i data-lucide="sparkles" aria-hidden="true"></i></span>
-        <strong>图像生成工作台</strong>
-        <small id="workflowDescription" class="workflow-description">图片生成</small>
-      </div>
+      <div id="genStatus" class="status gen-status" aria-live="polite">图片生成</div>
       <div class="workbench-tabs">
         <input id="workflowId" name="workflow_id" type="hidden" value="single">
         <input id="workflowTemplates" name="workflow_templates" type="hidden" value="">
@@ -155,7 +151,6 @@
                 </button>
               </div>
             </div>
-            <div id="genStatus" class="status gen-status"></div>
             <div id="imagePreviewList" class="image-preview-list empty">上传参考图后可预览、删除和调整顺序</div>
           </div>
 
