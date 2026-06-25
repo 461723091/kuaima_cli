@@ -26,6 +26,13 @@ function activeSubscription(subscriptions) {
   }) || null;
 }
 
+function accountIdentity(usage) {
+  if (!usage || typeof usage !== "object") {
+    return "default";
+  }
+  return usage.group || 'default';
+}
+
 function renderSubscriptions(subscriptions) {
   const list = Array.isArray(subscriptions) ? subscriptions : [];
   $("#subscriptionCount").textContent = list.length ? String(list.length) : "";
@@ -65,6 +72,7 @@ function renderBalance(usage) {
   $("#balanceTop2").textContent = usage.total_available_text || "-";
   $("#usedTop").textContent = usage.total_used_text || "-";
   $("#accountName").textContent = usage.name || "-";
+  $("#accountIdentity").textContent = accountIdentity(usage);
   $("#accountBalanceSummary").hidden = !!active;
   renderSubscriptions(subscriptions);
 

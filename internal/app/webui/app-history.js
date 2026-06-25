@@ -286,8 +286,9 @@ async function saveHistory(result, extra = {}) {
     : {};
   const resultParams = result && result.params && typeof result.params === "object" ? result.params : {};
   const mergedWorkflowParams = Object.assign({}, workflowParams, resultParams);
+  const historyId = String(extra.history_id || (result && result.history_id) || "").trim() || String(Date.now());
   const item = {
-    id: String(Date.now()),
+    id: historyId,
     created_at: new Date().toISOString(),
     status: extra.status || "success",
     prompt: form.elements.prompt.value,
@@ -311,6 +312,9 @@ async function saveHistory(result, extra = {}) {
     total_ms: timing && Number.isFinite(Number(timing.total_ms)) ? Math.round(Number(timing.total_ms)) : null,
     error: extra.error || "",
   };
+  if (result && typeof result === "object") {
+    result.history_id = item.id;
+  }
   await putHistoryItem(item);
   await renderHistory();
 }
@@ -550,8 +554,10 @@ function updateLoadedImageSize(img) {
 
 function openImagePreview(button) {
   const img = button.querySelector("img");
+  $("#imagePreviewTitle").textContent = "图片预览";
   $("#imageModalImg").src = button.dataset.previewImage || (img && img.src) || "";
   $("#imageModalSize").textContent = imageDimensionsText(img);
+  $("#imageModalImg").alt = img && img.alt ? img.alt : "图片预览";
   $("#imageModal").hidden = false;
 }
 

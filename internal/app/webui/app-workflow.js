@@ -96,6 +96,21 @@
     return def ? def.name : String(id || "");
   }
 
+  function openWorkflowCustomizationModal() {
+    const modal = $("#imageModal");
+    const title = $("#imagePreviewTitle");
+    const size = $("#imageModalSize");
+    const img = $("#imageModalImg");
+    if (!modal || !title || !size || !img) {
+      return;
+    }
+    title.textContent = "工作流定制";
+    size.textContent = "联系客服添加微信";
+    img.src = "imgs/qrcode.png";
+    img.alt = "联系客服添加微信二维码";
+    modal.hidden = false;
+  }
+
   function currentWorkflowValues() {
     const fields = workflowFields();
     const values = {};
@@ -138,7 +153,9 @@
     )).join("");
     container.innerHTML = workflowButtons +
       '<button class="workflow-tab' + (agentActive ? " active" : "") + '" type="button" role="tab" aria-selected="' +
-      String(agentActive) + '" data-mode-tab="agent">' + iconHTML("bot-message-square") + '<span>Agent 模式</span></button>' +
+      String(agentActive) + '" data-mode-tab="agent" data-workflow-id="agent">' + iconHTML("bot-message-square") + '<span>Agent 模式</span></button>' +
+      '<button class="workflow-tab" type="button" role="tab" aria-selected="false" data-mode-tab="generate" data-workflow-id="workflow-custom">' +
+      iconHTML("sparkles") + '<span>工作流定制</span></button>' +
       catalogButtons;
   }
 
@@ -1271,6 +1288,13 @@
         return;
       }
       const id = String(button.dataset.workflowId || "single");
+      if (id === "agent") {
+        return;
+      }
+      if (id === "workflow-custom") {
+        openWorkflowCustomizationModal();
+        return;
+      }
       if (id === currentWorkflowId()) {
         return;
       }
