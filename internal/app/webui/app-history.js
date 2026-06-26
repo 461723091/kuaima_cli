@@ -591,7 +591,15 @@ async function chooseOutputDir() {
 }
 
 async function openDefaultOutputDir() {
-  const saveDir = currentOutputDir();
+  return openOutputDir(currentOutputDir());
+}
+
+async function openOutputDir(saveDir) {
+  saveDir = String(saveDir || "").trim();
+  if (!saveDir) {
+    updateSaveDirStatus("请输入图片生成结果目录", true);
+    return;
+  }
   updateSaveDirStatus("正在打开输出目录...");
   try {
     const result = await api("/api/output/open", {
@@ -605,3 +613,7 @@ async function openDefaultOutputDir() {
     updateSaveDirStatus(error.message, true);
   }
 }
+
+window.KuaimaOutputDir = {
+  open: openOutputDir,
+};

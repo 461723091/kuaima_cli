@@ -1117,6 +1117,10 @@
     justify-content: start;
   }
 
+  .output-dir-row input {
+    grid-column: 1/-1;
+  }
+
   .output-dir-box .status {
     min-height: 18px;
     margin-top: 6px;

@@ -467,12 +467,22 @@
     }
     const needsReview = workflowNeedsReview(def);
     const checked = state.cache.skipReview === true ? " checked" : "";
+    const soundChecked = state.cache.playDoneSound !== false ? " checked" : "";
     container.hidden = false;
-    container.innerHTML = needsReview ? '<label class="workflow-run-toggle">' +
-      '<input id="workflowAutoRun" type="checkbox"' + checked + '>' +
-      '<span class="workflow-run-toggle-box">' + iconHTML("fast-forward") + '</span>' +
-      '<span><strong>无需确认一键运行</strong><small>文案步骤完成后自动继续生成图片</small></span>' +
-      '</label>' : "";
+    container.innerHTML = '<details class="workflow-run-options-compact" open>' +
+      '<summary>' + iconHTML("settings-2") + '<span>运行选项</span></summary>' +
+      '<div class="workflow-run-options-body">' +
+      (needsReview ? '<label class="workflow-run-toggle workflow-run-toggle-inline">' +
+        '<input id="workflowAutoRun" type="checkbox"' + checked + '>' +
+        '<span class="workflow-run-toggle-box">' + iconHTML("fast-forward") + '</span>' +
+        '<span>无需确认直接运行</span>' +
+        '</label>' : "") +
+      '<label class="workflow-run-toggle workflow-run-toggle-inline">' +
+      '<input id="workflowPlayDoneSound" type="checkbox"' + soundChecked + '>' +
+      '<span class="workflow-run-toggle-box">' + iconHTML("volume-2") + '</span>' +
+      '<span>完成后播放声音</span>' +
+      '</label>' +
+      '</div></details>';
   }
 
   function workflowAccountGroup() {
@@ -537,16 +547,28 @@
     return ordered;
   }
 
-  function workflowProgressMetaHTML(def) {
+  function workflowProgressMetaHTML(def, result) {
     const group = workflowAccountGroup();
     const selectedCount = currentWorkflowTemplateIDs().length || workflowDefaultTemplateIDs(def).length;
     const next = workflowNextPlan(group);
     return '<div class="workflow-progress-meta">' +
       '<span class="workflow-progress-chip">' + esc(workflowConcurrencySummary(group)) + '</span>' +
       '<span class="workflow-progress-chip">' + esc("本次选择 " + selectedCount + " 张") + '</span>' +
+      workflowResultDirHTML(result) +
       (next ? '<button class="btn small primary" type="button" data-workflow-upgrade>' +
         iconHTML("badge-plus") + '<span>升级到' + esc(next.label) + '</span></button>' : "") +
       '</div>';
+  }
+
+  function workflowResultDirHTML(result) {
+    const dir = String(result && result.output_dir || "").trim();
+    if (!dir) {
+      return "";
+    }
+    return '<button class="workflow-result-dir" type="button" data-workflow-open-output-dir="' + esc(dir) + '">' +
+      iconHTML("folder-open") +
+      '<span>打开文件目录</span>' +
+      '</button>';
   }
 
   function workflowDefaultTemplateIDs(def) {
@@ -781,7 +803,7 @@
     const def = workflowDef(currentWorkflowId());
     const progressHTML = '<div class="workflow-progress">' +
       '<div class="workflow-progress-head"><strong>工作流进度</strong><span>' + esc(current) + ' / ' + esc(total) + '</span></div>' +
-      workflowProgressMetaHTML(def) +
+      workflowProgressMetaHTML(def, result) +
       '<div class="workflow-progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="' + esc(total) +
       '" aria-valuenow="' + esc(current) + '"><span style="width:' + esc(percent) + '%"></span></div>' +
       '</div>';
@@ -1156,6 +1178,15 @@
       $("#genStatus").textContent = "已保存" + result.saved.length + " 张" +
         (historyError ? "，历史保存失败：" + historyError : "");
       $("#genStatus").className = "status gen-status";
+      renderWorkflowSteps(result);
+      if (state.cache.playDoneSound !== false && typeof Audio !== "undefined") {
+        try {
+          const audio = new Audio("done.mp3");
+          audio.play().catch(() => { });
+        } catch {
+          // Ignore sound playback failures.
+        }
+      }
       loadBalance();
       return result;
     } catch (error) {
@@ -1457,11 +1488,17 @@
     const runOptions = workflowRunOptions();
     if (runOptions) {
       runOptions.addEventListener("change", (event) => {
-        const input = event.target.closest("#workflowAutoRun");
-        if (!input) {
+        const autoRun = event.target.closest("#workflowAutoRun");
+        if (autoRun) {
+          state.cache.skipReview = Boolean(autoRun.checked);
+          saveWorkflowCache();
           return;
         }
-        state.cache.skipReview = Boolean(input.checked);
+        const playSound = event.target.closest("#workflowPlayDoneSound");
+        if (!playSound) {
+          return;
+        }
+        state.cache.playDoneSound = Boolean(playSound.checked);
         saveWorkflowCache();
       });
       runOptions.addEventListener("click", (event) => {
@@ -1470,6 +1507,7 @@
           return;
         }
         event.preventDefault();
+        event.stopImmediatePropagation();
         if (window.KuaimaBilling && typeof window.KuaimaBilling.openPlans === "function") {
           window.KuaimaBilling.openPlans();
         }
@@ -1499,10 +1537,19 @@
         const upgrade = event.target.closest("[data-workflow-upgrade]");
         if (upgrade) {
           event.preventDefault();
-          console.log('click upgrade ...')
+          event.stopImmediatePropagation();
           if (window.KuaimaBilling && typeof window.KuaimaBilling.openPlans === "function") {
             window.KuaimaBilling.openPlans();
-            console.log('open ok ?')
+          }
+          return;
+        }
+        const openOutputDir = event.target.closest("[data-workflow-open-output-dir]");
+        if (openOutputDir) {
+          event.preventDefault();
+          event.stopImmediatePropagation();
+          const dir = String(openOutputDir.dataset.workflowOpenOutputDir || "").trim();
+          if (dir && window.KuaimaOutputDir && typeof window.KuaimaOutputDir.open === "function") {
+            await window.KuaimaOutputDir.open(dir);
           }
           return;
         }

@@ -86,13 +86,12 @@ function renderBalance(usage) {
   $("#usageProgressUsedLabel").textContent = "已用 " + usedPercent.toFixed(0) + "%";
 }
 
-window.KuaimaBilling = Object.assign({}, window.KuaimaBilling || {}, {
-  openPlans() {
-    setBillingOpen(true);
-    setRechargeTab("plan");
-    loadRechargeInfo();
-  },
-});
+if (!window.KuaimaBilling) window.KuaimaBilling = {};
+window.KuaimaBilling.openPlans = function () {
+  setBillingOpen(true);
+  setRechargeTab("plan");
+  loadRechargeInfo();
+};
 
 async function loadBalance() {
   try {

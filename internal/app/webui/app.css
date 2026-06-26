@@ -4,3 +4,61 @@
 @import url("/css/results-history.css");
 @import url("/css/billing-modals.css");
 @import url("/css/responsive.css");
+
+.workflow-run-options-compact {
+  margin-top: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: var(--panel-bg);
+}
+
+.workflow-run-options-compact>summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.workflow-run-options-compact>summary::-webkit-details-marker {
+  display: none;
+}
+
+.workflow-run-options-body {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.workflow-run-toggle-inline {
+  min-width: 0;
+}
+
+.workflow-run-toggle-inline span:last-child {
+  white-space: nowrap;
+}
+
+.workflow-result-dir {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  cursor: pointer;
+  padding: 6px 10px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: var(--panel-bg);
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workflow-progress-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
