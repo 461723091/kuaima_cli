@@ -30,7 +30,7 @@
       <button id="toggleBillingTop" class="wallet-pill" type="button" aria-expanded="false">
         <i data-lucide="wallet-cards" aria-hidden="true"></i>
         <span class="wallet-copy">
-          <span id="balanceTopLabel">可用token</span>
+          <small id="accountIdentityTop">普通用户</small>
           <strong id="balanceTop">读取中...</strong>
         </span>
         <i class="wallet-chevron" data-lucide="chevron-down" aria-hidden="true"></i>
@@ -214,8 +214,9 @@
                 <select id="resolutionSelect">
                   <option value="1k">1k</option>
                   <option value="2k">2k</option>
-                  <option value="4k">4k</option>
+                  <option value="4k">4k（VIP+）</option>
                 </select>
+                <p class="field-note">4k 分辨率仅限 VIP 及以上用户。</p>
               </div>
             </div>
 
@@ -328,6 +329,52 @@
         <span id="imageModalSize" class="image-size-label">-</span>
       </div>
       <img id="imageModalImg" alt="生成结果预览">
+    </div>
+  </div>
+
+  <div id="workflowContactModal" class="modal-backdrop contact-modal-backdrop" hidden>
+    <div class="contact-modal" role="dialog" aria-modal="true" aria-labelledby="workflowContactTitle">
+      <button id="closeWorkflowContactModal" class="modal-close" type="button" aria-label="关闭">×</button>
+      <div class="contact-modal-head">
+        <div>
+          <p class="eyebrow">Support</p>
+          <h2 id="workflowContactTitle">联系客服</h2>
+        </div>
+        <span class="contact-badge">常见问题</span>
+      </div>
+      <div class="contact-modal-body">
+        <div class="contact-intro">
+          <img src="imgs/qrcode.png" alt="联系客服二维码">
+          <div class="contact-copy">
+            <p>扫一扫可添加客服微信。</p>
+            <ul>
+              <li>欢迎反馈意见与bug</li>
+              <li>单张图片速度约1-5分钟，如遇算力波动，请耐心等待或者稍后重试</li>
+              <li>如需稳定大量生图 或个性化工作流 请联系开通SVIP </li>
+            </ul>
+          </div>
+        </div>
+        <div class="contact-faq">
+          <h3>常见问题</h3>
+          <div class="contact-faq-item">
+            <strong>如何收费</strong>
+            <span>根据生图或者对话的token消耗计费。可在左上角查看当前剩余token数量和明细。</span>
+            <span>目前gpt-image-2模型一张图片价格约0.06元。生图失败不扣费。 </span>
+          </div>
+          <div class="contact-faq-item">
+            <strong>VIP权益</strong>
+            <span>支持4k图片</span>
+            <span>支持并发生图,更快的出图速度</span>
+            <span>SVIP客户支持定制工作流</span>
+            <span>SVIP客户支持企业独立专线，支持开发票</span>
+          </div>
+          <div class="contact-faq-item">
+            <strong>注意事项</strong>
+            <span>历史记录可能会被清空, 已生成内容默认保存在下载目录</span>
+            <span>请勿生成违法或不合规内容，可能会导致封号并拒绝退款</span>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 

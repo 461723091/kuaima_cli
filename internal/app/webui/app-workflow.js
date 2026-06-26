@@ -132,6 +132,25 @@
     return values;
   }
 
+  function openWorkflowContactModal() {
+    const modal = $("#workflowContactModal");
+    const close = $("#closeWorkflowContactModal");
+    if (!modal) {
+      return;
+    }
+    modal.hidden = false;
+    if (close) {
+      close.focus();
+    }
+  }
+
+  function closeWorkflowContactModal() {
+    const modal = $("#workflowContactModal");
+    if (modal) {
+      modal.hidden = true;
+    }
+  }
+
   function renderWorkflowTabs() {
     const container = workflowTabs();
     if (!container) {
@@ -155,7 +174,7 @@
       '<button class="workflow-tab' + (agentActive ? " active" : "") + '" type="button" role="tab" aria-selected="' +
       String(agentActive) + '" data-mode-tab="agent" data-workflow-id="agent">' + iconHTML("bot-message-square") + '<span>Agent 模式</span></button>' +
       '<button class="workflow-tab" type="button" role="tab" aria-selected="false" data-mode-tab="generate" data-workflow-id="workflow-custom">' +
-      iconHTML("sparkles") + '<span>工作流定制</span></button>' +
+      iconHTML("sparkles") + '<span>联系客服</span></button>' +
       catalogButtons;
   }
 
@@ -1375,7 +1394,7 @@
         return;
       }
       if (id === "workflow-custom") {
-        openWorkflowCustomizationModal();
+        openWorkflowContactModal();
         return;
       }
       if (id === currentWorkflowId()) {
@@ -1454,6 +1473,11 @@
       const modal = workflowTemplatePicker() && workflowTemplatePicker().querySelector("[data-workflow-template-modal]");
       if (modal && !modal.hidden) {
         modal.hidden = true;
+        return;
+      }
+      const contactModal = $("#workflowContactModal");
+      if (contactModal && !contactModal.hidden) {
+        closeWorkflowContactModal();
       }
     });
     const templatePicker = workflowTemplatePicker();
@@ -1560,6 +1584,32 @@
         event.preventDefault();
         await rerunWorkflowStep(button.dataset.workflowRerunStep || "");
       });
+    }
+    const contactModal = $("#workflowContactModal");
+    if (contactModal) {
+      contactModal.addEventListener("click", (event) => {
+        if (event.target.closest("#closeWorkflowContactModal") || event.target === contactModal) {
+          closeWorkflowContactModal();
+        }
+      });
+    }
+    const workflowResolution = $("#resolutionSelect");
+    if (workflowResolution) {
+      workflowResolution.addEventListener("change", (event) => {
+        const select = event.target;
+        if (!resolutionCanUse4k(workflowAccountGroup()) && String(select.value || "").toLowerCase() === "4k") {
+          select.value = select.dataset.previousResolution || "2k";
+          alert(resolutionUpgradeMessage());
+          if (window.KuaimaBilling && typeof window.KuaimaBilling.openPlans === "function") {
+            window.KuaimaBilling.openPlans();
+          }
+          updateSize();
+          return;
+        }
+        select.dataset.previousResolution = select.value;
+        updateSize();
+      });
+      workflowResolution.dataset.previousResolution = workflowResolution.value;
     }
     const form = $("#genForm");
     if (form) {

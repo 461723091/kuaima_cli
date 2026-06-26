@@ -33,6 +33,11 @@ function accountIdentity(usage) {
   return usage.group || 'default';
 }
 
+function accountIdentityLabel(group) {
+  const value = String(group || "default").toLowerCase();
+  return value === "svip" ? "SVIP" : value === "vip" ? "VIP" : "普通用户";
+}
+
 function renderSubscriptions(subscriptions) {
   const list = Array.isArray(subscriptions) ? subscriptions : [];
   $("#subscriptionCount").textContent = list.length ? String(list.length) : "";
@@ -65,7 +70,8 @@ function renderBalance(usage) {
   window.dispatchEvent(new CustomEvent("kuaima:account", { detail: window.KuaimaAccount }));
   const subscriptions = usage.subscriptions || [];
   const active = activeSubscription(subscriptions);
-  $("#balanceTopLabel").textContent = active ? "当前套餐" : "可用token";
+  $("#accountIdentityTop").textContent = accountIdentityLabel(accountIdentity(usage));
+  //$("#balanceTopLabel").textContent = active ? "当前套餐" : "可用token";
   $("#balanceTop").textContent = active
     ? ("有效至 " + (active.end || "-"))
     : (usage.total_available_text || "-");

@@ -1,12 +1,29 @@
 (function () {
   $("#ratioSelect").onchange = updateSize;
-  $("#resolutionSelect").onchange = updateSize;
+  $("#resolutionSelect").onchange = (event) => {
+    const select = event.target;
+    const group = String((window.KuaimaAccount && window.KuaimaAccount.group) || "default").toLowerCase();
+    const next = String(select.value || "").toLowerCase();
+    if (next === "4k" && !resolutionCanUse4k(group)) {
+      select.value = select.dataset.previousResolution || "2k";
+      alert(resolutionUpgradeMessage());
+      if (window.KuaimaBilling && typeof window.KuaimaBilling.openPlans === "function") {
+        window.KuaimaBilling.openPlans();
+      }
+      updateSize();
+      return;
+    }
+    select.dataset.previousResolution = select.value;
+    updateSize();
+  };
   document.querySelectorAll("[data-ratio]").forEach((button) => {
     button.onclick = () => {
       $("#ratioSelect").value = button.dataset.ratio;
       updateSize();
     };
   });
+
+  $("#resolutionSelect").dataset.previousResolution = $("#resolutionSelect").value;
 
   $('[name="images"]').onclick = (event) => {
     event.target.value = "";

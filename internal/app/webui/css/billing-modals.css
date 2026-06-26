@@ -378,3 +378,110 @@
   object-fit: contain;
 }
 
+.contact-modal-backdrop {
+  z-index: 22;
+}
+
+.contact-modal {
+  position: relative;
+  width: min(760px, calc(100vw - 32px));
+  max-height: calc(100vh - 32px);
+  display: grid;
+  gap: 16px;
+  padding: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.78);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.97);
+  box-shadow: 0 28px 80px rgba(15, 23, 42, 0.28);
+}
+
+.contact-modal-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+  padding-right: 34px;
+}
+
+.contact-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 0 10px;
+  border-radius: 8px;
+  background: rgba(37, 99, 235, 0.1);
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.contact-modal-body {
+  display: grid;
+  gap: 18px;
+  overflow: auto;
+}
+
+.contact-intro {
+  display: grid;
+  grid-template-columns: 160px minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.contact-intro img {
+  width: 160px;
+  height: 160px;
+  border: 1px solid rgba(82, 103, 132, 0.18);
+  border-radius: 8px;
+  background: #fff;
+}
+
+.contact-copy p {
+  margin: 0 0 10px;
+  color: var(--text);
+  line-height: 1.6;
+}
+
+.contact-copy ul {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.contact-faq {
+  display: grid;
+  gap: 10px;
+}
+
+.contact-faq h3 {
+  margin: 0;
+  font-size: 15px;
+}
+
+.contact-faq-item {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 1px solid rgba(82, 103, 132, 0.14);
+  border-radius: 8px;
+  background: rgba(248, 250, 252, 0.82);
+}
+
+.contact-faq-item strong {
+  font-size: 13px;
+}
+
+.contact-faq-item span {
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.field-note {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+

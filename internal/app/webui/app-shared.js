@@ -145,6 +145,15 @@ function updateSize() {
   });
 }
 
+function resolutionCanUse4k(group) {
+  const value = String(group || "default").toLowerCase();
+  return value === "vip" || value === "svip";
+}
+
+function resolutionUpgradeMessage() {
+  return "4k 分辨率仅限 VIP 及以上用户才能选择。";
+}
+
 function applySize(size) {
   const match = SIZE_LOOKUP[String(size || "").trim()];
   if (!match) {
