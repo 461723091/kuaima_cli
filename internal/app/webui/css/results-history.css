@@ -33,6 +33,26 @@
   font-weight: 760;
 }
 
+.workflow-progress-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.workflow-progress-chip {
+  display: inline-flex;
+  min-height: 24px;
+  align-items: center;
+  padding: 3px 7px;
+  border: 1px solid rgba(82, 103, 132, 0.16);
+  border-radius: 999px;
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.7);
+  font-size: 12px;
+  font-weight: 760;
+}
+
 .workflow-progress-track {
   height: 8px;
   overflow: hidden;

@@ -273,7 +273,7 @@ h2 {
   border-radius: 8px;
   background: var(--panel);
   box-shadow: var(--shadow);
-  backdrop-filter: blur(14px);
+  /* backdrop-filter: blur(14px); 不能加这种会影响子元素fixed布局 */
 }
 
 .generator,
@@ -325,5 +325,3 @@ h2 {
 .field {
   margin-bottom: 10px;
 }
-
-.workflow-field {

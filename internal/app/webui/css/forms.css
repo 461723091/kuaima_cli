@@ -248,52 +248,6 @@
     justify-self: start;
   }
 
-  .workflow-speed-panel {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-    padding: 10px;
-    border: 1px solid rgba(37, 99, 235, 0.18);
-    border-radius: 8px;
-    background: linear-gradient(135deg, rgba(239, 246, 255, 0.92), rgba(255, 255, 255, 0.74));
-  }
-
-  .workflow-speed-main {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    min-width: 0;
-  }
-
-  .workflow-speed-icon {
-    display: inline-grid;
-    flex: 0 0 auto;
-    width: 34px;
-    height: 34px;
-    place-items: center;
-    border-radius: 8px;
-    color: #1d4ed8;
-    background: rgba(37, 99, 235, 0.12);
-  }
-
-  .workflow-speed-main strong,
-  .workflow-speed-main small {
-    display: block;
-  }
-
-  .workflow-speed-main strong {
-    color: var(--text);
-    font-size: 13px;
-  }
-
-  .workflow-speed-main small {
-    margin-top: 2px;
-    color: var(--muted);
-    font-size: 12px;
-    line-height: 1.45;
-  }
-
   .workflow-template-modal-backdrop {
     z-index: 28;
   }
