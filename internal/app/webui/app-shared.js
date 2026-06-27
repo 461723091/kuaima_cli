@@ -512,6 +512,7 @@ function readSettings() {
 }
 
 function saveSettings() {
+  syncSingleGenerationControls();
   const form = $("#genForm");
   const settings = {
     image_model: form.elements.image_model.value,
@@ -545,6 +546,51 @@ function applySettings(settings) {
     $("#resolutionSelect").value = settings.resolution;
   }
   updateSize();
+  syncSingleGenerationControls();
+}
+
+function generationAccountGroup() {
+  return String((window.KuaimaAccount && window.KuaimaAccount.group) || "default").toLowerCase();
+}
+
+function generationImageCountLimit(group) {
+  const value = String(group || "default").toLowerCase();
+  if (value === "svip") {
+    return 10;
+  }
+  if (value === "vip") {
+    return 3;
+  }
+  return 1;
+}
+
+function generationImageCountHint(group) {
+  const value = String(group || "default").toLowerCase();
+  if (value === "svip") {
+    return "SVIP 一次最多生成 10 张。";
+  }
+  if (value === "vip") {
+    return "VIP 一次最多生成 3 张，升级 SVIP 后可一次生成 10 张。";
+  }
+  return "普通用户一次只能生成 1 张，升级 VIP 后可一次生成 3 张。";
+}
+
+function syncSingleGenerationControls() {
+  const form = $("#genForm");
+  const input = form && form.elements && form.elements.image_count ? form.elements.image_count : null;
+  if (!input) {
+    return;
+  }
+  const group = generationAccountGroup();
+  const limit = generationImageCountLimit(group);
+  input.max = String(limit);
+  const current = Number(input.value || 1);
+  input.value = String(Math.max(1, Math.min(limit, Number.isFinite(current) ? current : 1)));
+  input.title = generationImageCountHint(group);
+  const note = $("#singleGenerationNote");
+  if (note) {
+    note.textContent = generationImageCountHint(group);
+  }
 }
 
 function looksLikeInsufficientBalance(message) {

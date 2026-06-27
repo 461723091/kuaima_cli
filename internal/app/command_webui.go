@@ -349,15 +349,18 @@ func (s *webUIServer) handleGenerate(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	needUploadClient := (len(r.MultipartForm.File["images"]) > 0 || len(r.MultipartForm.File["mask"]) > 0) && strings.EqualFold(strings.TrimSpace(s.fileFormat), fileFormatURL)
-	var c *client
-	if needUploadClient {
-		c, err = s.clientOpts.newClient()
-		if err != nil {
-			writeError(w, http.StatusInternalServerError, err.Error())
-			return
-		}
-		defer c.Close()
+	c, err := s.clientOpts.newClient()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	defer c.Close()
+	group := accountGroupFromClient(r.Context(), c)
+	limit := imageGenerationCountLimit(group)
+	count := opts.responseRunCount()
+	if count > limit {
+		writeError(w, http.StatusBadRequest, imageGenerationCountLimitMessage(group, count))
+		return
 	}
 	refs, err := uploadedImageRefs(r, c, s.fileFormat)
 	if err != nil {
@@ -373,15 +376,6 @@ func (s *webUIServer) handleGenerate(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "mask requires at least one reference image")
 		return
 	}
-	if c == nil {
-		c, err = s.clientOpts.newClient()
-		if err != nil {
-			writeError(w, http.StatusInternalServerError, err.Error())
-			return
-		}
-		defer c.Close()
-	}
-
 	ctx := r.Context()
 	saveDir, err := s.saveDirectoryFromForm(r)
 	if err != nil {
@@ -391,7 +385,7 @@ func (s *webUIServer) handleGenerate(w http.ResponseWriter, r *http.Request) {
 	var resp *responsePayload
 	endpoint := webUIImageEndpoint(r)
 	if endpoint == "response" {
-		saved, text, err := s.handleGenerateWithResponses(ctx, c, opts, s.modelFromForm(r), prompt, refs, mask, saveDir)
+		saved, text, err := s.handleGenerateWithResponses(ctx, c, opts, s.modelFromForm(r), prompt, refs, mask, saveDir, limit)
 		if err != nil {
 			writeError(w, http.StatusBadGateway, err.Error())
 			return
@@ -403,7 +397,7 @@ func (s *webUIServer) handleGenerate(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	resp, err = s.handleGenerateWithImageEndpoint(ctx, c, opts, s.modelFromForm(r), prompt, refs, mask)
+	resp, err = s.handleGenerateWithImageEndpoint(ctx, c, opts, s.modelFromForm(r), prompt, refs, mask, limit)
 	if err != nil {
 		writeError(w, http.StatusBadGateway, err.Error())
 		return
@@ -439,15 +433,18 @@ func (s *webUIServer) handleGenerateStream(w http.ResponseWriter, r *http.Reques
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	needUploadClient := (len(r.MultipartForm.File["images"]) > 0 || len(r.MultipartForm.File["mask"]) > 0) && strings.EqualFold(strings.TrimSpace(s.fileFormat), fileFormatURL)
-	var c *client
-	if needUploadClient {
-		c, err = s.clientOpts.newClient()
-		if err != nil {
-			writeError(w, http.StatusInternalServerError, err.Error())
-			return
-		}
-		defer c.Close()
+	c, err := s.clientOpts.newClient()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	defer c.Close()
+	group := accountGroupFromClient(r.Context(), c)
+	limit := imageGenerationCountLimit(group)
+	count := opts.responseRunCount()
+	if count > limit {
+		writeError(w, http.StatusBadRequest, imageGenerationCountLimitMessage(group, count))
+		return
 	}
 	refs, err := uploadedImageRefs(r, c, s.fileFormat)
 	if err != nil {
@@ -462,14 +459,6 @@ func (s *webUIServer) handleGenerateStream(w http.ResponseWriter, r *http.Reques
 	if mask != nil && len(refs) == 0 {
 		writeError(w, http.StatusBadRequest, "mask requires at least one reference image")
 		return
-	}
-	if c == nil {
-		c, err = s.clientOpts.newClient()
-		if err != nil {
-			writeError(w, http.StatusInternalServerError, err.Error())
-			return
-		}
-		defer c.Close()
 	}
 	stream := newWebUIEventStream(w)
 
@@ -500,9 +489,9 @@ func (s *webUIServer) handleGenerateStream(w http.ResponseWriter, r *http.Reques
 	var resp *responsePayload
 	endpoint := webUIImageEndpoint(r)
 	if endpoint == "response" {
-		resp, err = s.handleGenerateWithResponsesStream(ctx, c, opts, s.modelFromForm(r), prompt, refs, mask, stream, saveAndSend)
+		resp, err = s.handleGenerateWithResponsesStream(ctx, c, opts, s.modelFromForm(r), prompt, refs, mask, stream, saveAndSend, limit)
 	} else {
-		resp, err = s.handleGenerateWithImageEndpointStream(ctx, c, opts, s.modelFromForm(r), prompt, refs, mask, stream, saveAndSend)
+		resp, err = s.handleGenerateWithImageEndpointStream(ctx, c, opts, s.modelFromForm(r), prompt, refs, mask, stream, saveAndSend, limit)
 	}
 	if err != nil {
 		stream.send("error", map[string]string{"error": err.Error()})
@@ -588,8 +577,11 @@ func (s *webUIServer) handleAgentStream(w http.ResponseWriter, r *http.Request) 
 	stream.send("done", map[string]string{"text": strings.TrimSpace(resp.OutputText)})
 }
 
-func (s *webUIServer) handleGenerateWithImageEndpoint(ctx context.Context, c *client, opts imageOptions, imageModel, prompt string, refs []imageRef, mask *imageRef) (*responsePayload, error) {
+func (s *webUIServer) handleGenerateWithImageEndpoint(ctx context.Context, c *client, opts imageOptions, imageModel, prompt string, refs []imageRef, mask *imageRef, maxConcurrency ...int) (*responsePayload, error) {
 	runCount := opts.responseRunCount()
+	if workflowConcurrencyLimit(maxConcurrency...) > 1 && runCount > 1 {
+		return s.handleGenerateWithImageEndpointConcurrent(ctx, c, opts, imageModel, prompt, refs, mask, nil, nil, workflowConcurrencyLimit(maxConcurrency...))
+	}
 	var combined responsePayload
 	var texts []string
 	for i := 0; i < runCount; i++ {
@@ -668,6 +660,7 @@ func (s *webUIServer) handleGenerateWithResponsesStream(ctx context.Context, c *
 		Input:     s.responseInput(prompt, refs),
 		Tools:     []map[string]any{tool},
 		Reasoning: defaultImageReasoning,
+		Stream:    true,
 	}
 	runCount := opts.responseRunCount()
 	if workflowConcurrencyLimit(maxConcurrency...) > 1 && runCount > 1 {
@@ -1366,20 +1359,7 @@ func formatWebUsage(usage *tokenUsage) map[string]any {
 }
 
 func (s *webUIServer) workflowMaxConcurrency(ctx context.Context, c *client) int {
-	group := ""
-	if c != nil {
-		if usage, err := c.getTokenUsage(ctx); err == nil && usage != nil {
-			group = usage.Group
-		}
-	}
-	switch strings.ToLower(strings.TrimSpace(group)) {
-	case "svip":
-		return 10
-	case "vip":
-		return 3
-	default:
-		return 1
-	}
+	return imageGenerationCountLimit(accountGroupFromClient(ctx, c))
 }
 
 func formDefault(r *http.Request, name, fallback string) string {

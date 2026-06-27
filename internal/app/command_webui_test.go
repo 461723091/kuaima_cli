@@ -12,9 +12,25 @@ import (
 	"testing"
 )
 
+func webUITestUsageHandler(group string, next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/usage/token/2" {
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"code":true,"data":{"group":"` + group + `","subscriptions":[],"total_available":0,"total_used":0,"total_granted":0,"unlimited_quota":false},"message":"ok"}`))
+			return
+		}
+		next(w, r)
+	}
+}
+
 func TestWebUIHandleGenerateRepeatsImageRequestsForCount(t *testing.T) {
 	var callCount int
 	apiServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/usage/token/2" {
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"code":true,"data":{"group":"vip","subscriptions":[],"total_available":0,"total_used":0,"total_granted":0,"unlimited_quota":false},"message":"ok"}`))
+			return
+		}
 		callCount++
 		if r.URL.Path != "/v1/images/generations" {
 			t.Fatalf("unexpected path: %s", r.URL.Path)
@@ -88,9 +104,135 @@ func TestWebUIHandleGenerateRepeatsImageRequestsForCount(t *testing.T) {
 	}
 }
 
+func TestWebUIHandleGenerateRejectsCountForDefaultGroup(t *testing.T) {
+	apiServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/usage/token/2":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"code":true,"data":{"group":"default","subscriptions":[],"total_available":0,"total_used":0,"total_granted":0,"unlimited_quota":false},"message":"ok"}`))
+		default:
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+	}))
+	defer apiServer.Close()
+
+	ui := &webUIServer{
+		clientOpts: clientOptions{
+			model:      stringPtr("gpt-5.4-mini"),
+			imageModel: stringPtr("test-model"),
+			baseURL:    stringPtr(apiServer.URL),
+			ossURL:     stringPtr(""),
+			apiKey:     stringPtr("secret-token"),
+			username:   stringPtr(""),
+			password:   stringPtr(""),
+			verbose:    boolPtr(false),
+			logFile:    stringPtr(""),
+		},
+		fileFormat: fileFormatBase64,
+		defaults: webUIDefaults{
+			ImageModel:   "test-model",
+			ImageSize:    "1024x1024",
+			ImageQuality: "auto",
+			ImageCount:   1,
+		},
+		saveDir: t.TempDir(),
+	}
+
+	body := &strings.Builder{}
+	writer := multipart.NewWriter(body)
+	_ = writer.WriteField("prompt", "generate me")
+	_ = writer.WriteField("image_model", "test-model")
+	_ = writer.WriteField("image_count", "2")
+	_ = writer.WriteField("image_endpoint", "image")
+	if err := writer.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/api/generate", strings.NewReader(body.String()))
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	rr := httptest.NewRecorder()
+
+	ui.handleGenerate(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected bad request, got %d body=%s", rr.Code, rr.Body.String())
+	}
+	if !strings.Contains(rr.Body.String(), "普通用户一次只能生成 1 张") {
+		t.Fatalf("unexpected body: %s", rr.Body.String())
+	}
+}
+
+func TestWebUIHandleGenerateAllowsVipCount(t *testing.T) {
+	var callCount int
+	apiServer := httptest.NewServer(webUITestUsageHandler("vip", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v1/images/generations":
+			callCount++
+			var got imageGenerationRequest
+			if err := json.NewDecoder(r.Body).Decode(&got); err != nil {
+				t.Fatal(err)
+			}
+			if got.N != 1 {
+				t.Fatalf("expected n=1, got %d", got.N)
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"id":"resp_1","output":[{"type":"image_generation_call","status":"completed","result":"ZmFrZQ=="}],"output_text":""}`))
+		default:
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+	})))
+	defer apiServer.Close()
+
+	saveDir := t.TempDir()
+	ui := &webUIServer{
+		clientOpts: clientOptions{
+			model:      stringPtr("gpt-5.4-mini"),
+			imageModel: stringPtr("test-model"),
+			baseURL:    stringPtr(apiServer.URL),
+			ossURL:     stringPtr(""),
+			apiKey:     stringPtr("secret-token"),
+			username:   stringPtr(""),
+			password:   stringPtr(""),
+			verbose:    boolPtr(false),
+			logFile:    stringPtr(""),
+		},
+		fileFormat: fileFormatBase64,
+		defaults: webUIDefaults{
+			ImageModel:   "test-model",
+			ImageSize:    "1024x1024",
+			ImageQuality: "auto",
+			ImageCount:   3,
+		},
+		saveDir: saveDir,
+	}
+
+	body := &strings.Builder{}
+	writer := multipart.NewWriter(body)
+	_ = writer.WriteField("prompt", "generate me")
+	_ = writer.WriteField("image_model", "test-model")
+	_ = writer.WriteField("image_count", "3")
+	_ = writer.WriteField("image_endpoint", "image")
+	if err := writer.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/api/generate", strings.NewReader(body.String()))
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	rr := httptest.NewRecorder()
+
+	ui.handleGenerate(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("unexpected status: %d body=%s", rr.Code, rr.Body.String())
+	}
+	if callCount != 3 {
+		t.Fatalf("expected 3 requests, got %d", callCount)
+	}
+}
+
 func TestWebUIHandleGenerateStreamRepeatsImageRequestsForCount(t *testing.T) {
 	var callCount int
-	apiServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	apiServer := httptest.NewServer(webUITestUsageHandler("vip", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		callCount++
 		if r.URL.Path != "/v1/images/generations" {
 			t.Fatalf("unexpected path: %s", r.URL.Path)
@@ -102,18 +244,16 @@ func TestWebUIHandleGenerateStreamRepeatsImageRequestsForCount(t *testing.T) {
 		if got.N != 1 {
 			t.Fatalf("expected n=1, got %d", got.N)
 		}
-		w.Header().Set("Content-Type", "text/event-stream")
+		w.Header().Set("Content-Type", "application/json")
 		switch callCount {
 		case 1:
-			_, _ = w.Write([]byte("data: {\"type\":\"image_generation.partial_image\",\"partial_image_b64\":\"ZmFrZTE=\"}\n\n"))
-			_, _ = w.Write([]byte("data: {\"type\":\"image_generation.completed\",\"b64_json\":\"ZmFrZTE=\"}\n\n"))
+			_, _ = w.Write([]byte(`{"id":"resp_1","output":[{"type":"image_generation_call","status":"completed","result":"ZmFrZTE="}],"output_text":""}`))
 		case 2:
-			_, _ = w.Write([]byte("data: {\"type\":\"image_generation.completed\",\"b64_json\":\"ZmFrZTI=\"}\n\n"))
+			_, _ = w.Write([]byte(`{"id":"resp_2","output":[{"type":"image_generation_call","status":"completed","result":"ZmFrZTI="}],"output_text":""}`))
 		default:
 			t.Fatalf("unexpected call count: %d", callCount)
 		}
-		_, _ = w.Write([]byte("data: [DONE]\n\n"))
-	}))
+	})))
 	defer apiServer.Close()
 
 	saveDir := t.TempDir()
@@ -168,6 +308,11 @@ func TestWebUIHandleGenerateStreamRepeatsImageRequestsForCount(t *testing.T) {
 
 func TestWebUIHandleGenerateUsesMultipartForImageEdits(t *testing.T) {
 	apiServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/usage/token/2" {
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"code":true,"data":{"group":"vip","subscriptions":[],"total_available":0,"total_used":0,"total_granted":0,"unlimited_quota":false},"message":"ok"}`))
+			return
+		}
 		if r.URL.Path != "/v1/images/edits" {
 			t.Fatalf("unexpected path: %s", r.URL.Path)
 		}
@@ -278,7 +423,7 @@ func TestWebUIHandleGeneratePassesMaskForResponses(t *testing.T) {
 		Tools []map[string]any `json:"tools"`
 		Input []inputMessage   `json:"input"`
 	}
-	apiServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	apiServer := httptest.NewServer(webUITestUsageHandler("vip", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/v1/responses" {
 			t.Fatalf("unexpected path: %s", r.URL.Path)
 		}
@@ -287,7 +432,7 @@ func TestWebUIHandleGeneratePassesMaskForResponses(t *testing.T) {
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"id":"resp_1","output_text":"ok","output":[]}`))
-	}))
+	})))
 	defer apiServer.Close()
 
 	saveDir := t.TempDir()
@@ -364,7 +509,7 @@ func TestWebUIHandleGeneratePassesMaskForResponses(t *testing.T) {
 
 func TestWebUIHandleGenerateRepeatsImageEditRequestsForCount(t *testing.T) {
 	var callCount int
-	apiServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	apiServer := httptest.NewServer(webUITestUsageHandler("vip", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		callCount++
 		if r.URL.Path != "/v1/images/edits" {
 			t.Fatalf("unexpected path: %s", r.URL.Path)
@@ -412,7 +557,7 @@ func TestWebUIHandleGenerateRepeatsImageEditRequestsForCount(t *testing.T) {
 		default:
 			t.Fatalf("unexpected call count: %d", callCount)
 		}
-	}))
+	})))
 	defer apiServer.Close()
 
 	saveDir := t.TempDir()
@@ -490,6 +635,11 @@ func TestWebUIHandleGenerateUsesOSSURLForUploadedImagesWhenFileFormatURL(t *test
 	defer ossServer.Close()
 
 	apiServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/usage/token/2" {
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"code":true,"data":{"group":"vip","subscriptions":[],"total_available":0,"total_used":0,"total_granted":0,"unlimited_quota":false},"message":"ok"}`))
+			return
+		}
 		if r.URL.Path != "/v1/images/edits" {
 			t.Fatalf("unexpected path: %s", r.URL.Path)
 		}
@@ -599,6 +749,11 @@ func TestWebUIHandleGenerateFallsBackToBase64WhenUploadFails(t *testing.T) {
 	defer ossServer.Close()
 
 	apiServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/usage/token/2" {
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"code":true,"data":{"group":"vip","subscriptions":[],"total_available":0,"total_used":0,"total_granted":0,"unlimited_quota":false},"message":"ok"}`))
+			return
+		}
 		if r.URL.Path != "/v1/images/edits" {
 			t.Fatalf("unexpected path: %s", r.URL.Path)
 		}
@@ -706,6 +861,11 @@ func TestWebUIHandleGenerateResponseUsesCLISystem(t *testing.T) {
 		Stream bool             `json:"stream"`
 	}
 	apiServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/usage/token/2" {
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"code":true,"data":{"group":"vip","subscriptions":[],"total_available":0,"total_used":0,"total_granted":0,"unlimited_quota":false},"message":"ok"}`))
+			return
+		}
 		if r.URL.Path != "/v1/responses" {
 			t.Fatalf("unexpected path: %s", r.URL.Path)
 		}

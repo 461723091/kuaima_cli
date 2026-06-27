@@ -39,6 +39,12 @@ func runImage(args []string) error {
 		return err
 	}
 	defer c.Close()
+	group := accountGroupFromClient(context.Background(), c)
+	limit := imageGenerationCountLimit(group)
+	count := imageOpts.responseRunCount()
+	if count > limit {
+		return errors.New(imageGenerationCountLimitMessage(group, count))
+	}
 	images, textFiles, err := collectInputAttachments(prompt, *inputOpts.attachments)
 	if err != nil {
 		return err

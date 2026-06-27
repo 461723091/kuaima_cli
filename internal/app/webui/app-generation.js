@@ -81,6 +81,11 @@ async function initConfig() {
     versionLabel.textContent = config.version ? "v" + config.version : "";
     versionLabel.hidden = !config.version;
   }
+  if (config.group) {
+    window.KuaimaAccount = Object.assign({}, window.KuaimaAccount || {}, {
+      group: String(config.group || "default").toLowerCase(),
+    });
+  }
   for (const [key, value] of Object.entries(config)) {
     const input = document.querySelector('[name="' + key + '"]');
     if (input && value !== "" && value != null) {
@@ -89,6 +94,7 @@ async function initConfig() {
   }
   applySize(config.image_size);
   applySettings(readSettings());
+  syncSingleGenerationControls();
   if (window.KuaimaMaskEditor) {
     window.KuaimaMaskEditor.init();
   }

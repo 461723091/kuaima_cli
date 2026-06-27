@@ -24,6 +24,7 @@
   });
 
   $("#resolutionSelect").dataset.previousResolution = $("#resolutionSelect").value;
+  syncSingleGenerationControls();
 
   $('[name="images"]').onclick = (event) => {
     event.target.value = "";
@@ -203,6 +204,10 @@
 
   document.addEventListener("kuaima-mask-change", () => {
     renderImagePreviews();
+  });
+
+  window.addEventListener("kuaima:account", () => {
+    syncSingleGenerationControls();
   });
 
   document.addEventListener("click", async (event) => {
