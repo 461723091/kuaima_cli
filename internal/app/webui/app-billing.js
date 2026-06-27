@@ -1,6 +1,7 @@
 function setBillingOpen(open) {
   const dropdown = $("#billingDropdown");
   dropdown.hidden = !open;
+  console.log('open bill ?', open)
   $("#toggleBillingTop").setAttribute("aria-expanded", String(open));
 }
 
@@ -96,7 +97,9 @@ if (!window.KuaimaBilling) window.KuaimaBilling = {};
 window.KuaimaBilling.openPlans = function () {
   setBillingOpen(true);
   setRechargeTab("plan");
-  loadRechargeInfo();
+  window.requestAnimationFrame(() => {
+    loadRechargeInfo();
+  });
 };
 
 async function loadBalance() {

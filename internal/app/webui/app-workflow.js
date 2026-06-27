@@ -980,8 +980,7 @@
         review.hidden = true;
         review.innerHTML = "";
       }
-      $("#gallery").classList.remove("empty");
-      $("#gallery").innerHTML = '<div class="generation-placeholder"><span class="spinner"></span><span>正在等待步骤输出...</span></div>';
+      renderGenerationPlaceholder("正在等待步骤输出...", startedAt);
       renderResultTiming(null);
     }
 
@@ -1533,7 +1532,7 @@
         event.preventDefault();
         event.stopImmediatePropagation();
         if (window.KuaimaBilling && typeof window.KuaimaBilling.openPlans === "function") {
-          window.KuaimaBilling.openPlans();
+          window.setTimeout(() => window.KuaimaBilling.openPlans(), 0);
         }
       });
     }
@@ -1563,7 +1562,7 @@
           event.preventDefault();
           event.stopImmediatePropagation();
           if (window.KuaimaBilling && typeof window.KuaimaBilling.openPlans === "function") {
-            window.KuaimaBilling.openPlans();
+            window.setTimeout(() => window.KuaimaBilling.openPlans(), 0);
           }
           return;
         }
@@ -1601,7 +1600,7 @@
           select.value = select.dataset.previousResolution || "2k";
           alert(resolutionUpgradeMessage());
           if (window.KuaimaBilling && typeof window.KuaimaBilling.openPlans === "function") {
-            window.KuaimaBilling.openPlans();
+            window.setTimeout(() => window.KuaimaBilling.openPlans(), 0);
           }
           updateSize();
           return;

@@ -8,7 +8,7 @@
       select.value = select.dataset.previousResolution || "2k";
       alert(resolutionUpgradeMessage());
       if (window.KuaimaBilling && typeof window.KuaimaBilling.openPlans === "function") {
-        window.KuaimaBilling.openPlans();
+        window.setTimeout(() => window.KuaimaBilling.openPlans(), 0);
       }
       updateSize();
       return;

@@ -8,9 +8,7 @@ async function generateStream(form, signal) {
       firstResponseAt = performance.now();
     }
   };
-  setResultsVisible(true);
-  $("#gallery").classList.remove("empty");
-  $("#gallery").innerHTML = '<div class="generation-placeholder"><span class="spinner"></span><span>正在等待首张图片...</span></div>';
+  renderGenerationPlaceholder("正在等待首张图片...", startedAt);
   renderResultTiming(null);
   if (selectedImages.length > 0 && !referenceCompressionDisabled(form)) {
     $("#genStatus").textContent = "正在压缩参考图...";

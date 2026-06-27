@@ -364,6 +364,10 @@ function formatTimingSummary(item) {
   return parts.join(" · ");
 }
 
+function formatElapsedSeconds(ms) {
+  return Math.max(0, Math.ceil(Number(ms || 0) / 1000)) + " 秒";
+}
+
 function historyStatusLabel(status) {
   const value = String(status || "").toLowerCase();
   if (value === "partial") {
@@ -406,6 +410,43 @@ function renderResultTiming(timing) {
   const summary = timing ? formatTimingSummary(timing) : "";
   label.textContent = summary;
   label.hidden = !summary;
+}
+
+let generationPlaceholderTimer = null;
+
+function stopGenerationPlaceholderTimer() {
+  if (generationPlaceholderTimer) {
+    clearInterval(generationPlaceholderTimer);
+    generationPlaceholderTimer = null;
+  }
+}
+
+function updateGenerationPlaceholderTimer(startedAt) {
+  const label = $("#gallery [data-generation-timer]");
+  if (label) {
+    label.textContent = "已耗时 " + formatElapsedSeconds(performance.now() - startedAt);
+  }
+}
+
+function renderGenerationPlaceholder(message, startedAt) {
+  stopGenerationPlaceholderTimer();
+  setResultsVisible(true);
+  $("#gallery").classList.remove("empty");
+  $("#gallery").innerHTML =
+    '<div class="generation-placeholder">' +
+    '<div class="generation-placeholder-frame">' +
+    '<div class="generation-placeholder-image" aria-hidden="true">' +
+    '<span class="generation-placeholder-image-mark"></span>' +
+    '</div>' +
+    '<span class="generation-placeholder-timer" data-generation-timer>已耗时 0 秒</span>' +
+    '</div>' +
+    '<div class="generation-placeholder-copy">' +
+    '<span class="spinner"></span>' +
+    '<span>' + esc(message || "正在等待首张图片...") + '</span>' +
+    '</div>' +
+    '</div>';
+  updateGenerationPlaceholderTimer(startedAt);
+  generationPlaceholderTimer = setInterval(() => updateGenerationPlaceholderTimer(startedAt), 1000);
 }
 
 function historyReferencePreview(ref) {
@@ -516,6 +557,7 @@ async function fileFromHistoryURL(url, name, type) {
 
 function renderGalleryImages(images) {
   const unique = Array.from(new Set(images || []));
+  stopGenerationPlaceholderTimer();
   setResultsVisible(true);
   if (unique.length === 0) {
     $("#gallery").classList.add("empty");
@@ -532,6 +574,7 @@ function renderGalleryImages(images) {
 }
 
 function renderGalleryMessage(message, className = "status") {
+  stopGenerationPlaceholderTimer();
   setResultsVisible(Boolean(message));
   $("#gallery").classList.add("empty");
   $("#gallery").innerHTML = '<div class="' + esc(className) + '">' + esc(message) + '</div>';
