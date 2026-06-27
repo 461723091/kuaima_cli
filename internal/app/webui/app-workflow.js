@@ -590,6 +590,26 @@
       '</button>';
   }
 
+  async function openWorkflowOutputDir(saveDir) {
+    saveDir = String(saveDir || "").trim();
+    if (!saveDir) {
+      return;
+    }
+    try {
+      await api("/api/output/open", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ save_dir: saveDir }),
+      });
+    } catch (error) {
+      const status = $("#genStatus");
+      if (status) {
+        status.textContent = error && error.message ? error.message : "打开输出目录失败";
+        status.className = "status gen-status error";
+      }
+    }
+  }
+
   function workflowDefaultTemplateIDs(def) {
     return workflowImageSteps(def).map((step) => String(step.id || "").trim()).filter(Boolean);
   }
@@ -834,6 +854,19 @@
       const status = String(step.status || "done");
       const duration = stepDurationMs(step);
       const canRerun = status === "done" && String(step.id || "").trim() && String(step.kind || "").toLowerCase() === "image";
+      const imageBlocks = images.map((url) => (
+        '<button class="workflow-step-image" type="button" data-preview-image="' + esc(url) + '">' +
+        '<img src="' + esc(url) + '" alt="' + esc(step.title || "workflow image") + '">' +
+        "</button>"
+      ));
+      if (!images.length && status === "running" && kind === "image") {
+        imageBlocks.push(
+          '<div class="workflow-step-image workflow-step-image-placeholder" aria-hidden="true">' +
+          '<span class="spinner"></span>' +
+          '<span>等待图片输出...</span>' +
+          '</div>'
+        );
+      }
       return '<section class="workflow-step ' + esc(status) + '">' +
         '<div class="workflow-step-head">' +
         '<div><strong>' + esc(step.title || step.id || "步骤") + "</strong>" +
@@ -846,11 +879,7 @@
         '</div>' +
         "</div>" +
         (showText && text ? '<pre class="workflow-step-text">' + esc(text) + "</pre>" : "") +
-        (images.length ? '<div class="workflow-step-images">' + images.map((url) => (
-          '<button class="workflow-step-image" type="button" data-preview-image="' + esc(url) + '">' +
-          '<img src="' + esc(url) + '" alt="' + esc(step.title || "workflow image") + '">' +
-          "</button>"
-        )).join("") + "</div>" : "") +
+        (imageBlocks.length ? '<div class="workflow-step-images">' + imageBlocks.join("") + "</div>" : "") +
         "</section>";
     }).join("");
   }
@@ -1571,8 +1600,8 @@
           event.preventDefault();
           event.stopImmediatePropagation();
           const dir = String(openOutputDir.dataset.workflowOpenOutputDir || "").trim();
-          if (dir && window.KuaimaOutputDir && typeof window.KuaimaOutputDir.open === "function") {
-            await window.KuaimaOutputDir.open(dir);
+          if (dir) {
+            await openWorkflowOutputDir(dir);
           }
           return;
         }
