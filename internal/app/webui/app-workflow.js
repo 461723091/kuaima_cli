@@ -219,6 +219,21 @@
     return '<figure class="workflow-field-example" data-workflow-option-example><img src="' + esc(src) + '" alt="' + esc(label) + '示例" loading="lazy"></figure>';
   }
 
+  function workflowFieldHelpHTML(field) {
+    if (String(field && field.key || "") === "image_resolution") {
+      return '<div class="workflow-help">4k 分辨率仅限 VIP 及以上用户。</div>';
+    }
+    return field && field.help ? '<div class="workflow-help">' + esc(field.help) + '</div>' : "";
+  }
+
+  function workflowOptionDisplayLabel(field, option) {
+    const label = option.label || option.value || "";
+    if (String(field && field.key || "") === "image_resolution" && String(option && option.value || "") === "4k") {
+      return label + "（VIP+）";
+    }
+    return label;
+  }
+
   function workflowComboClass(field) {
     return field.key === "platform" ? " platform" : field.key === "copy_language" ? " language" : "";
   }
@@ -229,13 +244,42 @@
     const example = option && option.example ? '<img class="workflow-option-example" src="' + esc(option.example) + '" alt="' + esc(option.label || option.value || "示例") + '示例" loading="lazy">' : "";
     return (icon ? '<span class="workflow-option-icon">' + icon + '</span>' : "") +
       example +
-      '<span>' + esc(option.label || option.value) + '</span>';
+      '<span>' + esc(workflowOptionDisplayLabel(field, option)) + '</span>';
+  }
+
+  function workflowNormalizeResolutionInput(input, options = {}) {
+    if (!input || String(input.dataset.workflowKey || "") !== "image_resolution") {
+      return true;
+    }
+    const value = String(input.value || "").trim().toLowerCase();
+    if (value !== "4k" || resolutionCanUse4k(workflowAccountGroup())) {
+      input.dataset.previousResolution = input.value;
+      return true;
+    }
+    input.value = input.dataset.previousResolution || "2k";
+    if (options.notify !== false) {
+      alert(resolutionUpgradeMessage());
+    }
+    if (options.notify !== false && window.KuaimaBilling && typeof window.KuaimaBilling.openPlans === "function") {
+      window.setTimeout(() => window.KuaimaBilling.openPlans(), 0);
+    }
+    return false;
+  }
+
+  function syncWorkflowResolutionState(container) {
+    const root = container || workflowFields();
+    if (!root) {
+      return;
+    }
+    root.querySelectorAll('[data-workflow-key="image_resolution"]').forEach((input) => {
+      input.dataset.previousResolution = input.value;
+    });
   }
 
   function renderWorkflowField(field, cached) {
     const name = "workflow_" + field.key;
     const value = buildInputValue(field, cached[field.key]);
-    const help = field.help ? '<div class="workflow-help">' + esc(field.help) + '</div>' : "";
+    const help = workflowFieldHelpHTML(field);
     let control = "";
     if (field.type === "textarea") {
       control = '<div class="workflow-textarea-group">' +
@@ -263,7 +307,7 @@
       control = '<select data-workflow-key="' + esc(field.key) + '" name="' + esc(name) + '">' +
         (field.options || []).map((option) => (
           '<option value="' + esc(option.value) + '"' + (String(option.value) === String(value) ? " selected" : "") + '>' +
-          esc(option.label || option.value) + "</option>"
+          esc(workflowOptionDisplayLabel(field, option)) + "</option>"
         )).join("") + "</select>";
     } else if (field.type === "number") {
       control = '<input data-workflow-key="' + esc(field.key) + '" name="' + esc(name) + '" type="number" value="' +
@@ -402,6 +446,7 @@
       return;
     }
     container.innerHTML = inputs.map((field) => renderWorkflowField(field, cached)).join("");
+    syncWorkflowResolutionState(container);
   }
 
   function workflowImageSteps(def) {
@@ -784,6 +829,7 @@
     if (String(id || "") === "single") {
       return;
     }
+    workflowNormalizeResolutionInput(workflowFields() && workflowFields().querySelector('[data-workflow-key="image_resolution"]'), { notify: false });
     state.cache[id] = currentWorkflowValues();
     if (!options.keepActiveId) {
       state.cache.activeWorkflowId = id;
@@ -812,6 +858,8 @@
           input.value = values[key];
         }
       });
+      syncWorkflowResolutionState(container);
+      workflowNormalizeResolutionInput(container.querySelector('[data-workflow-key="image_resolution"]'), { notify: false });
     }
     const templateValues = String(values && (values.templates || values.workflow_templates) || "").trim();
     if (templateValues) {
@@ -859,7 +907,7 @@
         '<img src="' + esc(url) + '" alt="' + esc(step.title || "workflow image") + '">' +
         "</button>"
       ));
-      if (!images.length && status === "running" && kind === "image") {
+      if (workflowStepNeedsImagePlaceholder(step)) {
         imageBlocks.push(
           '<div class="workflow-step-image workflow-step-image-placeholder" aria-hidden="true">' +
           '<span class="spinner"></span>' +
@@ -882,6 +930,12 @@
         (imageBlocks.length ? '<div class="workflow-step-images">' + imageBlocks.join("") + "</div>" : "") +
         "</section>";
     }).join("");
+  }
+
+  function workflowStepNeedsImagePlaceholder(step) {
+    return String(step && step.kind || "").toLowerCase() === "image" &&
+      String(step && step.status || "done") === "running" &&
+      !(Array.isArray(step && step.images) && step.images.length > 0);
   }
 
   function currentWorkflowReviewTexts() {
@@ -1436,7 +1490,15 @@
     const fields = workflowFields();
     if (fields) {
       fields.addEventListener("input", persistCurrentValues);
-      fields.addEventListener("change", persistCurrentValues);
+      fields.addEventListener("change", (event) => {
+        const input = event.target.closest("[data-workflow-key]");
+        if (input && !workflowNormalizeResolutionInput(input, { notify: true })) {
+          updateWorkflowSectionSummaries();
+          persistCurrentValues();
+          return;
+        }
+        persistCurrentValues();
+      });
       fields.addEventListener("input", updateWorkflowSectionSummaries);
       fields.addEventListener("change", updateWorkflowSectionSummaries);
       fields.addEventListener("click", (event) => {
