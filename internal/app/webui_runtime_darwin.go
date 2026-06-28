@@ -104,6 +104,7 @@ import "C"
 import (
 	"runtime"
 	"sync"
+	"sync/atomic"
 	"unsafe"
 )
 
@@ -112,15 +113,17 @@ type webUIRuntimeOptions struct {
 }
 
 type webUITrayState struct {
+	id   uint64
 	url  string
 	stop func()
 }
 
 var (
-	trayStateMu sync.Mutex
-	trayState   *webUITrayState
-	trayReadyMu sync.Mutex
-	trayReady   chan struct{}
+	trayStateMu  sync.Mutex
+	trayState    *webUITrayState
+	trayStateSeq uint64
+	trayReadyMu  sync.Mutex
+	trayReady    chan struct{}
 )
 
 func hideWebUIConsole() {}
@@ -161,12 +164,13 @@ func runWebUITray(rawURL string, stop func(), ready, done chan struct{}) {
 		})
 	}
 
+	stateID := atomic.AddUint64(&trayStateSeq, 1)
 	trayStateMu.Lock()
-	trayState = &webUITrayState{url: rawURL, stop: trayStop}
+	trayState = &webUITrayState{id: stateID, url: rawURL, stop: trayStop}
 	trayStateMu.Unlock()
 	defer func() {
 		trayStateMu.Lock()
-		if trayState != nil && trayState.stop == trayStop {
+		if trayState != nil && trayState.id == stateID {
 			trayState = nil
 		}
 		trayStateMu.Unlock()
