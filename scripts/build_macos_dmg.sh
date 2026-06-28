@@ -51,6 +51,58 @@ chmod +x "$universal_bin"
 icon_source="$root/internal/app/webui/logo.png"
 iconset_dir="$stage/kuaima_cli.iconset"
 app_icon="$resources_dir/AppIcon.icns"
+normalized_icon="$(mktemp "$dist/logo.normalized.XXXXXX.png")"
+normalize_helper="$(mktemp "$dist/logo.normalize.XXXXXX.go")"
+cleanup_icon_tmp() {
+  rm -f "$normalized_icon" "$normalize_helper"
+}
+trap cleanup_icon_tmp EXIT
+
+cat > "$normalize_helper" <<'EOF'
+package main
+
+import (
+	"fmt"
+	"image/png"
+	"os"
+)
+
+func main() {
+	if len(os.Args) != 3 {
+		fmt.Fprintln(os.Stderr, "usage: normalize_png <input> <output>")
+		os.Exit(2)
+	}
+
+	in, err := os.Open(os.Args[1])
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	defer in.Close()
+
+	img, err := png.Decode(in)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+
+	out, err := os.Create(os.Args[2])
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	defer out.Close()
+
+	if err := png.Encode(out, img); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+}
+EOF
+
+go run "$normalize_helper" "$icon_source" "$normalized_icon"
+rm -f "$normalize_helper"
+icon_source="$normalized_icon"
 
 rm -rf "$iconset_dir"
 mkdir -p "$iconset_dir"
