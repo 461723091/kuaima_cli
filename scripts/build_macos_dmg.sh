@@ -48,9 +48,9 @@ command -v iconutil >/dev/null 2>&1 || {
 lipo -create "$amd64_bin" "$arm64_bin" -output "$universal_bin"
 chmod +x "$universal_bin"
 
-icon_source="$root/internal/app/webui/logo.png"
 iconset_dir="$stage/kuaima_cli.iconset"
 app_icon="$resources_dir/AppIcon.icns"
+icon_source="$root/internal/app/webui/logo.png"
 normalized_icon="$(mktemp "$dist/logo.normalized.XXXXXX.png")"
 normalize_helper="$(mktemp "$dist/logo.normalize.XXXXXX.go")"
 cleanup_icon_tmp() {
@@ -99,6 +99,11 @@ func main() {
 	}
 }
 EOF
+
+if [[ ! -f "$icon_source" ]]; then
+  echo "Missing icon source: $icon_source" >&2
+  exit 1
+fi
 
 go run "$normalize_helper" "$icon_source" "$normalized_icon"
 rm -f "$normalize_helper"
