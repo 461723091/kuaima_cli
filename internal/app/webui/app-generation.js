@@ -8,7 +8,7 @@ async function generateStream(form, signal) {
       firstResponseAt = performance.now();
     }
   };
-  renderGenerationPlaceholder("正在等待首张图片...", startedAt);
+  renderGenerationPlaceholder("正在等待图片...", startedAt, Number(form.elements.image_count && form.elements.image_count.value) || 1);
   renderResultTiming(null);
   if (selectedImages.length > 0 && !referenceCompressionDisabled(form)) {
     $("#genStatus").textContent = "正在压缩参考图...";

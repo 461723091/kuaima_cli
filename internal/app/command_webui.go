@@ -65,10 +65,7 @@ func runWebUIWithOptions(args []string, runtimeOpts webUIRuntimeOptions) error {
 		return err
 	}
 	fs := newFlagSet("webui")
-	if cfg.System == nil || *cfg.System == "" {
-		defaultSystem := "Just generate the image; do not return a prompt or SVG"
-		cfg.System = &defaultSystem
-	}
+
 	if cfg.FileFormat == nil || *cfg.FileFormat == "" {
 		defaultFileFormat := "url"
 		cfg.FileFormat = &defaultFileFormat
@@ -94,6 +91,13 @@ func runWebUIWithOptions(args []string, runtimeOpts webUIRuntimeOptions) error {
 	absSaveDir, err := filepath.Abs(strings.TrimSpace(*saveDir))
 	if err != nil {
 		return err
+	}
+	if cfg.System == nil || *cfg.System == "" {
+		defaultSystem := "Just generate the image; do not return a prompt or SVG"
+		if imageOpts.size != nil && *imageOpts.size != "" {
+			defaultSystem += "; image size is " + *imageOpts.size
+		}
+		cfg.System = &defaultSystem
 	}
 
 	releaseInstance, acquired, err := acquireWebUIInstance()
@@ -747,6 +751,9 @@ func (s *webUIServer) handleGenerateWithImageEndpointConcurrent(ctx context.Cont
 
 func (s *webUIServer) handleGenerateWithResponsesConcurrent(ctx context.Context, c *client, req responseRequest, runCount int, stream *webUIEventStream, onImage func(imageCandidate) error, maxConcurrency int) (*responsePayload, error) {
 	return runConcurrentImageResponses(ctx, runCount, maxConcurrency, stream, func(ctx context.Context) (*responsePayload, error) {
+		if stream != nil {
+			return c.createResponseStreamWithImages(ctx, req, stream.textWriter(), onImage)
+		}
 		return c.createResponse(ctx, req)
 	}, onImage)
 }

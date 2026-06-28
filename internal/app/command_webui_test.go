@@ -306,6 +306,74 @@ func TestWebUIHandleGenerateStreamRepeatsImageRequestsForCount(t *testing.T) {
 	}
 }
 
+func TestWebUIHandleGenerateWithResponsesConcurrentUsesStreamWhenStreaming(t *testing.T) {
+	var callCount int
+	apiServer := httptest.NewServer(webUITestUsageHandler("vip", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v1/responses":
+			callCount++
+			if r.Header.Get("Accept") != "text/event-stream" {
+				t.Fatalf("expected streamed accept header, got %q", r.Header.Get("Accept"))
+			}
+			var got responseRequest
+			if err := json.NewDecoder(r.Body).Decode(&got); err != nil {
+				t.Fatal(err)
+			}
+			if !got.Stream {
+				t.Fatal("expected stream=true in request")
+			}
+			w.Header().Set("Content-Type", "text/event-stream")
+			_, _ = w.Write([]byte(
+				"data: {\"type\":\"response.output_text.delta\",\"delta\":\"ok\"}\n\n" +
+					"data: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_1\",\"output_text\":\"ok\",\"output\":[]}}\n\n",
+			))
+		default:
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+	})))
+	defer apiServer.Close()
+
+	ui := &webUIServer{
+		clientOpts: clientOptions{
+			model:      stringPtr("gpt-5.4-mini"),
+			imageModel: stringPtr("test-model"),
+			baseURL:    stringPtr(apiServer.URL),
+			ossURL:     stringPtr(""),
+			apiKey:     stringPtr("secret-token"),
+			username:   stringPtr(""),
+			password:   stringPtr(""),
+			verbose:    boolPtr(false),
+			logFile:    stringPtr(""),
+		},
+		fileFormat: fileFormatBase64,
+	}
+
+	c, err := newClient(apiServer.URL, "", "secret-token", "", "", false, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+
+	resp, err := ui.handleGenerateWithResponsesConcurrent(
+		t.Context(),
+		c,
+		responseRequest{Model: "test-model", Input: "draw", Stream: true},
+		2,
+		&webUIEventStream{w: httptest.NewRecorder()},
+		nil,
+		2,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp == nil || resp.OutputText != "ok\n\nok" {
+		t.Fatalf("unexpected response: %#v", resp)
+	}
+	if callCount != 2 {
+		t.Fatalf("expected 2 streamed requests, got %d", callCount)
+	}
+}
+
 func TestWebUIHandleGenerateUsesMultipartForImageEdits(t *testing.T) {
 	apiServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/api/usage/token/2" {

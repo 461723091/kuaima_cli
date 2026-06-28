@@ -413,6 +413,7 @@ function renderResultTiming(timing) {
 }
 
 let generationPlaceholderTimer = null;
+let generationPlaceholderState = null;
 
 function stopGenerationPlaceholderTimer() {
   if (generationPlaceholderTimer) {
@@ -422,30 +423,39 @@ function stopGenerationPlaceholderTimer() {
 }
 
 function updateGenerationPlaceholderTimer(startedAt) {
-  const label = $("#gallery [data-generation-timer]");
-  if (label) {
+  $("#gallery").querySelectorAll("[data-generation-timer]").forEach((label) => {
     label.textContent = "已耗时 " + formatElapsedSeconds(performance.now() - startedAt);
-  }
+  });
 }
 
-function renderGenerationPlaceholder(message, startedAt) {
+function renderGenerationPlaceholder(message, startedAt, count = 1) {
   stopGenerationPlaceholderTimer();
+  generationPlaceholderState = {
+    count: Math.max(1, Number(count) || 1),
+    startedAt,
+    message: message || "",
+  };
   setResultsVisible(true);
   $("#gallery").classList.remove("empty");
+  const total = generationPlaceholderState.count;
   $("#gallery").innerHTML =
     '<div class="generation-placeholder">' +
-    '<div class="generation-placeholder-frame">' +
-    '<div class="generation-placeholder-image" aria-hidden="true">' +
-    '<span class="generation-placeholder-image-mark"></span>' +
-    '</div>' +
-    '<span class="generation-placeholder-timer" data-generation-timer>已耗时 0 秒</span>' +
-    '</div>' +
-    '<div class="generation-placeholder-copy">' +
-    '<span class="spinner"></span>' +
-    '<span>' + esc(message || "正在等待首张图片...") + '</span>' +
-    '</div>' +
+    Array.from({ length: total }, (_, index) => (
+      '<div class="gallery-item generation-placeholder-item">' +
+      '<div class="generation-placeholder-frame">' +
+      '<div class="generation-placeholder-image" aria-hidden="true">' +
+      '<span class="generation-placeholder-image-mark"></span>' +
+      '</div>' +
+      '<span class="generation-placeholder-timer" data-generation-timer>已耗时 0 秒</span>' +
+      '</div>' +
+      '<div class="generation-placeholder-copy">' +
+      '<span class="spinner"></span>' +
+      '<span>' + esc(total > 1 ? (message || "正在等待图片...") : (message || "正在等待首张图片...")) + '</span>' +
+      '</div>' +
+      '</div>'
+    )).join("") +
     '</div>';
-  updateGenerationPlaceholderTimer(startedAt);
+  updateGenerationPlaceholderTimer(generationPlaceholderState.startedAt);
   generationPlaceholderTimer = setInterval(() => updateGenerationPlaceholderTimer(startedAt), 1000);
 }
 
@@ -557,24 +567,53 @@ async function fileFromHistoryURL(url, name, type) {
 
 function renderGalleryImages(images) {
   const unique = Array.from(new Set(images || []));
-  stopGenerationPlaceholderTimer();
+  const placeholderCount = generationPlaceholderState ? Math.max(0, generationPlaceholderState.count - unique.length) : 0;
+  const showingPlaceholders = placeholderCount > 0;
+  if (!showingPlaceholders) {
+    generationPlaceholderState = null;
+    stopGenerationPlaceholderTimer();
+  }
   setResultsVisible(true);
-  if (unique.length === 0) {
+  if (unique.length === 0 && !showingPlaceholders) {
     $("#gallery").classList.add("empty");
     $("#gallery").innerHTML = '<div class="status">没有返回图片</div>';
     return;
   }
   $("#gallery").classList.remove("empty");
-  $("#gallery").innerHTML = unique.map((url) => (
+  const galleryItems = unique.map((url) => (
     '<div class="gallery-item"><button class="gallery-preview" type="button" data-preview-image="' + esc(url) +
     '"><img src="' + esc(url) +
     '" alt="生成结果"><span class="image-size-label" data-image-size>读取尺寸...</span></button>' +
     '</div>'
-  )).join("");
+  ));
+  if (showingPlaceholders) {
+    galleryItems.push(...Array.from({ length: placeholderCount }, () => (
+      '<div class="gallery-item generation-placeholder-item">' +
+      '<div class="generation-placeholder-frame">' +
+      '<div class="generation-placeholder-image" aria-hidden="true">' +
+      '<span class="generation-placeholder-image-mark"></span>' +
+      '</div>' +
+      '<span class="generation-placeholder-timer" data-generation-timer>已耗时 0 秒</span>' +
+      '</div>' +
+      '<div class="generation-placeholder-copy">' +
+      '<span class="spinner"></span>' +
+      '<span>' + esc((generationPlaceholderState && generationPlaceholderState.message) || "正在等待图片...") + '</span>' +
+      '</div>' +
+      '</div>'
+    )));
+    if (!generationPlaceholderTimer && generationPlaceholderState) {
+      generationPlaceholderTimer = setInterval(() => updateGenerationPlaceholderTimer(generationPlaceholderState.startedAt), 1000);
+    }
+  }
+  $("#gallery").innerHTML = galleryItems.join("");
+  if (showingPlaceholders && generationPlaceholderState) {
+    updateGenerationPlaceholderTimer(generationPlaceholderState.startedAt);
+  }
 }
 
 function renderGalleryMessage(message, className = "status") {
   stopGenerationPlaceholderTimer();
+  generationPlaceholderState = null;
   setResultsVisible(Boolean(message));
   $("#gallery").classList.add("empty");
   $("#gallery").innerHTML = '<div class="' + esc(className) + '">' + esc(message) + '</div>';
