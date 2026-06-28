@@ -464,7 +464,7 @@
       "id": "social-commerce",
       "name": "图文带货",
       "icon": "message-square-text",
-      "description": "生成带货文案和配图，适合小红书、抖音图文和投放种草。",
+      "description": "生成带货标题、文案、封面和配图，适合小红书、抖音图文和投放种草。",
       "inputs": [
         {
           "key": "product_brief",
@@ -474,49 +474,272 @@
           "required": true
         },
         {
+          "key": "platform",
+          "label": "平台",
+          "type": "combo",
+          "default": "小红书",
+          "placeholder": "选择或输入平台",
+          "options": [
+            {
+              "value": "小红书",
+              "label": "小红书",
+              "icon": "imgs/小红书.png"
+            },
+            {
+              "value": "抖音",
+              "label": "抖音",
+              "icon": "imgs/抖音.png"
+            },
+            {
+              "value": "快手",
+              "label": "快手",
+              "icon": "imgs/快手.png"
+            },
+            {
+              "value": "微信小店",
+              "label": "微信小店",
+              "icon": "imgs/微信小店.png"
+            },
+            {
+              "value": "TikTok",
+              "label": "TikTok",
+              "icon": "imgs/抖音.png"
+            }
+          ]
+        },
+        {
+          "key": "copy_language",
+          "label": "文案语言",
+          "type": "combo",
+          "default": "简体中文",
+          "placeholder": "选择或输入语言",
+          "options": [
+            {
+              "value": "简体中文",
+              "label": "简体中文",
+              "icon": "imgs/cn.png"
+            },
+            {
+              "value": "英文",
+              "label": "英文",
+              "icon": "imgs/us.png"
+            }
+          ]
+        },
+        {
           "key": "audience",
           "label": "目标人群",
-          "type": "text",
-          "default": "25-35岁女性消费人群",
-          "placeholder": "例如：新手妈妈、露营用户"
+          "type": "combo",
+          "default": "年轻女性",
+          "placeholder": "选择或输入受众",
+          "options": [
+            {
+              "value": "年轻女性",
+              "label": "年轻女性"
+            },
+            {
+              "value": "宝妈人群",
+              "label": "宝妈人群"
+            },
+            {
+              "value": "上班族",
+              "label": "上班族"
+            },
+            {
+              "value": "学生群体",
+              "label": "学生群体"
+            },
+            {
+              "value": "时尚达人",
+              "label": "时尚达人"
+            },
+            {
+              "value": "户外运动人群",
+              "label": "户外运动人群"
+            },
+            {
+              "value": "科技爱好者",
+              "label": "科技爱好者"
+            },
+            {
+              "value": "家庭用户",
+              "label": "家庭用户"
+            },
+            {
+              "value": "礼赠人群",
+              "label": "礼赠人群"
+            },
+            {
+              "value": "银发人群",
+              "label": "银发人群"
+            }
+          ]
         },
         {
           "key": "tone",
           "label": "文案语气",
-          "type": "text",
-          "default": "真实、种草、带一点转化导向",
-          "placeholder": "例如：轻松、专业、强转化"
+          "type": "combo",
+          "default": "真实种草",
+          "placeholder": "选择或输入语气",
+          "options": [
+            {
+              "value": "真实种草",
+              "label": "真实种草"
+            },
+            {
+              "value": "轻松口语",
+              "label": "轻松口语"
+            },
+            {
+              "value": "专业测评",
+              "label": "专业测评"
+            },
+            {
+              "value": "高级克制",
+              "label": "高级克制"
+            },
+            {
+              "value": "强转化",
+              "label": "强转化"
+            },
+            {
+              "value": "促销冲单",
+              "label": "促销冲单"
+            }
+          ]
+        },
+        {
+          "key": "visual_style",
+          "label": "视觉风格",
+          "type": "combo",
+          "default": "生活方式感、真实场景、干净明亮",
+          "placeholder": "选择或输入视觉风格",
+          "options": [
+            {
+              "value": "生活方式感、真实场景、干净明亮",
+              "label": "生活方式感",
+              "example": "imgs/workflow-style-lifestyle.jpg"
+            },
+            {
+              "value": "高级感、干净背景、商业摄影",
+              "label": "高级商业摄影",
+              "example": "imgs/workflow-style-premium.jpg"
+            },
+            {
+              "value": "年轻潮流、强对比色、社媒感",
+              "label": "年轻潮流",
+              "example": "imgs/workflow-style-youth-trend.jpg"
+            },
+            {
+              "value": "极简白底、清晰产品轮廓",
+              "label": "极简白底",
+              "example": "imgs/workflow-style-minimal-white.jpg"
+            },
+            {
+              "value": "科技感、冷色调、精密质感",
+              "label": "科技感",
+              "example": "imgs/workflow-style-tech.jpg"
+            },
+            {
+              "value": "国潮复古、中式元素、经典配色",
+              "label": "国潮复古",
+              "example": "imgs/workflow-style-chinese-retro.jpg"
+            },
+            {
+              "value": "活泼童趣、明亮色彩、可爱插画感",
+              "label": "活泼童趣",
+              "example": "imgs/workflow-style-playful-kids.jpg"
+            }
+          ]
+        },
+        {
+          "key": "cover_ratio",
+          "label": "封面比例",
+          "type": "select",
+          "default": "4:5",
+          "options": [
+            {
+              "value": "1:1",
+              "label": "1:1"
+            },
+            {
+              "value": "4:5",
+              "label": "4:5"
+            },
+            {
+              "value": "3:4",
+              "label": "3:4"
+            }
+          ]
+        },
+        {
+          "key": "image_resolution",
+          "label": "图片分辨率",
+          "type": "select",
+          "default": "1k",
+          "options": [
+            {
+              "value": "1k",
+              "label": "1k"
+            },
+            {
+              "value": "2k",
+              "label": "2k"
+            },
+            {
+              "value": "4k",
+              "label": "4k"
+            }
+          ]
         },
         {
           "key": "image_count",
           "label": "配图数量",
           "type": "number",
-          "default": "3"
-        },
-        {
-          "key": "visual_style",
-          "label": "视觉风格",
-          "type": "text",
-          "default": "生活方式感、真实场景、干净明亮",
-          "placeholder": "例如：种草风、生活感、氛围感"
+          "default": "3",
+          "placeholder": "例如：3"
         }
       ],
       "steps": [
         {
+          "id": "strategy",
+          "kind": "response",
+          "title": "提炼方向",
+          "prompt": "根据商品信息提炼图文带货方向，只返回结果就好，不要其他多余信息。平台：{{field \"platform\"}}。文案语言：{{field \"copy_language\"}}。受众：{{field \"audience\"}}。语气：{{field \"tone\"}}。商品信息：\n{{field \"product_brief\"}}\n{{with field \"visual_style\"}}视觉风格：{{.}}\n{{end}}"
+        },
+        {
+          "id": "title",
+          "kind": "response",
+          "title": "生成标题",
+          "prompt": "根据商品信息和带货方向生成 10 个适合{{field \"platform\"}}发布的标题，优先给出能直接点击的标题风格，并标出 1 个最推荐标题。要求贴合{{field \"audience\"}}审美，语气为{{field \"tone\"}}，文案语言为{{field \"copy_language\"}}。商品信息：\n{{field \"product_brief\"}}\n方向提炼：\n{{stepText \"strategy\"}}\n{{with field \"visual_style\"}}视觉风格：{{.}}\n{{end}}"
+        },
+        {
           "id": "copy",
           "kind": "response",
           "title": "生成文案",
-          "prompt": "根据商品信息生成图文带货文案，包含标题、正文、3个短卖点和5个标签。语气：{{field \"tone\"}}。目标人群：{{field \"audience\"}}。商品信息：\n{{field \"product_brief\"}}\n"
+          "prompt": "根据商品信息、标题方向和带货策略生成图文带货文案，包含主文案、3个短卖点、5个标签和结尾引导语，表达要适合{{field \"platform\"}}和{{field \"audience\"}}。语气：{{field \"tone\"}}。文案语言：{{field \"copy_language\"}}。商品信息：\n{{field \"product_brief\"}}\n标题建议：\n{{stepText \"title\"}}\n方向提炼：\n{{stepText \"strategy\"}}\n{{with field \"visual_style\"}}视觉风格：{{.}}\n{{end}}"
+        },
+        {
+          "id": "cover",
+          "kind": "image",
+          "template_type": "main",
+          "title": "生成封面",
+          "prompt": "生成图文带货封面图。画面比例 {{field \"cover_ratio\"}}，适合{{field \"platform\"}}首图展示，标题感强，突出最推荐标题的点击欲望和核心卖点，画面真实、清晰、有社媒传播感。商品信息：\n{{field \"product_brief\"}}\n标题建议：\n{{stepText \"title\"}}\n文案：\n{{stepText \"copy\"}}\n{{with field \"visual_style\"}}视觉风格：{{.}}\n{{end}}",
+          "count": "1",
+          "size": "{{commerceSize (field \"image_resolution\") \"main\"}}",
+          "use_references": true,
+          "example": "imgs/workflow-main-hero.jpg"
         },
         {
           "id": "images",
           "kind": "image",
-          "template_type": "main",
+          "template_type": "detail",
           "title": "生成配图",
-          "prompt": "根据以下商品信息和文案生成图文带货配图，要求真实、清晰、适合社媒传播。商品信息：\n{{field \"product_brief\"}}\n文案：\n{{stepText \"copy\"}}\n{{with field \"visual_style\"}}视觉风格：{{.}}\n{{end}}",
+          "prompt": "根据以下商品信息、标题和文案生成图文带货配图，要求真实、清晰、适合社媒传播，画面风格统一，可直接做成套图。商品信息：\n{{field \"product_brief\"}}\n标题建议：\n{{stepText \"title\"}}\n文案：\n{{stepText \"copy\"}}\n{{stepText \"strategy\"}}\n{{with field \"visual_style\"}}视觉风格：{{.}}\n{{end}}",
           "count": "{{field \"image_count\"}}",
+          "size": "{{commerceSize (field \"image_resolution\") \"detail\"}}",
           "use_references": true,
-          "example": "imgs/workflow-main-scene.jpg"
+          "example": "imgs/workflow-detail-selling-points-overview.jpg"
         }
       ]
     }
